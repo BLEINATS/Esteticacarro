@@ -28,7 +28,8 @@ import {
   Car,
   Wrench,
   LayoutGrid,
-  Filter
+  Filter,
+  Info
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { cn } from '../lib/utils';
@@ -41,6 +42,9 @@ export default function Schedule() {
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'list'>('week');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedOS, setSelectedOS] = useState<WorkOrder | null>(null);
+  
+  // NOVO: State para o diálogo de explicação
+  const [showScheduleHelp, setShowScheduleHelp] = useState(false);
 
   // Navegação do Calendário
   const next = () => {
@@ -120,6 +124,37 @@ export default function Schedule() {
     return format(currentDate, 'MMMM yyyy', { locale: ptBR });
   };
 
+  // NOVO: Função para iniciar o agendamento real
+  const handleNewAppointment = () => {
+    // Fecha o diálogo de ajuda se estiver aberto
+    setShowScheduleHelp(false);
+
+    // Formata a data selecionada para o padrão "Dia/Mês" ou "Hoje" se for hoje
+    let deadlineStr = format(selectedDate, "dd/MM", { locale: ptBR });
+    if (isToday(selectedDate)) deadlineStr = "Hoje";
+    else if (isSameDay(selectedDate, addDays(new Date(), 1))) deadlineStr = "Amanhã";
+
+    const newOS: WorkOrder = {
+        id: `OS-${Math.floor(Math.random() * 10000)}`,
+        clientId: '', // Empty to force selection
+        vehicle: 'Veículo Novo',
+        plate: '',
+        service: 'A Definir',
+        status: 'Aguardando', // Status crucial para agendamento
+        technician: 'A Definir',
+        deadline: deadlineStr, // Preenche com a data do calendário
+        priority: 'medium',
+        totalValue: 0,
+        damages: [],
+        vehicleInventory: { estepe: false, macaco: false, chaveRoda: false, tapetes: false, manual: false, antena: false, pertences: '' },
+        dailyLog: [],
+        qaChecklist: [],
+        createdAt: new Date().toISOString(),
+        checklist: []
+    };
+    setSelectedOS(newOS);
+  };
+
   return (
     <div className="space-y-4 md:space-y-6 h-[calc(100vh-80px)] md:h-[calc(100vh-140px)] flex flex-col animate-in fade-in duration-500">
       {selectedOS && (
@@ -127,6 +162,49 @@ export default function Schedule() {
           workOrder={selectedOS} 
           onClose={() => setSelectedOS(null)} 
         />
+      )}
+
+      {/* DIÁLOGO DE EXPLICAÇÃO (MODAL) */}
+      {showScheduleHelp && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+                <div className="flex items-start gap-4 mb-4">
+                    <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400">
+                        <Info size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">Como funciona o Agendamento?</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                            No sistema Crystal Care, um agendamento é simplesmente uma <strong>Ordem de Serviço (OS)</strong> com o status definido como <strong>"Aguardando"</strong>.
+                        </p>
+                    </div>
+                </div>
+                
+                <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl mb-6 text-sm text-slate-600 dark:text-slate-300">
+                    <p className="mb-2">Ao clicar em "Criar Agendamento", o sistema irá:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                        <li>Abrir uma nova OS.</li>
+                        <li>Definir a data para <strong>{format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}</strong>.</li>
+                        <li>Definir o status como <strong>Aguardando</strong>.</li>
+                    </ul>
+                </div>
+
+                <div className="flex gap-3">
+                    <button 
+                        onClick={() => setShowScheduleHelp(false)}
+                        className="flex-1 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    >
+                        Cancelar
+                    </button>
+                    <button 
+                        onClick={handleNewAppointment}
+                        className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20"
+                    >
+                        Criar Agendamento Agora
+                    </button>
+                </div>
+            </div>
+        </div>
       )}
 
       {/* Header - Responsivo com Wrap */}
@@ -175,7 +253,7 @@ export default function Schedule() {
                 </div>
                 
                 <button 
-                    onClick={() => alert("Para agendar, crie uma nova OS com status 'Aguardando'.")}
+                    onClick={() => setShowScheduleHelp(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm transition-colors whitespace-nowrap"
                 >
                     <Plus size={18} />

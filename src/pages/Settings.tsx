@@ -2,22 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { 
   Building2, CreditCard, Save, 
   Upload, CheckCircle2, Layout, MessageCircle,
-  QrCode, Smartphone, Wifi, Battery, LogOut, Loader2, RefreshCw
+  QrCode, Smartphone, Wifi, Battery, LogOut, Loader2, RefreshCw,
+  Globe, ExternalLink, Image as ImageIcon,
+  Instagram, Facebook
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { cn } from '../lib/utils';
+import { Link } from 'react-router-dom';
 
 export default function Settings() {
-  const { companySettings, updateCompanySettings, subscription, connectWhatsapp, disconnectWhatsapp } = useApp();
-  const [activeTab, setActiveTab] = useState<'general' | 'billing' | 'integrations' | 'preferences'>('general');
+  const { 
+    companySettings, 
+    updateCompanySettings, 
+    subscription, 
+    connectWhatsapp, 
+    disconnectWhatsapp,
+    services,
+    updateService
+  } = useApp();
+  const [activeTab, setActiveTab] = useState<'general' | 'billing' | 'integrations' | 'preferences' | 'landing'>('general');
   
   // Form States
   const [formData, setFormData] = useState(companySettings);
   const [isSaved, setIsSaved] = useState(false);
 
-  // --- FIX: SYNC LOCAL STATE WITH CONTEXT ---
-  // Isso garante que quando o WhatsApp conectar (via timeout no Context),
-  // o formData local seja atualizado e não sobrescreva o status com "disconnected" ao salvar.
   useEffect(() => {
     setFormData(companySettings);
   }, [companySettings]);
@@ -69,6 +77,30 @@ export default function Settings() {
     }));
   };
 
+  const handleLandingChange = (key: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      landingPage: {
+        ...prev.landingPage,
+        [key]: value
+      }
+    }));
+  };
+
+  const handleHeroImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const url = URL.createObjectURL(e.target.files[0]);
+      handleLandingChange('heroImage', url);
+    }
+  };
+
+  const handleServiceImageUpdate = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const url = URL.createObjectURL(e.target.files[0]);
+      updateService(id, { imageUrl: url });
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -83,6 +115,7 @@ export default function Settings() {
         <div className="w-full lg:w-64 flex-shrink-0 space-y-2">
           {[
             { id: 'general', label: 'Dados da Empresa', icon: Building2 },
+            { id: 'landing', label: 'Página Web (Loja)', icon: Globe }, // NEW TAB
             { id: 'integrations', label: 'WhatsApp (QR Code)', icon: QrCode },
             { id: 'billing', label: 'Assinatura & Faturas', icon: CreditCard },
             { id: 'preferences', label: 'Preferências', icon: Layout },
@@ -141,7 +174,6 @@ export default function Settings() {
                     />
                   </div>
                   
-                  {/* NOVO CAMPO: RESPONSÁVEL */}
                   <div>
                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Nome do Responsável</label>
                     <input 
@@ -195,6 +227,37 @@ export default function Settings() {
                   </div>
                 </div>
 
+                {/* Social Media Fields */}
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <h4 className="font-bold text-slate-900 dark:text-white mb-4">Redes Sociais</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5 flex items-center gap-1">
+                                <Instagram size={14} /> Instagram (URL)
+                            </label>
+                            <input 
+                                type="text" 
+                                value={formData.instagram || ''}
+                                onChange={e => setFormData({...formData, instagram: e.target.value})}
+                                placeholder="https://instagram.com/suaempresa"
+                                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5 flex items-center gap-1">
+                                <Facebook size={14} /> Facebook (URL)
+                            </label>
+                            <input 
+                                type="text" 
+                                value={formData.facebook || ''}
+                                onChange={e => setFormData({...formData, facebook: e.target.value})}
+                                placeholder="https://facebook.com/suaempresa"
+                                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                    </div>
+                </div>
+
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                   {isSaved ? (
                     <span className="text-green-600 dark:text-green-400 font-bold flex items-center gap-2 animate-in fade-in">
@@ -203,6 +266,152 @@ export default function Settings() {
                   ) : <span></span>}
                   <button type="submit" className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all flex items-center gap-2">
                     <Save size={20} /> Salvar Alterações
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* TAB: LANDING PAGE (NEW) */}
+          {activeTab === 'landing' && (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden animate-in fade-in slide-in-from-right">
+              <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                <div>
+                    <h3 className="font-bold text-lg text-slate-900 dark:text-white">Página Web da Loja</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Configure sua vitrine online para captar clientes.</p>
+                </div>
+                {/* REMOVED target="_blank" to fix preview issue */}
+                <Link to="/shop" className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 rounded-lg font-bold text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
+                    <ExternalLink size={16} /> Ver Página
+                </Link>
+              </div>
+              
+              <form onSubmit={handleSave} className="p-6 space-y-6">
+                
+                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <div>
+                        <span className="font-bold text-slate-900 dark:text-white block">Página Ativa</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Se desativado, clientes verão uma tela de manutenção.</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" className="sr-only peer" checked={formData.landingPage.enabled} onChange={e => handleLandingChange('enabled', e.target.checked)} />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Título Principal (Hero)</label>
+                        <input 
+                            type="text" 
+                            value={formData.landingPage.heroTitle}
+                            onChange={e => handleLandingChange('heroTitle', e.target.value)}
+                            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Subtítulo</label>
+                        <textarea 
+                            rows={2}
+                            value={formData.landingPage.heroSubtitle}
+                            onChange={e => handleLandingChange('heroSubtitle', e.target.value)}
+                            className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Imagem de Capa (Hero Image)</label>
+                        <div className="flex gap-4 items-center">
+                            <div className="relative flex-1">
+                                <input 
+                                    type="text" 
+                                    value={formData.landingPage.heroImage}
+                                    onChange={e => handleLandingChange('heroImage', e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                    placeholder="URL da imagem..."
+                                />
+                            </div>
+                            <label className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                                <Upload size={18} className="text-slate-600 dark:text-slate-300" />
+                                <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Upload</span>
+                                <input type="file" accept="image/*" className="hidden" onChange={handleHeroImageUpload} />
+                            </label>
+                        </div>
+                        {formData.landingPage.heroImage && (
+                            <div className="mt-2 relative h-40 w-full rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                                <img src={formData.landingPage.heroImage} alt="Hero Preview" className="w-full h-full object-cover" />
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <label className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
+                        <input 
+                            type="checkbox"
+                            checked={formData.landingPage.showServices}
+                            onChange={e => handleLandingChange('showServices', e.target.checked)}
+                            className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                        />
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Mostrar Serviços</span>
+                    </label>
+                    <label className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
+                        <input 
+                            type="checkbox"
+                            checked={formData.landingPage.showTestimonials}
+                            onChange={e => handleLandingChange('showTestimonials', e.target.checked)}
+                            className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                        />
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Mostrar Depoimentos</span>
+                    </label>
+                </div>
+
+                {/* SERVICE IMAGES SECTION */}
+                <div className="pt-6 border-t border-slate-100 dark:border-slate-800">
+                    <h4 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                        <ImageIcon size={20} className="text-blue-600" />
+                        Galeria de Serviços
+                    </h4>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                        Personalize as fotos que aparecem nos cards de serviço da sua página.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {services.filter(s => s.active).map(service => (
+                            <div key={service.id} className="flex items-center gap-4 p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                                <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-200 dark:bg-slate-700 flex-shrink-0 relative group">
+                                    {service.imageUrl ? (
+                                        <img src={service.imageUrl} alt={service.name} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-slate-400">
+                                            <ImageIcon size={20} />
+                                        </div>
+                                    )}
+                                    <label className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                                        <Upload size={16} className="text-white" />
+                                        <input 
+                                            type="file" 
+                                            accept="image/*" 
+                                            className="hidden" 
+                                            onChange={(e) => handleServiceImageUpdate(service.id, e)}
+                                        />
+                                    </label>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-bold text-sm text-slate-900 dark:text-white truncate">{service.name}</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{service.category}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  {isSaved ? (
+                    <span className="text-green-600 dark:text-green-400 font-bold flex items-center gap-2 animate-in fade-in">
+                      <CheckCircle2 size={20} /> Alterações salvas!
+                    </span>
+                  ) : <span></span>}
+                  <button type="submit" className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all flex items-center gap-2">
+                    <Save size={20} /> Salvar Página
                   </button>
                 </div>
               </form>

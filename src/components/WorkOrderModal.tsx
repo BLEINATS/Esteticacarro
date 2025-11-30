@@ -5,12 +5,13 @@ import {
   ShieldCheck, ClipboardCheck, CalendarClock, Hammer,
   CreditCard, UploadCloud, Lock, Share2, Plus, Trash2,
   DollarSign, Wrench, Check, Smile, Star, ListTodo,
-  Image as ImageIcon
+  Image as ImageIcon, Search, Car, UserPlus
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { WorkOrder, DamagePoint, VehicleInventory, DailyLogEntry, AdditionalItem, QualityChecklistItem, ScopeItem } from '../types';
+import { WorkOrder, DamagePoint, VehicleInventory, DailyLogEntry, AdditionalItem, QualityChecklistItem, ScopeItem, Vehicle, VehicleSize, VEHICLE_SIZES } from '../types';
 import { cn, formatCurrency } from '../lib/utils';
 import VehicleDamageMap from './VehicleDamageMap';
+import ClientModal from './ClientModal';
 
 interface WorkOrderModalProps {
   workOrder: WorkOrder;
@@ -18,10 +19,23 @@ interface WorkOrderModalProps {
 }
 
 export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalProps) {
-  const { updateWorkOrder, completeWorkOrder, submitNPS, clients, recipes, services, getPrice, getWhatsappLink } = useApp();
+  const { addWorkOrder, updateWorkOrder, completeWorkOrder, submitNPS, clients, recipes, services, getPrice, getWhatsappLink, workOrders, addVehicle } = useApp();
   const [activeTab, setActiveTab] = useState<'reception' | 'execution' | 'quality' | 'finance'>('reception');
   
-  // State Local para Edição
+  // --- CLIENT & VEHICLE SELECTION STATE ---
+  const [selectedClientId, setSelectedClientId] = useState<string>(workOrder.clientId || '');
+  const [clientSearch, setClientSearch] = useState('');
+  const [showClientList, setShowClientList] = useState(false);
+  const [selectedVehiclePlate, setSelectedVehiclePlate] = useState<string>(workOrder.plate || '');
+  
+  // New Vehicle State (Quick Add)
+  const [isAddingVehicle, setIsAddingVehicle] = useState(false);
+  const [newVehicle, setNewVehicle] = useState<Partial<Vehicle>>({ model: '', plate: '', color: '', size: 'medium' });
+
+  // Client Modal State
+  const [isClientModalOpen, setIsClientModalOpen] = useState(false);
+
+  // --- EXISTING STATES ---
   const [damages, setDamages] = useState<DamagePoint[]>(workOrder.damages || []);
   const [inventory, setInventory] = useState<VehicleInventory>(workOrder.vehicleInventory || {
     estepe: false, macaco: false, chaveRoda: false, tapetes: false, manual: false, antena: false, pertences: ''
@@ -31,61 +45,57 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const [insurance, setInsurance] = useState(workOrder.insuranceDetails || { isInsurance: false });
   const [qaList, setQaList] = useState<QualityChecklistItem[]>(workOrder.qaChecklist || []);
   const [additionalItems, setAdditionalItems] = useState<AdditionalItem[]>(workOrder.additionalItems || []);
-  
-  // Scope Checklist State
   const [scopeList, setScopeList] = useState<ScopeItem[]>(workOrder.scopeChecklist || []);
-
-  // Service Selection State
   const [selectedServiceId, setSelectedServiceId] = useState<string>(workOrder.serviceId || '');
-  const [newItemDesc, setNewItemDesc] = useState('');
-  const [newItemValue, setNewItemValue] = useState('');
-
-  // NPS State
   const [npsScore, setNpsScore] = useState<number | null>(workOrder.npsScore || null);
-
-  // Damage Modal State (Admin)
   const [isDamageModalOpen, setIsDamageModalOpen] = useState(false);
   const [currentDamageArea, setCurrentDamageArea] = useState<DamagePoint['area'] | null>(null);
   const [damageDesc, setDamageDesc] = useState('');
   const [damagePhoto, setDamagePhoto] = useState<string | null>(null);
 
-  const client = clients.find(c => c.id === workOrder.clientId);
-  const vehicle = client?.vehicles.find(v => v.plate === workOrder.plate);
+  // --- PRICE STATE (EDITABLE) ---
+  // Initialize with existing total minus extras, or 0
+  const [servicePrice, setServicePrice] = useState<number>(() => {
+    const extras = workOrder.additionalItems?.reduce((acc, item) => acc + item.value, 0) || 0;
+    return workOrder.totalValue > 0 ? Math.max(0, workOrder.totalValue - extras) : 0;
+  });
 
-  // Inicializar Scope Checklist (Execução) se estiver vazio
+  // Derived Data
+  const selectedClient = clients.find(c => c.id === selectedClientId);
+  const clientVehicles = selectedClient ? selectedClient.vehicles : [];
+  const selectedVehicleObj = clientVehicles.find(v => v.plate === selectedVehiclePlate);
+
+  // Filter Clients for Search
+  const filteredClients = clientSearch.length > 0 
+    ? clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.phone.includes(clientSearch))
+    : [];
+
+  // Initialize or Update when props change
+  useEffect(() => {
+    if (workOrder.clientId && workOrder.clientId !== 'c1' && workOrder.clientId !== '') {
+        const c = clients.find(cl => cl.id === workOrder.clientId);
+        if (c) {
+            setClientSearch(c.name);
+            setSelectedClientId(c.id);
+        }
+    }
+  }, [workOrder.clientId, clients]);
+
+  // Initialize Scope Checklist
   useEffect(() => {
     if (scopeList.length === 0) {
         const items: ScopeItem[] = [];
-        
-        // Adiciona serviço principal
-        if (workOrder.service) {
-            items.push({
-                id: 'main-svc',
-                label: workOrder.service,
-                completed: false,
-                type: 'main'
-            });
-        }
-
-        // Adiciona itens adicionais
+        if (workOrder.service) items.push({ id: 'main-svc', label: workOrder.service, completed: false, type: 'main' });
         if (workOrder.additionalItems && workOrder.additionalItems.length > 0) {
             workOrder.additionalItems.forEach(item => {
-                items.push({
-                    id: `add-${item.id}`,
-                    label: item.description,
-                    completed: false,
-                    type: 'additional'
-                });
+                items.push({ id: `add-${item.id}`, label: item.description, completed: false, type: 'additional' });
             });
         }
-
-        if (items.length > 0) {
-            setScopeList(items);
-        }
+        if (items.length > 0) setScopeList(items);
     }
   }, [workOrder.service, workOrder.additionalItems]);
 
-  // Inicializar QA Checklist Dinâmico
+  // Initialize QA Checklist
   useEffect(() => {
     if (qaList.length === 0) {
       const defaultQA: QualityChecklistItem[] = [
@@ -93,37 +103,93 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         { id: 'q2', label: 'Limpeza final realizada (sem resíduos)', checked: false, required: true },
         { id: 'q3', label: 'Pertences do cliente conferidos', checked: false, required: true },
       ];
-      
-      // Regras Dinâmicas baseadas no Serviço
       if (workOrder.service.toLowerCase().includes('funilaria') || workOrder.service.toLowerCase().includes('pintura')) {
         defaultQA.push({ id: 'q4', label: 'Tonalidade da pintura conferida na luz natural', checked: false, required: true });
         defaultQA.push({ id: 'q5', label: 'Montagem de peças alinhada (gaps)', checked: false, required: true });
       }
-      
       if (workOrder.service.toLowerCase().includes('polimento') || workOrder.service.toLowerCase().includes('vitrificação')) {
         defaultQA.push({ id: 'q6', label: 'Inspeção de hologramas com luz de detalhamento', checked: false, required: true });
         defaultQA.push({ id: 'q7', label: 'Plásticos e borrachas protegidos/limpos', checked: false, required: true });
       }
-
       if (workOrder.service.toLowerCase().includes('higienização')) {
         defaultQA.push({ id: 'q8', label: 'Bancos e carpetes 100% secos', checked: false, required: true });
       }
-
       setQaList(defaultQA);
     }
   }, [workOrder.service]);
 
+  const handleClientSelect = (client: any) => {
+    setSelectedClientId(client.id);
+    setClientSearch(client.name);
+    setShowClientList(false);
+    // Auto-select first vehicle if exists
+    if (client.vehicles.length > 0) {
+        const v = client.vehicles[0];
+        setSelectedVehiclePlate(v.plate);
+        // Update price if service is already selected
+        if (selectedServiceId) {
+            setServicePrice(getPrice(selectedServiceId, v.size));
+        }
+    } else {
+        setSelectedVehiclePlate('');
+        setIsAddingVehicle(true); // Prompt to add vehicle
+    }
+  };
+
+  const handleVehicleChange = (plate: string) => {
+    setSelectedVehiclePlate(plate);
+    const v = clientVehicles.find(veh => veh.plate === plate);
+    if (v && selectedServiceId) {
+        setServicePrice(getPrice(selectedServiceId, v.size));
+    }
+  };
+
+  const handleServiceChange = (serviceId: string) => {
+    setSelectedServiceId(serviceId);
+    if (selectedVehicleObj && serviceId) {
+        setServicePrice(getPrice(serviceId, selectedVehicleObj.size));
+    }
+  };
+
+  const handleQuickAddVehicle = () => {
+    if (selectedClientId && newVehicle.model && newVehicle.plate) {
+        const v: Vehicle = {
+            id: `v-${Date.now()}`,
+            model: newVehicle.model || '',
+            plate: newVehicle.plate || '',
+            color: newVehicle.color || '',
+            year: newVehicle.year || '',
+            size: newVehicle.size as VehicleSize || 'medium'
+        };
+        addVehicle(selectedClientId, v);
+        setSelectedVehiclePlate(v.plate);
+        if (selectedServiceId) {
+            setServicePrice(getPrice(selectedServiceId, v.size));
+        }
+        setIsAddingVehicle(false);
+        setNewVehicle({ model: '', plate: '', color: '', size: 'medium' });
+    }
+  };
+
   const handleSave = () => {
-    // Recalcular total
-    const servicePrice = selectedServiceId && vehicle ? getPrice(selectedServiceId, vehicle.size) : workOrder.totalValue;
+    if (!selectedClientId || !selectedVehiclePlate) {
+        alert("Por favor, selecione um cliente e um veículo.");
+        setActiveTab('reception');
+        return;
+    }
+
+    // Use the editable servicePrice state
     const extrasTotal = additionalItems.reduce((acc, item) => acc + item.value, 0);
     const finalTotal = insurance.isInsurance 
-      ? (insurance.deductibleAmount || 0) + (insurance.insuranceCoveredAmount || 0) + extrasTotal // Simplificação
+      ? (insurance.deductibleAmount || 0) + (insurance.insuranceCoveredAmount || 0) + extrasTotal 
       : servicePrice + extrasTotal;
 
     const serviceName = services.find(s => s.id === selectedServiceId)?.name || workOrder.service;
 
-    updateWorkOrder(workOrder.id, {
+    const updatedData = {
+      clientId: selectedClientId,
+      vehicle: selectedVehicleObj ? selectedVehicleObj.model : workOrder.vehicle,
+      plate: selectedVehiclePlate,
       damages,
       vehicleInventory: inventory,
       dailyLog,
@@ -133,23 +199,60 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       additionalItems,
       totalValue: finalTotal,
       service: serviceName,
-      serviceId: selectedServiceId
-    });
+      serviceId: selectedServiceId,
+      status: workOrder.status
+    };
+
+    const exists = workOrders.some(o => o.id === workOrder.id);
+    
+    if (exists) {
+        updateWorkOrder(workOrder.id, updatedData);
+    } else {
+        addWorkOrder({
+            ...workOrder,
+            ...updatedData,
+            createdAt: workOrder.createdAt || new Date().toISOString(),
+            tasks: workOrder.tasks || [],
+            checklist: workOrder.checklist || []
+        });
+    }
+    
     onClose();
   };
 
   const handleApprove = () => {
-      const servicePrice = selectedServiceId && vehicle ? getPrice(selectedServiceId, vehicle.size) : workOrder.totalValue;
+      if (!selectedClientId || !selectedVehiclePlate) {
+        alert("Selecione o cliente antes de aprovar.");
+        return;
+      }
+      
+      // Use the editable servicePrice state
       const serviceName = services.find(s => s.id === selectedServiceId)?.name || workOrder.service;
 
-      updateWorkOrder(workOrder.id, {
+      const approvedData = {
+          clientId: selectedClientId,
+          vehicle: selectedVehicleObj ? selectedVehicleObj.model : workOrder.vehicle,
+          plate: selectedVehiclePlate,
           status: 'Aguardando',
           service: serviceName,
           serviceId: selectedServiceId,
-          totalValue: servicePrice,
+          totalValue: servicePrice, // Use the manual price
           damages,
           vehicleInventory: inventory
-      });
+      };
+
+      const exists = workOrders.some(o => o.id === workOrder.id);
+      if (exists) {
+          updateWorkOrder(workOrder.id, approvedData);
+      } else {
+          addWorkOrder({
+              ...workOrder,
+              ...approvedData,
+              createdAt: new Date().toISOString(),
+              tasks: [],
+              checklist: []
+          });
+      }
       onClose();
   };
 
@@ -194,14 +297,21 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       return;
     }
     
+    const exists = workOrders.some(o => o.id === workOrder.id);
+    if (!exists) {
+        if (confirm("Para mudar o status, precisamos salvar a OS primeiro. Deseja salvar agora?")) {
+            handleSave();
+        }
+        return;
+    }
+
     updateWorkOrder(workOrder.id, { status: newStatus });
     
     if (newStatus === 'Concluído') {
       completeWorkOrder(workOrder.id);
-      // Auto-trigger WhatsApp message
-      if (client) {
-        const msg = `Olá ${client.name}! O serviço no seu ${workOrder.vehicle} foi concluído com sucesso. Valor Total: ${formatCurrency(workOrder.totalValue)}. Aguardamos sua retirada!`;
-        window.open(getWhatsappLink(client.phone, msg), '_blank');
+      if (selectedClient) {
+        const msg = `Olá ${selectedClient.name}! O serviço no seu ${selectedVehicleObj?.model || 'veículo'} foi concluído com sucesso. Valor Total: ${formatCurrency(workOrder.totalValue)}. Aguardamos sua retirada!`;
+        window.open(getWhatsappLink(selectedClient.phone, msg), '_blank');
       }
     }
   };
@@ -211,17 +321,17 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     submitNPS(workOrder.id, score);
   };
 
-  // Cálculos de Totais para Exibição
-  const currentServicePrice = selectedServiceId && vehicle ? getPrice(selectedServiceId, vehicle.size) : (workOrder.serviceId && vehicle ? getPrice(workOrder.serviceId, vehicle.size) : workOrder.totalValue);
+  // Calculations for Display
   const currentExtrasTotal = additionalItems.reduce((acc, item) => acc + item.value, 0);
-  const currentTotal = currentServicePrice + currentExtrasTotal;
-
-  // Collect photos for gallery
+  const currentTotal = servicePrice + currentExtrasTotal;
+  
   const beforePhotos = damages.filter(d => d.photoUrl && d.photoUrl !== 'pending').map(d => ({ url: d.photoUrl!, desc: d.description }));
   const afterPhotos = dailyLog.flatMap(log => log.photos.map(url => ({ url, desc: log.description })));
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+      {isClientModalOpen && <ClientModal onClose={() => setIsClientModalOpen(false)} />}
+      
       <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-5xl max-h-[95vh] flex flex-col shadow-2xl animate-in fade-in zoom-in duration-200 border border-slate-200 dark:border-slate-800">
         
         {/* Header */}
@@ -248,7 +358,9 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                 <option value="Entregue">Entregue ao Cliente</option>
               </select>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 text-sm">{workOrder.vehicle} • {workOrder.plate} • {client?.name}</p>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">
+                {selectedVehicleObj ? selectedVehicleObj.model : 'Veículo não selecionado'} • {selectedVehiclePlate || 'Placa?'} • {selectedClient ? selectedClient.name : 'Cliente?'}
+            </p>
           </div>
           <div className="flex gap-2">
             {workOrder.status === 'Aguardando Aprovação' ? (
@@ -296,6 +408,107 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           {/* TAB: RECEPTION */}
           {activeTab === 'reception' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              
+              {/* COL 1: CLIENT & VEHICLE */}
+              <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm mb-2">
+                 <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                    <User size={20} className="text-blue-600" />
+                    Dados do Cliente & Veículo
+                 </h3>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Client Selection */}
+                    <div className="relative">
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cliente</label>
+                        <div className="flex gap-2">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                <input 
+                                    type="text" 
+                                    value={clientSearch}
+                                    onChange={(e) => { setClientSearch(e.target.value); setShowClientList(true); }}
+                                    onFocus={() => setShowClientList(true)}
+                                    placeholder="Buscar cliente..."
+                                    className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
+                                />
+                                {showClientList && clientSearch && (
+                                    <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
+                                        {filteredClients.length > 0 ? filteredClients.map(c => (
+                                            <button 
+                                                key={c.id}
+                                                onClick={() => handleClientSelect(c)}
+                                                className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm text-slate-700 dark:text-slate-300"
+                                            >
+                                                <span className="font-bold">{c.name}</span> <span className="text-xs text-slate-500">({c.phone})</span>
+                                            </button>
+                                        )) : (
+                                            <div className="px-4 py-2 text-sm text-slate-500">Nenhum cliente encontrado.</div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            <button 
+                                onClick={() => setIsClientModalOpen(true)}
+                                className="px-3 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                                title="Novo Cliente"
+                            >
+                                <UserPlus size={18} />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Vehicle Selection */}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Veículo</label>
+                        {selectedClientId ? (
+                            <div className="flex gap-2">
+                                <select 
+                                    value={selectedVehiclePlate}
+                                    onChange={(e) => handleVehicleChange(e.target.value)}
+                                    className="flex-1 px-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
+                                >
+                                    <option value="">Selecione o veículo...</option>
+                                    {clientVehicles.map(v => (
+                                        <option key={v.id} value={v.plate}>{v.model} - {v.plate}</option>
+                                    ))}
+                                </select>
+                                <button 
+                                    onClick={() => setIsAddingVehicle(!isAddingVehicle)}
+                                    className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                    title="Adicionar Carro"
+                                >
+                                    <Plus size={18} />
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="px-4 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-400 italic">
+                                Selecione um cliente primeiro
+                            </div>
+                        )}
+                    </div>
+                 </div>
+
+                 {/* Quick Add Vehicle Form */}
+                 {isAddingVehicle && selectedClientId && (
+                    <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800 animate-in slide-in-from-top-2">
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Novo Veículo</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                            <input type="text" placeholder="Modelo (ex: BMW X1)" value={newVehicle.model} onChange={e => setNewVehicle({...newVehicle, model: e.target.value})} className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm" />
+                            <input type="text" placeholder="Placa" value={newVehicle.plate} onChange={e => setNewVehicle({...newVehicle, plate: e.target.value})} className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm" />
+                            <input type="text" placeholder="Cor" value={newVehicle.color} onChange={e => setNewVehicle({...newVehicle, color: e.target.value})} className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm" />
+                            <input type="text" placeholder="Ano" value={newVehicle.year} onChange={e => setNewVehicle({...newVehicle, year: e.target.value})} className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm" />
+                            <select value={newVehicle.size} onChange={e => setNewVehicle({...newVehicle, size: e.target.value as any})} className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm">
+                                {Object.entries(VEHICLE_SIZES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                            </select>
+                        </div>
+                        <div className="flex justify-end gap-2 mt-3">
+                            <button onClick={() => setIsAddingVehicle(false)} className="text-xs font-bold text-slate-500 px-3 py-2">Cancelar</button>
+                            <button onClick={handleQuickAddVehicle} className="text-xs font-bold bg-blue-600 text-white px-4 py-2 rounded-lg">Salvar Veículo</button>
+                        </div>
+                    </div>
+                 )}
+              </div>
+
               <div className="lg:col-span-1">
                 <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                   <Camera size={20} className="text-blue-600" />
@@ -316,7 +529,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                       <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Serviço Principal</label>
                       <select 
                         value={selectedServiceId}
-                        onChange={(e) => setSelectedServiceId(e.target.value)}
+                        onChange={(e) => handleServiceChange(e.target.value)}
                         className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
                       >
                         <option value="">Selecione um serviço...</option>
@@ -326,9 +539,15 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor Tabelado (Porte: {vehicle ? vehicle.size : '?'})</label>
-                      <div className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white">
-                        {formatCurrency(currentServicePrice)}
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor do Serviço (R$) {selectedVehicleObj && `- Porte ${selectedVehicleObj.size}`}</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">R$</span>
+                        <input 
+                            type="number"
+                            value={servicePrice}
+                            onChange={(e) => setServicePrice(Number(e.target.value))}
+                            className="w-full pl-8 pr-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                        />
                       </div>
                     </div>
                   </div>
@@ -633,7 +852,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                 <div className="flex flex-col gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
                     <div className="flex justify-between text-slate-500 dark:text-slate-400">
                     <span>Serviço (Tabela)</span>
-                    <span>{formatCurrency(currentServicePrice)}</span>
+                    <span>{formatCurrency(servicePrice)}</span>
                     </div>
                     <div className="flex justify-between text-slate-500 dark:text-slate-400">
                     <span>Peças/Extras</span>

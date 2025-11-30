@@ -101,9 +101,9 @@ export default function Dashboard() {
   const handleNewOS = () => {
     const newOS: WorkOrder = {
         id: `OS-${Math.floor(Math.random() * 10000)}`,
-        clientId: 'c1',
+        clientId: '', // Empty to force selection
         vehicle: 'Veículo Novo',
-        plate: 'AAA-0000',
+        plate: '',
         service: 'A Definir',
         status: 'Aguardando',
         technician: 'A Definir',

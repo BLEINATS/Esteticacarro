@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useLocation, Outlet } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Wrench, 
@@ -17,7 +17,9 @@ import {
   Smartphone,
   Megaphone,
   Calendar,
-  Settings
+  Settings,
+  AlertTriangle,
+  CheckCircle2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useApp } from '../context/AppContext';
@@ -40,11 +42,32 @@ const SidebarItem = ({ icon: Icon, label, path, isActive, onClick }: any) => (
 
 export default function Layout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationRef = useRef<HTMLDivElement>(null);
+  
   const location = useLocation();
-  const { theme, toggleTheme, reminders, workOrders, companySettings } = useApp(); // Added companySettings
+  const navigate = useNavigate();
+  const { theme, toggleTheme, reminders, workOrders, inventory, companySettings } = useApp();
 
   const pendingReminders = reminders.filter(r => r.status === 'pending').length;
   const pendingApprovals = workOrders.filter(o => o.status === 'Aguardando Aprovação').length;
+  const criticalStock = inventory.filter(i => i.status === 'critical').length;
+  const totalNotifications = pendingReminders + pendingApprovals + criticalStock;
+
+  const handleLogout = () => {
+    navigate('/shop');
+  };
+
+  // Close notifications when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setIsNotificationsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
@@ -57,7 +80,7 @@ export default function Layout() {
     { icon: Package, label: 'Estoque', path: '/inventory' },
     { icon: Tags, label: 'Catálogo & Preços', path: '/pricing' },
     { icon: Users, label: 'Equipe & RH', path: '/team' },
-    { icon: Settings, label: 'Configurações', path: '/settings' }, // Added Settings
+    { icon: Settings, label: 'Configurações', path: '/settings' },
   ];
 
   return (
@@ -77,7 +100,7 @@ export default function Layout() {
       )}>
         <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3">
           <img 
-            src={companySettings.logoUrl} // Dynamic Logo
+            src={companySettings.logoUrl} 
             alt="Logo" 
             className="w-12 h-12 rounded-full shadow-md border-2 border-slate-100 dark:border-slate-700 object-cover"
           />
@@ -112,9 +135,12 @@ export default function Layout() {
         </nav>
 
         <div className="p-4 border-t border-slate-100 dark:border-slate-800">
-          <button className="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 w-full transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/10">
+          <button 
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 w-full transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-900/10"
+          >
             <LogOut size={20} />
-            <span className="font-medium">Sair</span>
+            <span className="font-medium">Sair / Ir para Loja</span>
           </button>
         </div>
       </aside>
@@ -139,12 +165,86 @@ export default function Layout() {
               {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
             </button>
 
-            <button className="relative p-2 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-              <Bell size={20} />
-              {(pendingReminders > 0 || pendingApprovals > 0) && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
-              )}
-            </button>
+            {/* Notification Bell with Dropdown */}
+            <div className="relative" ref={notificationRef}>
+                <button 
+                  onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                  className="relative p-2 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  <Bell size={20} />
+                  {totalNotifications > 0 && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+                  )}
+                </button>
+
+                {isNotificationsOpen && (
+                    <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                            <h3 className="font-bold text-slate-900 dark:text-white">Notificações</h3>
+                            {totalNotifications > 0 && (
+                                <span className="text-xs font-bold bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full">
+                                    {totalNotifications} novas
+                                </span>
+                            )}
+                        </div>
+                        <div className="max-h-[300px] overflow-y-auto">
+                            {pendingApprovals > 0 && (
+                                <Link to="/operations" onClick={() => setIsNotificationsOpen(false)} className="block p-4 hover:bg-slate-50 dark:hover:bg-slate-800 border-b border-slate-100 dark:border-slate-800 transition-colors group">
+                                    <div className="flex items-start gap-3">
+                                        <div className="p-2 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg group-hover:scale-110 transition-transform">
+                                            <Wrench size={16} />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-slate-900 dark:text-white">{pendingApprovals} OS Aguardando</p>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">Aprovação necessária para iniciar.</p>
+                                        </div>
+                                    </div>
+                                </Link>
+                            )}
+                            
+                            {criticalStock > 0 && (
+                                <Link to="/inventory" onClick={() => setIsNotificationsOpen(false)} className="block p-4 hover:bg-slate-50 dark:hover:bg-slate-800 border-b border-slate-100 dark:border-slate-800 transition-colors group">
+                                    <div className="flex items-start gap-3">
+                                        <div className="p-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg group-hover:scale-110 transition-transform">
+                                            <AlertTriangle size={16} />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-slate-900 dark:text-white">{criticalStock} Itens Críticos</p>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">Estoque baixo detectado.</p>
+                                        </div>
+                                    </div>
+                                </Link>
+                            )}
+
+                            {pendingReminders > 0 && (
+                                <Link to="/marketing" onClick={() => setIsNotificationsOpen(false)} className="block p-4 hover:bg-slate-50 dark:hover:bg-slate-800 border-b border-slate-100 dark:border-slate-800 transition-colors group">
+                                    <div className="flex items-start gap-3">
+                                        <div className="p-2 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg group-hover:scale-110 transition-transform">
+                                            <Bell size={16} />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-slate-900 dark:text-white">{pendingReminders} Lembretes de Retorno</p>
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">Clientes para contatar hoje.</p>
+                                        </div>
+                                    </div>
+                                </Link>
+                            )}
+
+                            {totalNotifications === 0 && (
+                                <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm flex flex-col items-center gap-2">
+                                    <CheckCircle2 size={24} className="text-green-500 opacity-50" />
+                                    <p>Tudo limpo por aqui!</p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-2 bg-slate-50 dark:bg-slate-950/50 text-center">
+                            <button onClick={() => setIsNotificationsOpen(false)} className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline">
+                                Fechar
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
             
             <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700">
               <div className="text-right hidden md:block">

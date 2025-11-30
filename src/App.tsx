@@ -12,11 +12,16 @@ import TechPortal from './pages/TechPortal';
 import Marketing from './pages/Marketing';
 import Schedule from './pages/Schedule';
 import Settings from './pages/Settings';
+import ShopLanding from './pages/ShopLanding'; // Import new page
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Rota Pública da Loja (Landing Page) */}
+        <Route path="/shop" element={<ShopLanding />} />
+
+        {/* Rotas do Sistema (Admin) */}
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="schedule" element={<Schedule />} />

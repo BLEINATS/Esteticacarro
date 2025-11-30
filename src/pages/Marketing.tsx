@@ -4,7 +4,8 @@ import {
   TrendingUp, AlertTriangle, Star, CheckCircle2,
   CalendarClock, Wrench, BarChart3, ArrowRight,
   Instagram, Wand2, Image as ImageIcon, Share2, Copy,
-  Smartphone, Video, BellRing, Loader2, Plus, X, Download, Layers
+  Smartphone, Video, BellRing, Loader2, Plus, X, Download, Layers,
+  FileText, Eye, MousePointerClick, DollarSign
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -13,6 +14,162 @@ import {
 import { useApp } from '../context/AppContext';
 import { ClientSegment, MarketingCampaign, WorkOrder } from '../types';
 import { cn, formatCurrency } from '../lib/utils';
+
+const CAMPAIGN_TEMPLATES = [
+  {
+    id: 'inactive',
+    label: 'Recuperação de Inativos (Saudade)',
+    text: 'Olá {cliente}, sentimos sua falta! Faz tempo que não cuidamos do seu {veiculo}. Que tal agendar uma lavagem detalhada com 10% de desconto para matar a saudade?'
+  },
+  {
+    id: 'rain',
+    label: 'Remoção de Chuva Ácida (Problema/Solução)',
+    text: 'Olá {cliente}, notou manchas nos vidros do seu {veiculo}? Pode ser chuva ácida. Temos um tratamento especial que devolve a visibilidade e segurança. Vamos agendar?'
+  },
+  {
+    id: 'maintenance',
+    label: 'Manutenção Vitrificação (Garantia)',
+    text: 'Olá {cliente}, para manter a garantia da vitrificação do seu {veiculo}, é hora da manutenção periódica. Garanta o brilho e a proteção por mais tempo!'
+  },
+  {
+    id: 'blackfriday',
+    label: 'Oferta Relâmpago / Black Friday',
+    text: '⚡ Oferta Relâmpago na Cristal Care! {cliente}, traga seu {veiculo} esta semana e ganhe a Higienização de Ozônio na contratação de qualquer polimento.'
+  },
+  {
+    id: 'birthday',
+    label: 'Aniversário do Cliente',
+    text: 'Parabéns {cliente}! 🎂 No mês do seu aniversário, seu {veiculo} ganha um presente especial aqui na Cristal Care. Venha conferir!'
+  },
+  {
+    id: 'review',
+    label: 'Pedido de Avaliação (Google)',
+    text: 'Olá {cliente}, obrigado por confiar seu {veiculo} a nós! Poderia nos ajudar com uma avaliação rápida no Google? Leva menos de 1 minuto: [LINK]'
+  }
+];
+
+// --- COMPONENTE MODAL DE DETALHES ---
+const CampaignDetailsModal = ({ campaign, onClose }: { campaign: MarketingCampaign, onClose: () => void }) => {
+  // Simulação de dados de conversão baseados na campanha
+  const mockConversions = [
+    { client: 'Dr. Roberto Silva', vehicle: 'Porsche Macan', service: 'Polimento Técnico', value: 1200, date: 'Há 2 dias' },
+    { client: 'Ana Paula', vehicle: 'BMW X1', service: 'Lavagem Detalhada', value: 350, date: 'Ontem' },
+    { client: 'Construtora Mendes', vehicle: 'Hilux CD', service: 'Higienização', value: 650, date: 'Hoje' },
+  ].slice(0, Math.min(3, campaign.conversionCount || 0));
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
+        
+        {/* Header */}
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-start bg-slate-50/50 dark:bg-slate-900/50 rounded-t-2xl">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
+                <Megaphone size={20} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white">{campaign.name}</h3>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2">
+              Enviada em {new Date(campaign.date).toLocaleDateString('pt-BR')} às {new Date(campaign.date).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
+              <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600" />
+              <span className="capitalize">{campaign.targetSegment === 'all' ? 'Todos os Clientes' : `Segmento: ${campaign.targetSegment}`}</span>
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors">
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+          
+          {/* Funil de Conversão */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2 text-sm font-medium">
+                <Send size={16} /> Enviados
+              </div>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">{campaign.sentCount}</p>
+            </div>
+            <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2 text-sm font-medium">
+                <Eye size={16} /> Taxa Abertura
+              </div>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white">92%</p>
+              <p className="text-xs text-green-600 dark:text-green-400">Estimado</p>
+            </div>
+            <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2 text-sm font-medium">
+                <MousePointerClick size={16} /> Conversões
+              </div>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{campaign.conversionCount || 0}</p>
+            </div>
+            <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-100 dark:border-green-900/30">
+              <div className="flex items-center gap-2 text-green-700 dark:text-green-400 mb-2 text-sm font-medium">
+                <DollarSign size={16} /> Receita
+              </div>
+              <p className="text-2xl font-bold text-green-700 dark:text-green-400">{formatCurrency(campaign.revenueGenerated || 0)}</p>
+            </div>
+          </div>
+
+          {/* Mensagem Enviada */}
+          <div>
+            <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-3">Mensagem Enviada</h4>
+            <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-xl border border-blue-100 dark:border-blue-800 text-slate-700 dark:text-slate-300 text-sm relative">
+              <MessageCircle size={16} className="absolute top-4 right-4 text-blue-300 dark:text-blue-700" />
+              {campaign.messageTemplate}
+            </div>
+          </div>
+
+          {/* Lista de Conversões */}
+          <div>
+            <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-3">
+              Clientes Convertidos (Recentes)
+            </h4>
+            {mockConversions.length > 0 ? (
+              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Cliente</th>
+                      <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Serviço</th>
+                      <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Valor</th>
+                      <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Quando</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {mockConversions.map((conv, idx) => (
+                      <tr key={idx}>
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-slate-900 dark:text-white">{conv.client}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{conv.vehicle}</p>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{conv.service}</td>
+                        <td className="px-4 py-3 font-bold text-green-600 dark:text-green-400">{formatCurrency(conv.value)}</td>
+                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{conv.date}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-slate-400 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                Nenhuma conversão registrada ainda.
+              </div>
+            )}
+          </div>
+
+        </div>
+        
+        <div className="p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 rounded-b-2xl flex justify-end">
+          <button onClick={onClose} className="px-6 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function Marketing() {
   const { clients, campaigns, createCampaign, getWhatsappLink, workOrders, reminders } = useApp();
@@ -29,11 +186,13 @@ export default function Marketing() {
 
   // --- CAMPAIGNS STATE ---
   const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
+  const [selectedCampaign, setSelectedCampaign] = useState<MarketingCampaign | null>(null); // NOVO STATE
   const [newCampaign, setNewCampaign] = useState({ 
     name: '',
     target: 'inactive' as ClientSegment | 'all', 
     message: '' 
   });
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [sendingCampaign, setSendingCampaign] = useState(false);
 
   // Segmentação de Clientes
@@ -48,6 +207,14 @@ export default function Marketing() {
   const returnReminders = reminders.filter(r => r.status === 'pending' || r.status === 'overdue');
 
   // --- ACTIONS ---
+
+  const handleTemplateSelect = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    const template = CAMPAIGN_TEMPLATES.find(t => t.id === templateId);
+    if (template) {
+      setNewCampaign(prev => ({ ...prev, message: template.text }));
+    }
+  };
 
   const handleSendCampaign = () => {
     if (!newCampaign.message || !newCampaign.name) return;
@@ -74,6 +241,7 @@ export default function Marketing() {
       setSendingCampaign(false);
       setIsCampaignModalOpen(false);
       setNewCampaign({ name: '', target: 'inactive', message: '' });
+      setSelectedTemplateId('');
     }, 2000);
   };
 
@@ -158,6 +326,14 @@ export default function Marketing() {
 
   return (
     <div className="space-y-6">
+      {/* MODAL DE DETALHES DA CAMPANHA */}
+      {selectedCampaign && (
+        <CampaignDetailsModal 
+          campaign={selectedCampaign} 
+          onClose={() => setSelectedCampaign(null)} 
+        />
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Marketing & CRM</h2>
@@ -315,8 +491,14 @@ export default function Marketing() {
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                         {campaigns.map(campaign => (
-                            <tr key={campaign.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{campaign.name}</td>
+                            <tr 
+                              key={campaign.id} 
+                              onClick={() => setSelectedCampaign(campaign)}
+                              className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group"
+                            >
+                                <td className="px-6 py-4 font-medium text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors">
+                                  {campaign.name}
+                                </td>
                                 <td className="px-6 py-4">
                                     <span className="capitalize px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-medium text-slate-600 dark:text-slate-300">
                                         {campaign.targetSegment === 'all' ? 'Todos' : campaign.targetSegment}
@@ -375,12 +557,30 @@ export default function Marketing() {
                                      <option value="all">Todos ({clients.length})</option>
                                  </select>
                              </div>
+
+                             {/* TEMPLATE SELECTOR */}
+                             <div>
+                                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5 flex items-center gap-1">
+                                    <FileText size={12} /> Modelos Prontos
+                                </label>
+                                <select
+                                    value={selectedTemplateId}
+                                    onChange={(e) => handleTemplateSelect(e.target.value)}
+                                    className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white mb-2 cursor-pointer"
+                                >
+                                    <option value="">Selecione um modelo para preencher...</option>
+                                    {CAMPAIGN_TEMPLATES.map(t => (
+                                        <option key={t.id} value={t.id}>{t.label}</option>
+                                    ))}
+                                </select>
+                             </div>
+
                              <div>
                                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Mensagem (WhatsApp)</label>
                                  <textarea 
                                     value={newCampaign.message}
                                     onChange={e => setNewCampaign({...newCampaign, message: e.target.value})}
-                                    rows={4}
+                                    rows={5}
                                     placeholder="Olá {cliente}, temos uma oferta especial..."
                                     className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white resize-none"
                                  />

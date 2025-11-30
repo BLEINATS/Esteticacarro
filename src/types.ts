@@ -24,6 +24,7 @@ export interface ServiceCatalogItem {
   active: boolean;
   standardTimeMinutes: number;
   returnIntervalDays?: number;
+  imageUrl?: string; // Nova propriedade para a foto do serviço
 }
 
 export interface PriceMatrixEntry {
@@ -219,13 +220,15 @@ export interface WorkOrder {
   
   npsScore?: number; 
   npsComment?: string;
+  
+  origin?: 'manual' | 'web_lead'; // Rastreamento de origem
 }
 
-// --- SAAS & CONFIG TYPES (UPDATED FOR QR CODE) ---
+// --- SAAS & CONFIG TYPES ---
 
 export interface WhatsappSessionInfo {
   status: 'disconnected' | 'scanning' | 'connected';
-  qrCode?: string; // URL or base64
+  qrCode?: string; 
   device?: {
     name: string;
     number: string;
@@ -245,17 +248,30 @@ export interface WhatsappConfig {
   };
 }
 
+export interface LandingPageConfig {
+  enabled: boolean;
+  heroTitle: string;
+  heroSubtitle: string;
+  heroImage: string;
+  primaryColor: string;
+  showServices: boolean;
+  showTestimonials: boolean;
+}
+
 export interface CompanySettings {
   name: string;
-  responsibleName: string; // NOVO CAMPO
+  responsibleName: string;
   cnpj: string;
   email: string;
   phone: string;
   address: string;
   logoUrl: string;
   website?: string;
+  instagram?: string; // Novo
+  facebook?: string; // Novo
   primaryColor?: string;
   whatsapp: WhatsappConfig; 
+  landingPage: LandingPageConfig;
 }
 
 export interface SubscriptionPlan {
@@ -270,7 +286,7 @@ export interface SubscriptionDetails {
   planId: 'starter' | 'pro' | 'enterprise';
   status: 'active' | 'past_due' | 'canceled' | 'trial';
   nextBillingDate: string;
-  paymentMethod: string; // ex: "Mastercard final 8899"
+  paymentMethod: string; 
   invoices: {
     id: string;
     date: string;

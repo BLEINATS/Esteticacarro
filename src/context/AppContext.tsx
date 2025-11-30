@@ -27,7 +27,7 @@ interface AppContextType {
   subscription: SubscriptionDetails;
   updateCompanySettings: (settings: Partial<CompanySettings>) => void;
   
-  // WhatsApp Actions (New)
+  // WhatsApp Actions
   connectWhatsapp: () => void;
   disconnectWhatsapp: () => void;
   
@@ -92,13 +92,15 @@ const setStorage = <T,>(key: string, value: T) => {
 
 const initialCompanySettings: CompanySettings = {
   name: 'Cristal Care Autodetail',
-  responsibleName: 'Anderson Silva', // NOVO CAMPO
+  responsibleName: 'Anderson Silva',
   cnpj: '12.345.678/0001-90',
   email: 'contato@cristalcare.com.br',
   phone: '(11) 99999-8888',
   address: 'Av. Automotiva, 1000 - Jardins, SP',
   logoUrl: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=150&q=80',
   website: 'www.cristalcare.com.br',
+  instagram: 'https://instagram.com',
+  facebook: 'https://facebook.com',
   whatsapp: {
     enabled: true,
     session: {
@@ -110,6 +112,15 @@ const initialCompanySettings: CompanySettings = {
       nps: 'Olá {cliente}, como foi sua experiência com a Cristal Care? Responda de 0 a 10.',
       recall: 'Olá {cliente}, já faz um tempo que cuidamos do seu {veiculo}. Que tal renovar a proteção?'
     }
+  },
+  landingPage: {
+    enabled: true,
+    heroTitle: 'Estética Automotiva de Alto Padrão',
+    heroSubtitle: 'Cuidamos do seu carro com a excelência que ele merece. Agende agora e transforme seu veículo.',
+    heroImage: 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=1920&q=80',
+    primaryColor: '#2563eb',
+    showServices: true,
+    showTestimonials: true
   }
 };
 
@@ -140,10 +151,123 @@ const initialEmployees: Employee[] = [
   { id: 'e1', name: 'Mestre Miyagi', role: 'Funileiro', pin: '1234', commissionRate: 30, commissionBase: 'net', active: true, balance: 3450.00 },
   { id: 'e5', name: 'Fernanda Gerente', role: 'Manager', pin: '9999', commissionRate: 5, commissionBase: 'gross', active: true, balance: 4500.00 },
 ];
+
+// --- EXPANDED SERVICE CATALOG ---
 const initialServices: ServiceCatalogItem[] = [
-    { id: 'srv1', name: 'Lavagem Técnica', description: '...', category: 'Lavagem', active: true, standardTimeMinutes: 90, returnIntervalDays: 30 },
+    { 
+      id: 'srv1', 
+      name: 'Lavagem Técnica', 
+      description: 'Limpeza detalhada de carroceria, rodas e caixas de roda com produtos biodegradáveis de pH neutro.', 
+      category: 'Lavagem', 
+      active: true, 
+      standardTimeMinutes: 90, 
+      returnIntervalDays: 30, 
+      imageUrl: 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=800&q=80' 
+    },
+    { 
+      id: 'srv2', 
+      name: 'Polimento Comercial', 
+      description: 'Revitalização do brilho e remoção de riscos superficiais e marcas de lavagem (swirls).', 
+      category: 'Polimento', 
+      active: true, 
+      standardTimeMinutes: 240, 
+      returnIntervalDays: 180, 
+      imageUrl: 'https://images.unsplash.com/photo-1507136566006-cfc505b114fc?auto=format&fit=crop&w=800&q=80' 
+    },
+    { 
+      id: 'srv3', 
+      name: 'Vitrificação 3 Anos', 
+      description: 'Proteção cerâmica de alta dureza (9H) que repele água e sujeira, facilitando a limpeza.', 
+      category: 'Proteção', 
+      active: true, 
+      standardTimeMinutes: 480, 
+      returnIntervalDays: 365, 
+      imageUrl: 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=800&q=80' 
+    },
+    { 
+      id: 'srv4', 
+      name: 'Higienização Interna', 
+      description: 'Limpeza profunda de bancos, carpetes e teto com extração de sujeira e eliminação de ácaros.', 
+      category: 'Interior', 
+      active: true, 
+      standardTimeMinutes: 300, 
+      returnIntervalDays: 180, 
+      imageUrl: 'https://images.unsplash.com/photo-1552930294-6b595f4c2974?auto=format&fit=crop&w=800&q=80' 
+    },
+    { 
+      id: 'srv5', 
+      name: 'Martelinho de Ouro', 
+      description: 'Técnica artesanal para desamassar a lataria sem danificar a pintura original.', 
+      category: 'Funilaria', 
+      active: true, 
+      standardTimeMinutes: 120, 
+      returnIntervalDays: 0, 
+      imageUrl: 'https://images.unsplash.com/photo-1625047509168-a7026f36de04?auto=format&fit=crop&w=800&q=80' 
+    },
+    { 
+      id: 'srv6', 
+      name: 'Cristalização de Vidros', 
+      description: 'Tratamento repelente de chuva que melhora a visibilidade em dias chuvosos.', 
+      category: 'Proteção', 
+      active: true, 
+      standardTimeMinutes: 60, 
+      returnIntervalDays: 90, 
+      imageUrl: 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=800&q=80' 
+    },
+    { 
+      id: 'srv7', 
+      name: 'Oxi-Sanitização', 
+      description: 'Esterilização do ar condicionado e interior com ozônio, eliminando odores e bactérias.', 
+      category: 'Interior', 
+      active: true, 
+      standardTimeMinutes: 45, 
+      returnIntervalDays: 90, 
+      imageUrl: 'https://images.unsplash.com/photo-1600661653561-629509216228?auto=format&fit=crop&w=800&q=80' 
+    },
+    { 
+      id: 'srv8', 
+      name: 'PPF (Frontal)', 
+      description: 'Película de proteção de pintura contra pedras e riscos profundos em estradas.', 
+      category: 'Proteção', 
+      active: true, 
+      standardTimeMinutes: 600, 
+      returnIntervalDays: 0, 
+      imageUrl: 'https://images.unsplash.com/photo-1553440569-bcc63803a83d?auto=format&fit=crop&w=800&q=80' 
+    },
+    { 
+      id: 'srv9', 
+      name: 'Detalhamento de Motor', 
+      description: 'Limpeza técnica do cofre do motor com proteção de plásticos e borrachas.', 
+      category: 'Lavagem', 
+      active: true, 
+      standardTimeMinutes: 120, 
+      returnIntervalDays: 180, 
+      imageUrl: 'https://images.unsplash.com/photo-1504215680853-026ed2a45def?auto=format&fit=crop&w=800&q=80' 
+    }
 ];
-const initialPriceMatrix: PriceMatrixEntry[] = [];
+
+// --- GENERATE PRICE MATRIX (FIXED) ---
+const initialPriceMatrix: PriceMatrixEntry[] = initialServices.flatMap(service => {
+  return (['small', 'medium', 'large', 'xl'] as VehicleSize[]).map(size => {
+    let basePrice = 100;
+    // Define base prices per category
+    if (service.category === 'Lavagem') basePrice = 80;
+    if (service.category === 'Polimento') basePrice = 450;
+    if (service.category === 'Proteção') basePrice = 900;
+    if (service.category === 'Interior') basePrice = 300;
+    if (service.category === 'Funilaria') basePrice = 600;
+    
+    // Apply size multiplier
+    const multipliers: Record<string, number> = { small: 1, medium: 1.2, large: 1.4, xl: 1.7 };
+    
+    return {
+      serviceId: service.id,
+      size: size,
+      price: Math.ceil(basePrice * multipliers[size])
+    };
+  });
+});
+
 const initialInventory: InventoryItem[] = [];
 const initialWorkOrders: WorkOrder[] = [];
 const initialTransactions: EmployeeTransaction[] = [];
@@ -152,8 +276,8 @@ const initialCampaigns: MarketingCampaign[] = [];
 
 export function AppProvider({ children }: { children: ReactNode }) {
   // State Initialization
-  // BUMPED TO V6 to ensure clean config state for new logic
-  const [companySettings, setCompanySettings] = useState<CompanySettings>(() => getStorage('companySettings_v6', initialCompanySettings)); 
+  // BUMPED TO V11 to ensure new company fields
+  const [companySettings, setCompanySettings] = useState<CompanySettings>(() => getStorage('companySettings_v11', initialCompanySettings)); 
   const [subscription, setSubscription] = useState<SubscriptionDetails>(() => getStorage('subscription_v1', initialSubscription));
   
   // Existing States
@@ -161,8 +285,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() => getStorage<WorkOrder[]>('workOrders_v7', initialWorkOrders));
   const [clients, setClients] = useState<Client[]>(() => getStorage<Client[]>('clients_v7', initialClients));
   const [reminders, setReminders] = useState<Reminder[]>(() => getStorage('reminders_v7', initialReminders));
-  const [services, setServices] = useState<ServiceCatalogItem[]>(() => getStorage('services_v7', initialServices));
-  const [priceMatrix, setPriceMatrix] = useState<PriceMatrixEntry[]>(() => getStorage('priceMatrix_v7', initialPriceMatrix));
+  
+  // BUMPED TO V10 for new services image fix
+  const [services, setServices] = useState<ServiceCatalogItem[]>(() => getStorage('services_v10', initialServices));
+  
+  // BUMPED TO V8 to load the new price matrix
+  const [priceMatrix, setPriceMatrix] = useState<PriceMatrixEntry[]>(() => getStorage('priceMatrix_v8', initialPriceMatrix));
+  
   const [employees, setEmployees] = useState<Employee[]>(() => getStorage('employees_v7', initialEmployees));
   const [employeeTransactions, setEmployeeTransactions] = useState<EmployeeTransaction[]>(() => getStorage('employeeTransactions_v7', initialTransactions));
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>(() => getStorage<MarketingCampaign[]>('campaigns_v7', initialCampaigns));
@@ -172,14 +301,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [recipes] = useState<ServiceRecipe[]>([]);
 
   // Persistence
-  useEffect(() => setStorage('companySettings_v6', companySettings), [companySettings]);
+  useEffect(() => setStorage('companySettings_v11', companySettings), [companySettings]);
   useEffect(() => setStorage('subscription_v1', subscription), [subscription]);
   useEffect(() => setStorage('theme', theme), [theme]);
+  useEffect(() => setStorage('reminders_v7', reminders), [reminders]); // Persist reminders
+  useEffect(() => setStorage('services_v10', services), [services]);
+  useEffect(() => setStorage('priceMatrix_v8', priceMatrix), [priceMatrix]); // Persist prices
 
-  // RECOVERY LOGIC: If loaded in 'scanning' state, auto-connect (simulating completion)
+  // RECOVERY LOGIC
   useEffect(() => {
     if (companySettings.whatsapp.session.status === 'scanning') {
-      console.log("Recovering from scanning state...");
       setCompanySettings(prev => ({
         ...prev,
         whatsapp: {
@@ -196,7 +327,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }));
     }
-  }, []); // Runs once on mount
+  }, []);
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -219,7 +350,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // --- WHATSAPP SIMULATION ---
   const connectWhatsapp = () => {
-    // 1. Set to Scanning
     setCompanySettings(prev => ({
       ...prev,
       whatsapp: {
@@ -228,7 +358,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     }));
 
-    // 2. Simulate delay (User scanning QR)
     setTimeout(() => {
       setCompanySettings(prev => ({
         ...prev,
@@ -245,7 +374,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         }
       }));
-    }, 4000); // 4 seconds to simulate scan
+    }, 4000);
   };
 
   const disconnectWhatsapp = () => {
@@ -258,14 +387,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  // ... (Keeping all existing actions)
+  // --- LOGIC: GENERATE REMINDERS ---
+  const generateReminders = (os: WorkOrder) => {
+    // 1. Find the service definition
+    const service = services.find(s => s.id === os.serviceId) || services.find(s => s.name === os.service);
+    
+    // 2. Check if it has a return interval
+    if (!service || !service.returnIntervalDays || service.returnIntervalDays <= 0) return;
+
+    // 3. Find vehicle ID (since OS only stores plate string for now)
+    const client = clients.find(c => c.id === os.clientId);
+    if (!client) return;
+    const vehicle = client.vehicles.find(v => v.plate === os.plate);
+    const vehicleId = vehicle ? vehicle.id : 'unknown';
+
+    // 4. Calculate Due Date
+    const dueDate = addDays(new Date(), service.returnIntervalDays);
+    
+    // 5. Create Reminder
+    const newReminder: Reminder = {
+      id: `rem-${Date.now()}`,
+      clientId: os.clientId,
+      vehicleId: vehicleId,
+      serviceType: service.name,
+      dueDate: formatISO(dueDate),
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      autoGenerated: true
+    };
+
+    setReminders(prev => [...prev, newReminder]);
+  };
+
   const addWorkOrder = (os: WorkOrder) => setWorkOrders(prev => [os, ...prev]);
   const updateWorkOrder = (id: string, updates: Partial<WorkOrder>) => setWorkOrders(prev => prev.map(os => os.id === id ? { ...os, ...updates } : os));
   const addClient = (client: Partial<Client>) => setClients(prev => [...prev, { id: `c-${Date.now()}`, vehicles: [], ltv: 0, lastVisit: new Date().toISOString(), visitCount: 0, status: 'active', segment: 'new', name: '', phone: '', email: '', ...client } as Client]);
   const updateClient = (id: string, updates: Partial<Client>) => setClients(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
   const addVehicle = (clientId: string, vehicle: Vehicle) => setClients(prev => prev.map(c => c.id === clientId ? { ...c, vehicles: [...c.vehicles, vehicle] } : c));
   const deductStock = (serviceName: string) => { };
-  const generateReminders = (os: WorkOrder) => { };
+  
   const addService = (service: Partial<ServiceCatalogItem>) => {
     const newService = { id: `srv-${Date.now()}`, active: true, standardTimeMinutes: 60, returnIntervalDays: 0, ...service } as ServiceCatalogItem;
     setServices(prev => [...prev, newService]);
@@ -276,9 +436,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const bulkUpdatePrices = (targetSize: VehicleSize | 'all', percentage: number) => { const factor = 1 + (percentage / 100); setPriceMatrix(prev => prev.map(entry => (targetSize === 'all' || entry.size === targetSize) ? { ...entry, price: Math.ceil(entry.price * factor) } : entry)); };
   const getPrice = (serviceId: string, size: VehicleSize) => priceMatrix.find(p => p.serviceId === serviceId && p.size === size)?.price || 0;
   const assignTask = () => {}; const startTask = () => {}; const stopTask = () => {};
+  
   const completeWorkOrder = (id: string) => {
-      updateWorkOrder(id, { status: 'Concluído' });
+      const os = workOrders.find(o => o.id === id);
+      if (os) {
+        updateWorkOrder(id, { status: 'Concluído' });
+        generateReminders(os); // TRIGGER REMINDER GENERATION
+      }
   };
+  
   const submitNPS = (workOrderId: string, score: number, comment?: string) => updateWorkOrder(workOrderId, { npsScore: score, npsComment: comment });
   const addEmployeeTransaction = (trans: EmployeeTransaction) => { setEmployeeTransactions(prev => [...prev, trans]); setEmployees(prev => prev.map(e => { if (e.id === trans.employeeId) { const change = trans.type === 'commission' ? trans.amount : -trans.amount; return { ...e, balance: e.balance + change }; } return e; })); };
   const createCampaign = (campaign: MarketingCampaign) => setCampaigns(prev => [campaign, ...prev]);
