@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, CheckCircle2, AlertTriangle, Camera, User, 
   MessageCircle, FileText, Box, Save, PenTool, 
   ShieldCheck, ClipboardCheck, CalendarClock, Hammer,
   CreditCard, UploadCloud, Lock, Share2, Plus, Trash2,
   DollarSign, Wrench, Check, Smile, Star, ListTodo,
-  Image as ImageIcon, Search, Car, UserPlus
+  Image as ImageIcon, Search, Car, UserPlus, ChevronDown
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { WorkOrder, DamagePoint, VehicleInventory, DailyLogEntry, AdditionalItem, QualityChecklistItem, ScopeItem, Vehicle, VehicleSize, VEHICLE_SIZES } from '../types';
@@ -46,7 +46,12 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const [qaList, setQaList] = useState<QualityChecklistItem[]>(workOrder.qaChecklist || []);
   const [additionalItems, setAdditionalItems] = useState<AdditionalItem[]>(workOrder.additionalItems || []);
   const [scopeList, setScopeList] = useState<ScopeItem[]>(workOrder.scopeChecklist || []);
-  const [selectedServiceId, setSelectedServiceId] = useState<string>(workOrder.serviceId || '');
+  
+  // MULTI-SERVICE SELECTION
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   const [npsScore, setNpsScore] = useState<number | null>(workOrder.npsScore || null);
   const [isDamageModalOpen, setIsDamageModalOpen] = useState(false);
   const [currentDamageArea, setCurrentDamageArea] = useState<DamagePoint['area'] | null>(null);
@@ -80,6 +85,47 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         }
     }
   }, [workOrder.clientId, clients]);
+
+  // Initialize Services from WorkOrder
+  useEffect(() => {
+    if (workOrder.serviceIds && workOrder.serviceIds.length > 0) {
+        setSelectedServiceIds(workOrder.serviceIds);
+    } else if (workOrder.serviceId) {
+        setSelectedServiceIds([workOrder.serviceId]);
+    }
+  }, [workOrder]);
+
+  // Update Price when Services or Vehicle changes
+  useEffect(() => {
+    if (selectedVehicleObj && selectedServiceIds.length > 0) {
+        // Only update price if it's a new order or user is changing services
+        // For existing orders, we might want to keep the stored price unless user explicitly changes services
+        // But for simplicity in this demo, we recalculate if services change.
+        // To avoid overwriting manual edits on load, we could check if it's initial load.
+        // However, since we init servicePrice from props, this effect runs on mount.
+        // We can check if the calculated price is different from current to avoid reset?
+        // Better: Only calc if we are "interacting".
+        // For now, let's just calculate.
+        const total = selectedServiceIds.reduce((acc, id) => acc + getPrice(id, selectedVehicleObj.size), 0);
+        
+        // Only update if it's significantly different (e.g. user changed selection)
+        // Or if it's a new order (totalValue 0)
+        if (workOrder.totalValue === 0 || selectedServiceIds.join(',') !== (workOrder.serviceIds || [workOrder.serviceId]).join(',')) {
+             setServicePrice(total);
+        }
+    }
+  }, [selectedServiceIds, selectedVehicleObj]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsServiceDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Initialize Scope Checklist
   useEffect(() => {
@@ -126,10 +172,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     if (client.vehicles.length > 0) {
         const v = client.vehicles[0];
         setSelectedVehiclePlate(v.plate);
-        // Update price if service is already selected
-        if (selectedServiceId) {
-            setServicePrice(getPrice(selectedServiceId, v.size));
-        }
     } else {
         setSelectedVehiclePlate('');
         setIsAddingVehicle(true); // Prompt to add vehicle
@@ -138,17 +180,14 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
   const handleVehicleChange = (plate: string) => {
     setSelectedVehiclePlate(plate);
-    const v = clientVehicles.find(veh => veh.plate === plate);
-    if (v && selectedServiceId) {
-        setServicePrice(getPrice(selectedServiceId, v.size));
-    }
   };
 
-  const handleServiceChange = (serviceId: string) => {
-    setSelectedServiceId(serviceId);
-    if (selectedVehicleObj && serviceId) {
-        setServicePrice(getPrice(serviceId, selectedVehicleObj.size));
-    }
+  const toggleService = (serviceId: string) => {
+    setSelectedServiceIds(prev => 
+        prev.includes(serviceId) 
+            ? prev.filter(id => id !== serviceId) 
+            : [...prev, serviceId]
+    );
   };
 
   const handleQuickAddVehicle = () => {
@@ -163,9 +202,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         };
         addVehicle(selectedClientId, v);
         setSelectedVehiclePlate(v.plate);
-        if (selectedServiceId) {
-            setServicePrice(getPrice(selectedServiceId, v.size));
-        }
         setIsAddingVehicle(false);
         setNewVehicle({ model: '', plate: '', color: '', size: 'medium' });
     }
@@ -184,7 +220,11 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       ? (insurance.deductibleAmount || 0) + (insurance.insuranceCoveredAmount || 0) + extrasTotal 
       : servicePrice + extrasTotal;
 
-    const serviceName = services.find(s => s.id === selectedServiceId)?.name || workOrder.service;
+    // Combine service names
+    const selectedServicesList = services.filter(s => selectedServiceIds.includes(s.id));
+    const serviceName = selectedServicesList.length > 0 
+        ? selectedServicesList.map(s => s.name).join(' + ') 
+        : workOrder.service;
 
     const updatedData = {
       clientId: selectedClientId,
@@ -199,7 +239,8 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       additionalItems,
       totalValue: finalTotal,
       service: serviceName,
-      serviceId: selectedServiceId,
+      serviceId: selectedServiceIds[0], // Primary ID
+      serviceIds: selectedServiceIds, // All IDs
       status: workOrder.status
     };
 
@@ -226,8 +267,11 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         return;
       }
       
-      // Use the editable servicePrice state
-      const serviceName = services.find(s => s.id === selectedServiceId)?.name || workOrder.service;
+      // Combine service names
+      const selectedServicesList = services.filter(s => selectedServiceIds.includes(s.id));
+      const serviceName = selectedServicesList.length > 0 
+        ? selectedServicesList.map(s => s.name).join(' + ') 
+        : workOrder.service;
 
       const approvedData = {
           clientId: selectedClientId,
@@ -235,7 +279,8 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           plate: selectedVehiclePlate,
           status: 'Aguardando',
           service: serviceName,
-          serviceId: selectedServiceId,
+          serviceId: selectedServiceIds[0],
+          serviceIds: selectedServiceIds,
           totalValue: servicePrice, // Use the manual price
           damages,
           vehicleInventory: inventory
@@ -525,21 +570,67 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     O que vamos fazer?
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Serviço Principal</label>
-                      <select 
-                        value={selectedServiceId}
-                        onChange={(e) => handleServiceChange(e.target.value)}
-                        className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
+                    
+                    {/* MULTI-SERVICE SELECTION */}
+                    <div className="relative" ref={dropdownRef}>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Serviços a Realizar</label>
+                      <button 
+                        onClick={() => setIsServiceDropdownOpen(!isServiceDropdownOpen)}
+                        className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white flex items-center justify-between"
                       >
-                        <option value="">Selecione um serviço...</option>
-                        {services.map(s => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                      </select>
+                        <span className="truncate">
+                            {selectedServiceIds.length > 0 
+                                ? `${selectedServiceIds.length} serviço(s) selecionado(s)` 
+                                : 'Selecione os serviços...'}
+                        </span>
+                        <ChevronDown size={16} className="text-slate-400" />
+                      </button>
+                      
+                      {isServiceDropdownOpen && (
+                        <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto p-2 space-y-1">
+                            {services.map(s => (
+                                <div 
+                                    key={s.id} 
+                                    onClick={() => toggleService(s.id)}
+                                    className={cn(
+                                        "flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors",
+                                        selectedServiceIds.includes(s.id) 
+                                            ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300" 
+                                            : "hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                                    )}
+                                >
+                                    <div className={cn(
+                                        "w-4 h-4 rounded border flex items-center justify-center transition-colors",
+                                        selectedServiceIds.includes(s.id)
+                                            ? "bg-blue-600 border-blue-600 text-white"
+                                            : "border-slate-300 dark:border-slate-600"
+                                    )}>
+                                        {selectedServiceIds.includes(s.id) && <Check size={12} />}
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-sm font-medium">{s.name}</p>
+                                        <p className="text-[10px] text-slate-500 dark:text-slate-400">{s.category}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                      )}
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {selectedServiceIds.map(id => {
+                            const s = services.find(srv => srv.id === id);
+                            if (!s) return null;
+                            return (
+                                <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-bold">
+                                    {s.name}
+                                    <button onClick={() => toggleService(id)} className="hover:text-red-500"><X size={12} /></button>
+                                </span>
+                            );
+                        })}
+                      </div>
                     </div>
+
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor do Serviço (R$) {selectedVehicleObj && `- Porte ${selectedVehicleObj.size}`}</label>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor Total (R$) {selectedVehicleObj && `- Porte ${selectedVehicleObj.size}`}</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">R$</span>
                         <input 

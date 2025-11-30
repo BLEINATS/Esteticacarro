@@ -197,6 +197,7 @@ export interface WorkOrder {
   plate: string;
   service: string; 
   serviceId?: string; 
+  serviceIds?: string[]; // Support for multiple services
   status: 'Aguardando Aprovação' | 'Aguardando' | 'Em Andamento' | 'Aguardando Peças' | 'Controle de Qualidade' | 'Concluído' | 'Entregue' | 'Cancelado';
   technician: string;
   deadline: string;

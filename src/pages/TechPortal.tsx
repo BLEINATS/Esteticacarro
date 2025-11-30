@@ -113,6 +113,7 @@ export default function TechPortal() {
       plate: selectedVehicle.plate,
       service: serviceNameCombined,
       serviceId: selectedServiceIds[0], // Primary service ID for reference
+      serviceIds: selectedServiceIds, // Store all IDs
       status: 'Aguardando Aprovação',
       technician: currentUser.name,
       deadline: 'A definir',
@@ -144,8 +145,6 @@ export default function TechPortal() {
   };
 
   // --- MY TASKS LOGIC ---
-  // Filter tasks assigned to current user OR allow seeing all active OS for "Team Work" if needed
-  // For now, showing all active OS so tech can pick up work or update logs
   const activeWorkOrders = workOrders.filter(os => 
     os.status !== 'Concluído' && os.status !== 'Entregue' && os.status !== 'Cancelado'
   );
