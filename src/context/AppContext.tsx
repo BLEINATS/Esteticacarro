@@ -1111,24 +1111,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const points = getClientPoints(clientId);
     if (!card || !points) return '';
     
-    const pkpassData = {
-      formatVersion: 1,
-      typeId: 'generic',
-      description: 'Cartão de Fidelidade Cristal Care',
-      serialNumber: card.cardNumber,
-      barcode: { format: 'QR', message: card.qrCode },
-      generic: {
-        primaryFields: [
-          { key: 'name', label: 'Cliente', value: card.cardHolder }
-        ],
-        secondaryFields: [
-          { key: 'points', label: 'Pontos', value: points.totalPoints.toString() },
-          { key: 'tier', label: 'Nível', value: points.tier.toUpperCase() }
-        ]
-      }
-    };
+    const cardData = `
+CARTÃO DE FIDELIDADE - CRISTAL CARE
+=====================================
+Nome: ${card.cardHolder}
+Número: ${card.cardNumber}
+Pontos: ${points.totalPoints}
+Nível: ${points.tier.toUpperCase()}
+Serviços: ${points.servicesCompleted}
+Data Emissão: ${new Date().toLocaleDateString('pt-BR')}
+
+Escaneie o QR CODE abaixo no ponto de venda:
+${card.qrCode}
+    `;
     
-    return `data:text/plain;base64,${Buffer.from(JSON.stringify(pkpassData)).toString('base64')}`;
+    return `data:text/plain;base64,${btoa(cardData)}`;
   };
 
   const generateGoogleWallet = (clientId: string): string => {
@@ -1136,25 +1133,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const points = getClientPoints(clientId);
     if (!card || !points) return '';
     
-    const walletData = {
-      classId: 'cristal-care-fidelidade',
-      objectId: card.cardNumber,
-      genericClass: {
-        id: 'cristal-care-fidelidade',
-        issuerName: 'Cristal Care Autodetail',
-        cardNumberLabel: 'Cartão de Fidelidade'
-      },
-      genericObject: {
-        id: card.cardNumber,
-        classId: 'cristal-care-fidelidade',
-        cardNumber: card.cardNumber,
-        heroImage: {
-          contentDescription: `Cartão ${points.tier} - ${points.totalPoints} pontos`
-        }
-      }
-    };
+    // Retorna um URL de compartilhamento direto do cartão
+    const baseUrl = window.location.origin;
+    return `${baseUrl}/client-profile/${clientId}`;
+  };
+  
+  const claimReward = (clientId: string, rewardId: string): boolean => {
+    const reward = rewards.find(r => r.id === rewardId);
+    const clientPoints = getClientPoints(clientId);
     
-    return `https://pay.google.com/gp/m/walletobjects?payload=${Buffer.from(JSON.stringify(walletData)).toString('base64')}`;
+    if (!reward || !clientPoints) return false;
+    if (clientPoints.totalPoints < reward.requiredPoints) return false;
+    
+    // Deduzir pontos
+    setClientPoints(prev => prev.map(cp => 
+      cp.clientId === clientId 
+        ? {
+            ...cp,
+            totalPoints: cp.totalPoints - reward.requiredPoints,
+            pointsHistory: [
+              ...cp.pointsHistory,
+              {
+                id: `claim-${Date.now()}`,
+                workOrderId: '',
+                points: -reward.requiredPoints,
+                description: `Resgate: ${reward.name}`,
+                date: new Date().toISOString()
+              }
+            ]
+          }
+        : cp
+    ));
+    
+    // Atualizar contagem de resgate
+    updateReward(rewardId, { redeemedCount: (reward.redeemedCount || 0) + 1 });
+    
+    return true;
   };
 
   return (
@@ -1176,7 +1190,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       connectWhatsapp, disconnectWhatsapp,
       addPointsToClient, getClientPoints, createFidelityCard, getFidelityCard,
       addReward, updateReward, deleteReward, getRewardsByLevel,
-      updateTier, generatePKPass, generateGoogleWallet
+      updateTier, generatePKPass, generateGoogleWallet, claimReward
     }}>
       {children}
     </AppContext.Provider>

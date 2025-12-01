@@ -14,7 +14,7 @@ interface ClientDetailsModalProps {
 }
 
 export default function ClientDetailsModal({ client, onClose }: ClientDetailsModalProps) {
-  const { workOrders, reminders, addVehicle, getClientPoints, getFidelityCard, companySettings, getRewardsByLevel, getWhatsappLink, generatePKPass, generateGoogleWallet } = useApp();
+  const { workOrders, reminders, addVehicle, getClientPoints, getFidelityCard, companySettings, getRewardsByLevel, getWhatsappLink, generatePKPass, generateGoogleWallet, claimReward } = useApp();
   const [activeTab, setActiveTab] = useState<'overview' | 'vehicles' | 'history' | 'crm' | 'fidelidade'>('overview');
   const [showAddVehicle, setShowAddVehicle] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -198,16 +198,18 @@ Podemos agendar para esta semana?`;
               </div>
 
               {/* History & Rewards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 {/* Points History */}
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <h4 className="font-bold text-blue-900 dark:text-blue-200 text-sm mb-2">📋 Pontos ({points.pointsHistory?.length || 0})</h4>
+                  <h4 className="font-bold text-blue-900 dark:text-blue-200 text-sm mb-2">📋 Histórico de Pontos ({points.pointsHistory?.length || 0})</h4>
                   <div className="space-y-1 max-h-32 overflow-y-auto text-xs">
                     {points.pointsHistory && points.pointsHistory.length > 0 ? (
-                      points.pointsHistory.slice(-3).map(entry => (
-                        <div key={entry.id} className="flex justify-between text-blue-700 dark:text-blue-400">
+                      points.pointsHistory.slice(-5).map(entry => (
+                        <div key={entry.id} className="flex justify-between items-center text-blue-700 dark:text-blue-400">
                           <span className="truncate">{entry.description}</span>
-                          <span className="font-bold flex-shrink-0">+{entry.points}</span>
+                          <span className={`font-bold flex-shrink-0 ${entry.points > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {entry.points > 0 ? '+' : ''}{entry.points}
+                          </span>
                         </div>
                       ))
                     ) : (
@@ -216,21 +218,49 @@ Podemos agendar para esta semana?`;
                   </div>
                 </div>
 
-                {/* Available Rewards */}
+                {/* Available Rewards - Claimable */}
                 {points.tier && (
                   <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
-                    <h4 className="font-bold text-amber-900 dark:text-amber-200 text-sm mb-2 flex items-center gap-1">
-                      <Gift size={14} /> Recompensas ({getRewardsByLevel(points.tier).length})
+                    <h4 className="font-bold text-amber-900 dark:text-amber-200 text-sm mb-3 flex items-center gap-1">
+                      <Gift size={14} /> Recompensas Disponíveis
                     </h4>
-                    <div className="space-y-1 max-h-32 overflow-y-auto text-xs">
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
                       {getRewardsByLevel(points.tier).length > 0 ? (
-                        getRewardsByLevel(points.tier).slice(0, 3).map(r => (
-                          <div key={r.id} className="text-amber-700 dark:text-amber-400">
-                            <p className="font-bold truncate">{r.name}</p>
-                          </div>
-                        ))
+                        getRewardsByLevel(points.tier).map(r => {
+                          const canClaim = points.totalPoints >= r.requiredPoints;
+                          return (
+                            <div key={r.id} className="bg-white dark:bg-slate-900 p-2 rounded border border-amber-200 dark:border-amber-800">
+                              <div className="flex justify-between items-start gap-2 mb-2">
+                                <div className="flex-1">
+                                  <p className="font-bold text-amber-900 dark:text-amber-200 text-xs">{r.name}</p>
+                                  <p className="text-[10px] text-amber-700 dark:text-amber-400 line-clamp-1">{r.description}</p>
+                                </div>
+                                <span className="text-[10px] font-bold bg-amber-200 dark:bg-amber-800 px-2 py-1 rounded whitespace-nowrap">
+                                  -{r.requiredPoints}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  if (claimReward(client.id, r.id)) {
+                                    alert(`✅ Recompensa "${r.name}" resgatada! -${r.requiredPoints} pontos`);
+                                  } else {
+                                    alert(`❌ Pontos insuficientes! Você tem ${points.totalPoints}, precisa de ${r.requiredPoints}`);
+                                  }
+                                }}
+                                disabled={!canClaim}
+                                className={`w-full text-xs font-bold py-1.5 rounded transition-colors ${
+                                  canClaim
+                                    ? 'bg-amber-500 hover:bg-amber-600 text-white cursor-pointer'
+                                    : 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                                }`}
+                              >
+                                {canClaim ? '🎁 Resgatar' : '❌ Sem Pontos'}
+                              </button>
+                            </div>
+                          );
+                        })
                       ) : (
-                        <p className="italic text-amber-600">Sem recompensas disponíveis</p>
+                        <p className="italic text-amber-600">Sem recompensas disponíveis para este nível</p>
                       )}
                     </div>
                   </div>
