@@ -208,6 +208,39 @@ export interface Discount {
   appliedServiceId?: string;
 }
 
+export interface GamificationConfig {
+  enabled: boolean;
+  levelSystem: boolean;
+  pointsMultiplier: number; // 1x, 1.5x, 2x etc
+  rewardTier: 'bronze' | 'silver' | 'gold' | 'platinum';
+}
+
+export interface ClientPoints {
+  clientId: string;
+  totalPoints: number;
+  currentLevel: number; // 1-5 levels
+  tier: 'bronze' | 'silver' | 'gold' | 'platinum';
+  lastServiceDate: string;
+  servicesCompleted: number;
+  pointsHistory: {
+    id: string;
+    workOrderId: string;
+    points: number;
+    description: string;
+    date: string;
+  }[];
+}
+
+export interface FidelityCard {
+  clientId: string;
+  cardNumber: string; // Gerado automaticamente
+  cardHolder: string;
+  cardColor: 'blue' | 'purple' | 'emerald' | 'amber';
+  qrCode: string;
+  expiresAt: string;
+  issueDate: string;
+}
+
 export interface ScopeItem {
     id: string;
     label: string;
@@ -311,6 +344,7 @@ export interface CompanySettings {
   whatsapp: WhatsappConfig; 
   landingPage: LandingPageConfig;
   preferences: CompanyPreferences;
+  gamification: GamificationConfig;
 }
 
 export interface SubscriptionPlan {

@@ -14,6 +14,7 @@ import Marketing from './pages/Marketing';
 import Schedule from './pages/Schedule';
 import Settings from './pages/Settings';
 import ShopLanding from './pages/ShopLanding';
+import Gamification from './pages/Gamification';
 
 function App() {
   return (
@@ -38,6 +39,7 @@ function App() {
             <Route path="team" element={<Team />} />
             <Route path="pricing" element={<ServicesPricing />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="gamification" element={<Gamification />} />
           </Route>
         </Routes>
       </BrowserRouter>
