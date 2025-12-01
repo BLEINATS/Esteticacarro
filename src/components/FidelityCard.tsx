@@ -10,6 +10,11 @@ interface FidelityCardProps {
   tier: 'bronze' | 'silver' | 'gold' | 'platinum';
   cardNumber: string;
   servicesCompleted: number;
+  logoUrl?: string;
+  shopName?: string;
+  instagram?: string;
+  facebook?: string;
+  website?: string;
 }
 
 const tierColors = {
@@ -22,7 +27,7 @@ const tierColors = {
 const levelNames = ['Iniciante', 'Bronze', 'Prata', 'Ouro', 'Platina'];
 const nextLevelPoints = [500, 1500, 3000, 5000];
 
-export default function FidelityCard({ clientName, clientPhone, totalPoints, currentLevel, tier, cardNumber, servicesCompleted }: FidelityCardProps) {
+export default function FidelityCard({ clientName, clientPhone, totalPoints, currentLevel, tier, cardNumber, servicesCompleted, logoUrl, shopName = 'Cristal Care', instagram, facebook, website }: FidelityCardProps) {
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [showQR, setShowQR] = useState(false);
   const colors = tierColors[tier];
@@ -43,10 +48,12 @@ export default function FidelityCard({ clientName, clientPhone, totalPoints, cur
   const handleShare = () => {
     const text = `Meu cartão de fidelidade Cristal Care: ${cardNumber}\nPontos: ${totalPoints}\nNível: ${levelNames[currentLevel]}`;
     if (navigator.share) {
-      navigator.share({ title: 'Meu Cartão de Fidelidade', text });
+      navigator.share({ title: 'Meu Cartão de Fidelidade', text }).catch(() => {
+        // Ignorar erro se usuário cancelar
+        navigator.clipboard.writeText(text);
+      });
     } else {
       navigator.clipboard.writeText(text);
-      alert('Copiado para a área de transferência!');
     }
   };
 
@@ -59,10 +66,13 @@ export default function FidelityCard({ clientName, clientPhone, totalPoints, cur
         <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/10 rounded-full -ml-16 -mb-16" />
         
         <div className="relative z-10 flex flex-col h-full justify-between">
-          {/* Top Section */}
-          <div>
-            <p className="text-xs font-bold opacity-75 uppercase tracking-widest">Cristal Care</p>
-            <p className="text-2xl font-bold mt-2">{levelNames[currentLevel]}</p>
+          {/* Top Section - Logo + Shop Name */}
+          <div className="flex items-center gap-3 mb-2">
+            {logoUrl && <img src={logoUrl} alt="Logo" className="w-10 h-10 rounded-full bg-white/20" />}
+            <div>
+              <p className="text-xs font-bold opacity-75 uppercase tracking-widest">{shopName}</p>
+              <p className="text-2xl font-bold">{levelNames[currentLevel]}</p>
+            </div>
           </div>
 
           {/* Center - Points */}
@@ -123,6 +133,30 @@ export default function FidelityCard({ clientName, clientPhone, totalPoints, cur
         <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-700 text-center">
           <img src={qrCodeUrl} alt="QR Code" className="w-32 h-32 mx-auto mb-2" />
           <p className="text-xs text-slate-600 dark:text-slate-400">Escaneie para validar pontos</p>
+        </div>
+      )}
+
+      {/* Social Networks */}
+      {(instagram || facebook || website) && (
+        <div className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+          <p className="text-xs font-bold text-slate-600 dark:text-slate-400 mb-3 uppercase">Siga-nos</p>
+          <div className="flex gap-3 flex-wrap">
+            {website && (
+              <a href={website} target="_blank" rel="noopener noreferrer" className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded transition">
+                🌐 Website
+              </a>
+            )}
+            {instagram && (
+              <a href={`https://instagram.com/${instagram}`} target="_blank" rel="noopener noreferrer" className="text-xs bg-pink-500 hover:bg-pink-600 text-white px-3 py-1 rounded transition">
+                📸 Instagram
+              </a>
+            )}
+            {facebook && (
+              <a href={`https://facebook.com/${facebook}`} target="_blank" rel="noopener noreferrer" className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded transition">
+                👍 Facebook
+              </a>
+            )}
+          </div>
         </div>
       )}
 

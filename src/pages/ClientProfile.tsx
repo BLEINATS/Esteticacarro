@@ -8,15 +8,17 @@ import QRCode from 'qrcode';
 export default function ClientProfile() {
   const { clientId } = useParams();
   const navigate = useNavigate();
-  const { clients, getClientPoints, getFidelityCard, companySettings, getRewardsByLevel, generatePKPass, generateGoogleWallet } = useApp();
+  const { clients, getClientPoints, getFidelityCard, companySettings, getRewardsByLevel, generatePKPass, generateGoogleWallet, getWhatsappLink } = useApp();
   const client = clients.find(c => c.id === clientId);
   const points = getClientPoints(clientId || '');
   const card = getFidelityCard(clientId || '');
   
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [pkpassUrl, setPkpassUrl] = useState('');
   const [googleWalletUrl, setGoogleWalletUrl] = useState('');
+  const [shareLink, setShareLink] = useState('');
 
   useEffect(() => {
     if (!card || !points) return;
@@ -38,7 +40,11 @@ export default function ClientProfile() {
     // Gerar URLs de wallet
     setPkpassUrl(generatePKPass(clientId || ''));
     setGoogleWalletUrl(generateGoogleWallet(clientId || ''));
-  }, [clientId, card, points, generatePKPass, generateGoogleWallet]);
+    
+    // Gerar link compartilhável
+    const baseUrl = window.location.origin;
+    setShareLink(`${baseUrl}/client-profile/${clientId}`);
+  }, [clientId, card, points, generatePKPass, generateGoogleWallet, client?.id]);
 
   if (!client || !points || !card) {
     return (
@@ -72,11 +78,24 @@ export default function ClientProfile() {
   const handleShare = () => {
     const shareText = `Meu cartão de fidelidade Cristal Care:\nNúmero: ${card.cardNumber}\nPontos: ${points.totalPoints}\nNível: ${points.tier.toUpperCase()}`;
     if (navigator.share) {
-      navigator.share({ title: 'Meu Cartão de Fidelidade', text: shareText });
+      navigator.share({ title: 'Meu Cartão de Fidelidade', text: shareText }).catch(() => {
+        navigator.clipboard.writeText(shareText);
+      });
     } else {
       navigator.clipboard.writeText(shareText);
-      alert('Copiado para clipboard!');
     }
+  };
+
+  const handleCopyShareLink = () => {
+    navigator.clipboard.writeText(shareLink);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+  };
+
+  const handleSendViaWhatsApp = () => {
+    const message = `Olá ${client?.name}! 🎁\n\nSeu cartão de fidelidade ${companySettings.name} está pronto! Você já tem ${points.totalPoints} pontos no nível ${points.tier.toUpperCase()}.\n\nAdicione ao seu Wallet:\n${shareLink}\n\nNúmero: ${card.cardNumber}`;
+    const whatsappLink = getWhatsappLink(client?.phone || '', message);
+    window.open(whatsappLink, '_blank');
   };
 
   const availableRewards = points.tier ? getRewardsByLevel(points.tier as 'bronze' | 'silver' | 'gold' | 'platinum') : [];
@@ -114,6 +133,11 @@ export default function ClientProfile() {
               tier={points.tier}
               cardNumber={card.cardNumber}
               servicesCompleted={points.servicesCompleted}
+              logoUrl={companySettings.logoUrl}
+              shopName={companySettings.name}
+              instagram={companySettings.instagram}
+              facebook={companySettings.facebook}
+              website={companySettings.website}
             />
           </div>
 
@@ -132,13 +156,13 @@ export default function ClientProfile() {
           </div>
         </div>
 
-        {/* Wallet Actions */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+        {/* Wallet & WhatsApp Actions */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           <button
             onClick={handleDownloadPKPass}
             className="flex items-center justify-center gap-2 px-6 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-colors shadow-lg"
           >
-            <Smartphone size={20} /> Adicionar ao Carteira (iOS)
+            <Smartphone size={20} /> iOS Wallet
           </button>
           <button
             onClick={handleAddToGoogleWallet}
@@ -146,27 +170,56 @@ export default function ClientProfile() {
           >
             <Wallet size={20} /> Google Wallet
           </button>
+          <button
+            onClick={handleSendViaWhatsApp}
+            className="flex items-center justify-center gap-2 px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold transition-colors shadow-lg"
+          >
+            💬 Enviar via WhatsApp
+          </button>
         </div>
 
         {/* Card Number & Actions */}
         <div className="bg-white dark:bg-slate-900 rounded-xl p-6 shadow-lg border border-slate-200 dark:border-slate-800 mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-slate-900 dark:text-white">Número do Cartão</h3>
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-bold text-slate-900 dark:text-white">Número do Cartão</h3>
+                <button
+                  onClick={handleCopyCardNumber}
+                  className="flex items-center gap-2 px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors text-slate-700 dark:text-slate-300 font-semibold text-sm"
+                >
+                  {copied ? <Check size={16} /> : <Copy size={16} />}
+                  {copied ? 'Copiado!' : 'Copiar'}
+                </button>
+              </div>
+              <p className="text-2xl font-mono font-bold text-blue-600 dark:text-blue-400">{card.cardNumber}</p>
+            </div>
+
+            <div>
+              <h4 className="font-bold text-slate-900 dark:text-white mb-2">Link de Compartilhamento</h4>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={shareLink}
+                  readOnly
+                  className="flex-1 px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded text-sm font-mono text-slate-600 dark:text-slate-400"
+                />
+                <button
+                  onClick={handleCopyShareLink}
+                  className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors font-semibold text-sm"
+                >
+                  {linkCopied ? <Check size={16} /> : <Copy size={16} />}
+                </button>
+              </div>
+            </div>
+
             <button
-              onClick={handleCopyCardNumber}
-              className="flex items-center gap-2 px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors text-slate-700 dark:text-slate-300 font-semibold text-sm"
+              onClick={handleShare}
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold transition-colors"
             >
-              {copied ? <Check size={16} /> : <Copy size={16} />}
-              {copied ? 'Copiado!' : 'Copiar'}
+              <Share2 size={18} /> Compartilhar Cartão
             </button>
           </div>
-          <p className="text-2xl font-mono font-bold text-blue-600 dark:text-blue-400">{card.cardNumber}</p>
-          <button
-            onClick={handleShare}
-            className="mt-4 w-full flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold transition-colors"
-          >
-            <Share2 size={18} /> Compartilhar Cartão
-          </button>
         </div>
 
         {/* Points History */}
