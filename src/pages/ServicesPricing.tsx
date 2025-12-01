@@ -226,8 +226,8 @@ export default function ServicesPricing() {
                 {filteredServices.map((service) => (
                   <tr key={service.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                     <td className="px-6 py-4">
-                      <p className="font-bold text-slate-900 dark:text-white">{service.name}</p>
-                      <div className="flex mt-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-bold text-slate-900 dark:text-white">{service.name}</p>
                         <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-bold border", getCategoryStyle(service.category))}>
                             {service.category}
                         </span>
