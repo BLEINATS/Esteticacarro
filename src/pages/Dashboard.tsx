@@ -12,7 +12,8 @@ import {
   ArrowRight,
   Target,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Car
 } from 'lucide-react';
 import { 
   PieChart, 
@@ -313,40 +314,48 @@ export default function Dashboard() {
 
             {/* 3. Alertas & Operação */}
             <div className="space-y-3">
-              {/* Live Operations */}
+              {/* Pátio - Carros Visuais */}
               <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
-                  <Wrench size={16} className="text-amber-500" />
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                  <Car size={16} className="text-amber-500" />
                   Pátio Agora
                 </h3>
-                <div className="space-y-2 max-h-[150px] overflow-y-auto">
-                  {activeOS.slice(0, 3).map(os => (
-                    <div 
-                      key={os.id} 
-                      onClick={() => setSelectedOS(os)}
-                      className="flex items-center gap-2 p-2 bg-slate-50 dark:bg-slate-800 rounded border border-slate-100 dark:border-slate-700 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-[10px] flex-shrink-0">
-                        {os.technician.charAt(0)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-slate-900 dark:text-white text-xs truncate">{os.vehicle}</p>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{os.service}</p>
-                      </div>
-                      <span className="text-[8px] font-bold uppercase bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded text-slate-500 border border-slate-200 dark:border-slate-700 flex-shrink-0 whitespace-nowrap">
-                        {os.status.replace('Em Andamento', 'Exec.')}
-                      </span>
+                <div className="grid grid-cols-3 gap-2">
+                  {/* Carro 1 */}
+                  <div className="flex flex-col items-center justify-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 hover:shadow-md transition-all cursor-pointer">
+                    <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white mb-1">
+                      <Car size={20} />
                     </div>
-                  ))}
-                  {activeOS.length === 0 && (
-                    <p className="text-xs text-slate-400 text-center py-2">Pátio livre.</p>
-                  )}
+                    <p className="text-[9px] font-bold text-slate-900 dark:text-white text-center">Toyota</p>
+                    <p className="text-[8px] text-slate-500 dark:text-slate-400">Corolla</p>
+                    <p className="text-[7px] font-bold text-blue-600 dark:text-blue-400 mt-1">ABC-1234</p>
+                  </div>
+
+                  {/* Carro 2 */}
+                  <div className="flex flex-col items-center justify-center p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800 hover:shadow-md transition-all cursor-pointer">
+                    <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center text-white mb-1">
+                      <Car size={20} />
+                    </div>
+                    <p className="text-[9px] font-bold text-slate-900 dark:text-white text-center">Honda</p>
+                    <p className="text-[8px] text-slate-500 dark:text-slate-400">Civic</p>
+                    <p className="text-[7px] font-bold text-emerald-600 dark:text-emerald-400 mt-1">XYZ-5678</p>
+                  </div>
+
+                  {/* Carro 3 */}
+                  <div className="flex flex-col items-center justify-center p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800 hover:shadow-md transition-all cursor-pointer">
+                    <div className="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center text-white mb-1">
+                      <Car size={20} />
+                    </div>
+                    <p className="text-[9px] font-bold text-slate-900 dark:text-white text-center">Volkswagen</p>
+                    <p className="text-[8px] text-slate-500 dark:text-slate-400">Gol</p>
+                    <p className="text-[7px] font-bold text-purple-600 dark:text-purple-400 mt-1">LMN-9999</p>
+                  </div>
                 </div>
                 <button 
                   onClick={() => navigate('/operations')}
-                  className="w-full py-1.5 mt-2 text-xs text-blue-600 dark:text-blue-400 font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors flex items-center justify-center gap-1"
+                  className="w-full py-1.5 mt-3 text-xs text-blue-600 dark:text-blue-400 font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors flex items-center justify-center gap-1"
                 >
-                  Ver todas <ArrowRight size={12} />
+                  Ver Pátio Completo <ArrowRight size={12} />
                 </button>
               </div>
 
