@@ -608,139 +608,145 @@ export default function Finance() {
             <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
                 
                 {/* Toolbar */}
-                <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col lg:flex-row gap-4">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                        <input 
-                        type="text" 
-                        placeholder="Buscar no extrato..." 
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white placeholder-slate-400 transition-colors text-sm"
-                        />
-                    </div>
-                    
-                    {/* Botão de Ordenação */}
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
-                        className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors flex items-center gap-2"
-                        title={sortOrder === 'desc' ? 'Ordenação: Recente para Antigo' : 'Ordenação: Antigo para Recente'}
-                      >
-                        <Calendar size={14} />
-                        {sortOrder === 'desc' ? 'Recente ↓' : 'Antigo ↑'}
-                      </button>
-                      <button 
-                        onClick={() => {
-                          const reportData = {
-                            empresa: companySettings.name,
-                            dataRelatorio: new Date().toLocaleDateString('pt-BR'),
-                            saldoInicial: formatCurrency(balanceData.initialBalance),
-                            movimento: formatCurrency(balanceData.totalMovement),
-                            saldoFinal: formatCurrency(balanceData.finalBalance),
-                            transacoes: visibleTransactions.map(t => ({
-                              data: displayDate(t.date),
-                              descricao: t.desc,
-                              categoria: t.category,
-                              valor: formatCurrency(t.netAmount),
-                              tipo: t.type
-                            }))
-                          };
-                          
-                          const csvContent = [
-                            `EXTRATO BANCÁRIO - ${reportData.empresa}`,
-                            `Data do Relatório: ${reportData.dataRelatorio}`,
-                            '',
-                            `SALDO INICIAL,${reportData.saldoInicial}`,
-                            `MOVIMENTO PERÍODO,${reportData.movimento}`,
-                            `SALDO FINAL,${reportData.saldoFinal}`,
-                            '',
-                            'DATA,DESCRIÇÃO,CATEGORIA,VALOR,TIPO',
-                            ...reportData.transacoes.map(t => `${t.data},${t.descricao},${t.categoria},${t.valor},${t.tipo}`)
-                          ].join('\n');
-                          
-                          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                          const link = document.createElement('a');
-                          const url = URL.createObjectURL(blob);
-                          link.setAttribute('href', url);
-                          link.setAttribute('download', `extrato_${new Date().toISOString().split('T')[0]}.csv`);
-                          link.click();
-                        }}
-                        className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm"
-                        title="Baixar Extrato em CSV"
-                      >
-                        <Download size={14} />
-                        Extrato
-                      </button>
-                    </div>
-                    
-                    {/* Date Filter */}
-                    <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-950 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
-                        <div className="flex items-center gap-2 px-2">
-                            <Calendar size={16} className="text-slate-400" />
-                            <input 
-                                type="date" 
-                                value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                                className="bg-transparent text-sm text-slate-600 dark:text-slate-300 focus:outline-none w-32"
-                                title="Data Inicial"
-                            />
-                        </div>
-                        <span className="text-slate-300 dark:text-slate-600">-</span>
-                        <div className="flex items-center gap-2 px-2">
-                            <input 
-                                type="date" 
-                                value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
-                                className="bg-transparent text-sm text-slate-600 dark:text-slate-300 focus:outline-none w-32"
-                                title="Data Final"
-                            />
-                        </div>
-                        {(startDate || endDate) && (
-                            <button 
-                                onClick={() => { setStartDate(''); setEndDate(''); }}
-                                className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors"
-                                title="Limpar Filtro de Data"
-                            >
-                                <X size={14} />
-                            </button>
-                        )}
-                    </div>
-
-                    <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0">
-                        {['Todas', 'Serviços', 'Estoque', 'Comissões', 'RH', 'Manutenção', 'Aluguel/Fixo'].map(cat => (
+                <div className="p-3 sm:p-4 border-b border-slate-200 dark:border-slate-800 space-y-3 sm:space-y-0">
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+                      <div className="relative flex-1">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                          <input 
+                          type="text" 
+                          placeholder="Buscar no extrato..." 
+                          value={searchTerm}
+                          onChange={e => setSearchTerm(e.target.value)}
+                          className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white placeholder-slate-400 transition-colors text-xs sm:text-sm"
+                          />
+                      </div>
+                      
+                      {/* Botões Compactos no Mobile */}
+                      <div className="flex gap-2">
                         <button
-                            key={cat}
-                            onClick={() => setCategoryFilter(cat)}
-                            className={cn(
-                            "px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors border",
-                            categoryFilter === cat 
-                                ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800" 
-                                : "bg-transparent border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-                            )}
+                          onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+                          className="px-2 sm:px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-[10px] sm:text-xs font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors flex items-center gap-1 sm:gap-2 whitespace-nowrap"
+                          title={sortOrder === 'desc' ? 'Ordenação: Recente para Antigo' : 'Ordenação: Antigo para Recente'}
                         >
-                            {cat}
+                          <Calendar size={12} className="sm:w-4 sm:h-4" />
+                          <span className="hidden sm:inline">{sortOrder === 'desc' ? 'Recente ↓' : 'Antigo ↑'}</span>
+                          <span className="sm:hidden">{sortOrder === 'desc' ? '↓' : '↑'}</span>
                         </button>
-                        ))}
+                        <button 
+                          onClick={() => {
+                            const reportData = {
+                              empresa: companySettings.name,
+                              dataRelatorio: new Date().toLocaleDateString('pt-BR'),
+                              saldoInicial: formatCurrency(balanceData.initialBalance),
+                              movimento: formatCurrency(balanceData.totalMovement),
+                              saldoFinal: formatCurrency(balanceData.finalBalance),
+                              transacoes: visibleTransactions.map(t => ({
+                                data: displayDate(t.date),
+                                descricao: t.desc,
+                                categoria: t.category,
+                                valor: formatCurrency(t.netAmount),
+                                tipo: t.type
+                              }))
+                            };
+                            
+                            const csvContent = [
+                              `EXTRATO BANCÁRIO - ${reportData.empresa}`,
+                              `Data do Relatório: ${reportData.dataRelatorio}`,
+                              '',
+                              `SALDO INICIAL,${reportData.saldoInicial}`,
+                              `MOVIMENTO PERÍODO,${reportData.movimento}`,
+                              `SALDO FINAL,${reportData.saldoFinal}`,
+                              '',
+                              'DATA,DESCRIÇÃO,CATEGORIA,VALOR,TIPO',
+                              ...reportData.transacoes.map(t => `${t.data},${t.descricao},${t.categoria},${t.valor},${t.tipo}`)
+                            ].join('\n');
+                            
+                            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                            const link = document.createElement('a');
+                            const url = URL.createObjectURL(blob);
+                            link.setAttribute('href', url);
+                            link.setAttribute('download', `extrato_${new Date().toISOString().split('T')[0]}.csv`);
+                            link.click();
+                          }}
+                          className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] sm:text-xs font-bold transition-colors shadow-sm"
+                          title="Baixar Extrato em CSV"
+                        >
+                          <Download size={12} className="sm:w-4 sm:h-4" />
+                          <span className="hidden sm:inline">Extrato</span>
+                          <span className="sm:hidden">CSV</span>
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Date Filter - Responsive */}
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                      <div className="flex items-center gap-1 sm:gap-2 bg-slate-50 dark:bg-slate-950 p-1 rounded-lg border border-slate-200 dark:border-slate-700 flex-1">
+                          <div className="flex items-center gap-1 sm:gap-2 px-1 sm:px-2">
+                              <Calendar size={14} className="sm:w-4 sm:h-4 text-slate-400" />
+                              <input 
+                                  type="date" 
+                                  value={startDate}
+                                  onChange={(e) => setStartDate(e.target.value)}
+                                  className="bg-transparent text-[10px] sm:text-sm text-slate-600 dark:text-slate-300 focus:outline-none w-20 sm:w-32"
+                                  title="Data Inicial"
+                              />
+                          </div>
+                          <span className="text-slate-300 dark:text-slate-600 text-xs">-</span>
+                          <div className="flex items-center gap-1 sm:gap-2 px-1 sm:px-2">
+                              <input 
+                                  type="date" 
+                                  value={endDate}
+                                  onChange={(e) => setEndDate(e.target.value)}
+                                  className="bg-transparent text-[10px] sm:text-sm text-slate-600 dark:text-slate-300 focus:outline-none w-20 sm:w-32"
+                                  title="Data Final"
+                              />
+                          </div>
+                          {(startDate || endDate) && (
+                              <button 
+                                  onClick={() => { setStartDate(''); setEndDate(''); }}
+                                  className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors"
+                                  title="Limpar Filtro de Data"
+                              >
+                                  <X size={12} className="sm:w-4 sm:h-4" />
+                              </button>
+                          )}
+                      </div>
+
+                      <div className="flex gap-1 overflow-x-auto pb-1 sm:pb-0">
+                          {['Todas', 'Serviços', 'Estoque', 'Comissões', 'RH', 'Manutenção', 'Aluguel/Fixo'].map(cat => (
+                          <button
+                              key={cat}
+                              onClick={() => setCategoryFilter(cat)}
+                              className={cn(
+                              "px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold whitespace-nowrap transition-colors border",
+                              categoryFilter === cat 
+                                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800" 
+                                  : "bg-transparent border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                              )}
+                          >
+                              {cat}
+                          </button>
+                          ))}
+                      </div>
                     </div>
                 </div>
 
-                {/* EXTRATO SIMPLIFICADO (SEM AGRUPAMENTO) */}
-                <div className="overflow-x-auto">
+                {/* EXTRATO - DESKTOP TABLE VIEW */}
+                <div className="hidden sm:block overflow-x-auto">
                     <table className="w-full text-left text-sm">
                         <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                             <tr>
-                                <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 w-32">Data</th>
-                                <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Descrição</th>
-                                <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Categoria</th>
-                                <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Valor</th>
-                                <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right w-24">Ações</th>
+                                <th className="px-4 sm:px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 w-32">Data</th>
+                                <th className="px-4 sm:px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Descrição</th>
+                                <th className="px-4 sm:px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Categoria</th>
+                                <th className="px-4 sm:px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Valor</th>
+                                <th className="px-4 sm:px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right w-24">Ações</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                             {visibleTransactions.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                                    <td colSpan={5} className="px-4 sm:px-6 py-12 text-center text-slate-400">
                                         <div className="flex flex-col items-center gap-2">
                                             <DollarSign size={32} className="opacity-50" />
                                             <p>Nenhuma transação no período</p>
@@ -749,7 +755,6 @@ export default function Finance() {
                                 </tr>
                             ) : (
                                 visibleTransactions.map((t, idx) => {
-                                    // Calcular saldo acumulado até esta transação
                                     const accumulatedBalance = balanceData.initialBalance + 
                                       visibleTransactions.slice(0, idx + 1).reduce((acc, tx) => acc + tx.netAmount, 0);
                                     
@@ -758,28 +763,28 @@ export default function Finance() {
                                         "hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group",
                                         t.type === 'income' ? "bg-green-50/30 dark:bg-green-900/5" : ""
                                     )}>
-                                        <td className="px-6 py-3 text-slate-500 dark:text-slate-400 font-medium">
-                                            {displayDate(t.date)}
+                                        <td className="px-4 sm:px-6 py-3 text-slate-500 dark:text-slate-400 font-medium text-xs sm:text-sm">
+                                            {t.date ? displayDate(t.date) : 'S/D'}
                                         </td>
-                                        <td className="px-6 py-3 font-medium text-slate-900 dark:text-white">
+                                        <td className="px-4 sm:px-6 py-3 font-medium text-slate-900 dark:text-white text-xs sm:text-sm">
                                             <div className="flex items-center gap-2">
-                                                <span>{t.desc}</span>
-                                                <span className="text-[10px] text-slate-400 font-normal px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                                                <span>{t.desc || 'S/D'}</span>
+                                                <span className="text-[10px] text-slate-400 font-normal px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 whitespace-nowrap">
                                                     {t.method} {t.installments && t.installments > 1 && `• ${t.installments}x`}
                                                 </span>
                                             </div>
                                         </td>
-                                    <td className="px-6 py-3">
+                                    <td className="px-4 sm:px-6 py-3 text-xs sm:text-sm">
                                         <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-[10px] font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                                            {t.category}
+                                            {t.category || 'S/D'}
                                         </span>
                                     </td>
                                     <td className={cn(
-                                        "px-6 py-3 text-right font-bold",
+                                        "px-4 sm:px-6 py-3 text-right font-bold text-xs sm:text-sm",
                                         t.type === 'income' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
                                     )}>
                                         <div>
-                                            {t.type === 'income' ? '+' : ''} {formatCurrency(t.type === 'income' ? (t.netAmount ?? t.amount) : Math.abs(t.amount))}
+                                            {t.type === 'income' ? '+' : ''} {t.netAmount || t.amount ? formatCurrency(t.type === 'income' ? (t.netAmount ?? t.amount) : Math.abs(t.amount)) : 'R$ 0,00'}
                                         </div>
                                         {t.type === 'income' && t.fee > 0 && (
                                             <div className="text-[10px] font-normal text-slate-400 mt-0.5">
@@ -787,21 +792,21 @@ export default function Finance() {
                                             </div>
                                         )}
                                     </td>
-                                    <td className="px-6 py-3 text-right">
-                                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <td className="px-4 sm:px-6 py-3 text-right">
+                                        <div className="flex justify-end gap-1 sm:gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                             <button 
                                                 onClick={() => handleEdit(t)}
-                                                className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors" 
+                                                className="p-1 sm:p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors" 
                                                 title="Editar"
                                             >
-                                                <Pencil size={14} />
+                                                <Pencil size={14} className="sm:w-4 sm:h-4" />
                                             </button>
                                             <button 
                                                 onClick={() => handleDelete(t.id)}
-                                                className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" 
+                                                className="p-1 sm:p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" 
                                                 title="Excluir"
                                             >
-                                                <Trash2 size={14} />
+                                                <Trash2 size={14} className="sm:w-4 sm:h-4" />
                                             </button>
                                         </div>
                                     </td>
@@ -811,6 +816,78 @@ export default function Finance() {
                             )}
                         </tbody>
                     </table>
+                </div>
+
+                {/* EXTRATO - MOBILE CARD VIEW */}
+                <div className="sm:hidden space-y-2 p-3">
+                    {visibleTransactions.length === 0 ? (
+                        <div className="text-center py-8 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 text-sm flex flex-col items-center gap-2">
+                            <DollarSign size={28} className="opacity-50" />
+                            <p>Nenhuma transação</p>
+                        </div>
+                    ) : (
+                        visibleTransactions.map((t) => (
+                            <div 
+                                key={t.id} 
+                                className={cn(
+                                    "p-3 rounded-lg border transition-all",
+                                    t.type === 'income' 
+                                        ? "bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800" 
+                                        : "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800"
+                                )}
+                            >
+                                <div className="flex items-start justify-between gap-2 mb-2">
+                                    <div className="flex-1">
+                                        <p className="text-xs font-bold text-slate-600 dark:text-slate-400 mb-0.5">
+                                            {t.date ? displayDate(t.date) : 'S/D'}
+                                        </p>
+                                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                                            {t.desc || 'S/D'}
+                                        </p>
+                                    </div>
+                                    <p className={cn(
+                                        "text-sm font-bold whitespace-nowrap",
+                                        t.type === 'income' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                                    )}>
+                                        {t.type === 'income' ? '+' : ''}{t.netAmount || t.amount ? formatCurrency(t.type === 'income' ? (t.netAmount ?? t.amount) : Math.abs(t.amount)) : 'R$ 0,00'}
+                                    </p>
+                                </div>
+                                
+                                <div className="flex items-center justify-between gap-2 text-xs">
+                                    <div className="flex gap-1 items-center">
+                                        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-[10px] font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                            {t.category || 'S/D'}
+                                        </span>
+                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                                            {t.method} {t.installments && t.installments > 1 && `• ${t.installments}x`}
+                                        </span>
+                                    </div>
+                                    <div className="flex gap-1">
+                                        <button 
+                                            onClick={() => handleEdit(t)}
+                                            className="p-1.5 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors" 
+                                            title="Editar"
+                                        >
+                                            <Pencil size={14} />
+                                        </button>
+                                        <button 
+                                            onClick={() => handleDelete(t.id)}
+                                            className="p-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors" 
+                                            title="Excluir"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {t.type === 'income' && t.fee > 0 && (
+                                    <div className="text-[10px] font-normal text-slate-500 dark:text-slate-400 mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                                        Bruto: {formatCurrency(t.amount)} (-{formatCurrency(t.fee)})
+                                    </div>
+                                )}
+                            </div>
+                        ))
+                    )}
                 </div>
             </div>
         </div>
@@ -833,14 +910,16 @@ export default function Finance() {
              </div>
 
              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                {/* Desktop Table */}
+                <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-left text-sm">
                     <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                         <tr>
-                            <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">Vencimento</th>
-                            <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">Descrição</th>
-                            <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">Categoria</th>
-                            <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300 text-right">Valor</th>
-                            <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300 text-right">Ações</th>
+                            <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-slate-700 dark:text-slate-300 text-xs sm:text-sm">Vencimento</th>
+                            <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-slate-700 dark:text-slate-300 text-xs sm:text-sm">Descrição</th>
+                            <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-slate-700 dark:text-slate-300 text-xs sm:text-sm">Categoria</th>
+                            <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-slate-700 dark:text-slate-300 text-right text-xs sm:text-sm">Valor</th>
+                            <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-slate-700 dark:text-slate-300 text-right text-xs sm:text-sm">Ações</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -848,18 +927,18 @@ export default function Finance() {
                             const isLate = new Date(t.dueDate) < new Date() && new Date(t.dueDate).toDateString() !== new Date().toDateString();
                             return (
                                 <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
-                                    <td className="px-6 py-4 text-slate-500 dark:text-slate-400">
+                                    <td className="px-4 sm:px-6 py-3 sm:py-4 text-slate-500 dark:text-slate-400 text-xs sm:text-sm">
                                         <div className="flex items-center gap-2">
                                             <CalendarClock size={14} className={isLate ? "text-red-500" : "text-slate-400"} />
                                             <span className={cn(isLate ? "text-red-600 font-bold" : "")}>
-                                                {displayDate(t.dueDate)}
+                                                {t.dueDate ? displayDate(t.dueDate) : 'S/D'}
                                             </span>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{t.desc}</td>
-                                    <td className="px-6 py-4">
-                                        <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-medium text-slate-600 dark:text-slate-300">
-                                            {t.category}
+                                    <td className="px-4 sm:px-6 py-3 sm:py-4 font-medium text-slate-900 dark:text-white text-xs sm:text-sm">{t.desc || 'S/D'}</td>
+                                    <td className="px-4 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm">
+                                        <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-[10px] sm:text-xs font-medium text-slate-600 dark:text-slate-300">
+                                            {t.category || 'S/D'}
                                         </span>
                                     </td>
                                     <td className={cn("px-6 py-4 text-right font-bold", t.type === 'income' ? "text-green-600" : "text-red-600")}>
