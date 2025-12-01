@@ -683,12 +683,40 @@ const initialFidelityCards: FidelityCard[] = initialClientPoints.map(cp => ({
 }));
 
 const initialRewards: Reward[] = [
+  // DESCONTOS - BRONZE
   { id: 'r1', name: 'Desconto 5%', description: 'Desconto de 5% em todos os serviços', requiredPoints: 0, requiredLevel: 'bronze', rewardType: 'discount', percentage: 5, active: true, createdAt: formatISO(today) },
+  { id: 'r-b2', name: 'Desconto 7%', description: 'Desconto de 7% em polimento e detalhes', requiredPoints: 150, requiredLevel: 'bronze', rewardType: 'discount', percentage: 7, active: true, createdAt: formatISO(today) },
+  
+  // DESCONTOS - PRATA
   { id: 'r2', name: 'Desconto 10% + Frete Grátis', description: 'Desconto de 10% em todos os serviços + frete grátis', requiredPoints: 500, requiredLevel: 'silver', rewardType: 'discount', percentage: 10, active: true, createdAt: formatISO(today) },
+  { id: 'r-s2', name: 'Desconto 12%', description: 'Desconto de 12% em vitrificação', requiredPoints: 600, requiredLevel: 'silver', rewardType: 'discount', percentage: 12, active: true, createdAt: formatISO(today) },
+  
+  // SERVIÇOS GRÁTIS - PRATA
   { id: 'r3', name: 'Lavagem Grátis', description: 'Serviço de lavagem simples gratuito', requiredPoints: 800, requiredLevel: 'silver', rewardType: 'free_service', gift: 'Lavagem Simples', active: true, createdAt: formatISO(today) },
+  { id: 'r-s3', name: 'Descontaminação Grátis', description: 'Serviço de descontaminação de roda gratuito', requiredPoints: 750, requiredLevel: 'silver', rewardType: 'free_service', gift: 'Descontaminação de Roda', active: true, createdAt: formatISO(today) },
+  
+  // DESCONTOS - OURO
   { id: 'r4', name: 'Desconto 15% + Atendimento VIP', description: 'Desconto de 15% em todos os serviços + atendimento prioritário', requiredPoints: 1500, requiredLevel: 'gold', rewardType: 'discount', percentage: 15, active: true, createdAt: formatISO(today) },
+  { id: 'r-g2', name: 'Desconto 18%', description: 'Desconto de 18% em serviços premium', requiredPoints: 1700, requiredLevel: 'gold', rewardType: 'discount', percentage: 18, active: true, createdAt: formatISO(today) },
+  
+  // SERVIÇOS GRÁTIS - OURO
   { id: 'r5', name: 'Polimento Premium Grátis', description: 'Serviço de polimento premium gratuito', requiredPoints: 1800, requiredLevel: 'gold', rewardType: 'free_service', gift: 'Polimento Premium', active: true, createdAt: formatISO(today) },
-  { id: 'r6', name: 'Desconto 20% + Brinde Exclusivo', description: 'Desconto de 20% em todos os serviços + brinde exclusivo (toalha premium)', requiredPoints: 3000, requiredLevel: 'platinum', rewardType: 'discount', percentage: 20, active: true, createdAt: formatISO(today) },
+  { id: 'r-g3', name: 'Cristalização Grátis', description: 'Serviço de cristalização de pintura gratuito', requiredPoints: 1900, requiredLevel: 'gold', rewardType: 'free_service', gift: 'Cristalização de Pintura', active: true, createdAt: formatISO(today) },
+  
+  // BRINDES - OURO
+  { id: 'r-g4', name: 'Kit Premium', description: 'Kit premium com produtos de limpeza especializados', requiredPoints: 2000, requiredLevel: 'gold', rewardType: 'gift', gift: 'Kit Premium de Limpeza', active: true, createdAt: formatISO(today) },
+  
+  // DESCONTOS - PLATINA
+  { id: 'r6', name: 'Desconto 20% + Brinde Exclusivo', description: 'Desconto de 20% em todos os serviços + brinde exclusivo', requiredPoints: 3000, requiredLevel: 'platinum', rewardType: 'discount', percentage: 20, active: true, createdAt: formatISO(today) },
+  { id: 'r-p2', name: 'Desconto 25%', description: 'Desconto de 25% em todos os serviços - máximo desconto', requiredPoints: 3500, requiredLevel: 'platinum', rewardType: 'discount', percentage: 25, active: true, createdAt: formatISO(today) },
+  
+  // SERVIÇOS COMPLETOS - PLATINA
+  { id: 'r-p3', name: 'Detailing Completo Grátis', description: 'Serviço de detailing completo (lavagem + polimento + cristalização) gratuito', requiredPoints: 3200, requiredLevel: 'platinum', rewardType: 'free_service', gift: 'Detailing Completo', active: true, createdAt: formatISO(today) },
+  { id: 'r-p4', name: 'Proteção Interior Grátis', description: 'Higienização e proteção completa do interior do veículo', requiredPoints: 3300, requiredLevel: 'platinum', rewardType: 'free_service', gift: 'Proteção Interior Completa', active: true, createdAt: formatISO(today) },
+  
+  // BRINDES - PLATINA
+  { id: 'r-p5', name: 'Toalha Premium + Produtos', description: 'Brinde exclusivo: toalha premium + kit de produtos profissionais', requiredPoints: 3400, requiredLevel: 'platinum', rewardType: 'gift', gift: 'Toalha Premium + Kit Profissional', active: true, createdAt: formatISO(today) },
+  { id: 'r-p6', name: 'Tratamento Interior Grátis', description: 'Tratamento profissional do interior com produtos premium', requiredPoints: 3600, requiredLevel: 'platinum', rewardType: 'gift', gift: 'Tratamento Interior Premium', active: true, createdAt: formatISO(today) },
 ];
 
 export function AppProvider({ children }: { children: ReactNode }) {

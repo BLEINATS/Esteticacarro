@@ -12,6 +12,7 @@ export default function Gamification() {
   const [multiplier, setMultiplier] = useState(companySettings.gamification?.pointsMultiplier || 1);
   const [levelSystem, setLevelSystem] = useState(companySettings.gamification?.levelSystem || true);
   const [showRewardForm, setShowRewardForm] = useState(false);
+  const [editingRewardId, setEditingRewardId] = useState<string | null>(null);
   const [newReward, setNewReward] = useState({ name: '', description: '', requiredPoints: 100, requiredLevel: 'bronze', rewardType: 'discount', percentage: 0, gift: '' });
 
   const handleToggle = (value: boolean) => {
@@ -50,19 +51,46 @@ export default function Gamification() {
   const handleAddReward = (e: React.FormEvent) => {
     e.preventDefault();
     if (newReward.name && newReward.description) {
-      addReward({
-        name: newReward.name,
-        description: newReward.description,
-        requiredPoints: newReward.requiredPoints,
-        requiredLevel: newReward.requiredLevel as any,
-        rewardType: newReward.rewardType as any,
-        percentage: newReward.rewardType === 'discount' ? newReward.percentage : undefined,
-        gift: newReward.rewardType === 'gift' || newReward.rewardType === 'free_service' ? newReward.gift : undefined,
-        active: true
-      });
+      if (editingRewardId) {
+        updateReward(editingRewardId, {
+          name: newReward.name,
+          description: newReward.description,
+          requiredPoints: newReward.requiredPoints,
+          requiredLevel: newReward.requiredLevel as any,
+          rewardType: newReward.rewardType as any,
+          percentage: newReward.rewardType === 'discount' ? newReward.percentage : undefined,
+          gift: newReward.rewardType === 'gift' || newReward.rewardType === 'free_service' ? newReward.gift : undefined,
+        });
+        setEditingRewardId(null);
+      } else {
+        addReward({
+          name: newReward.name,
+          description: newReward.description,
+          requiredPoints: newReward.requiredPoints,
+          requiredLevel: newReward.requiredLevel as any,
+          rewardType: newReward.rewardType as any,
+          percentage: newReward.rewardType === 'discount' ? newReward.percentage : undefined,
+          gift: newReward.rewardType === 'gift' || newReward.rewardType === 'free_service' ? newReward.gift : undefined,
+          active: true
+        });
+      }
       setNewReward({ name: '', description: '', requiredPoints: 100, requiredLevel: 'bronze', rewardType: 'discount', percentage: 0, gift: '' });
       setShowRewardForm(false);
     }
+  };
+
+  const handleEditReward = (reward: any) => {
+    setEditingRewardId(reward.id);
+    setNewReward({
+      name: reward.name,
+      description: reward.description,
+      requiredPoints: reward.requiredPoints,
+      requiredLevel: reward.requiredLevel,
+      rewardType: reward.rewardType,
+      percentage: reward.percentage || 0,
+      gift: reward.gift || ''
+    });
+    setShowRewardForm(true);
   };
 
   return (
@@ -203,16 +231,20 @@ export default function Gamification() {
                       Gerenciar Recompensas
                     </h3>
                     <button
-                      onClick={() => setShowRewardForm(!showRewardForm)}
+                      onClick={() => {
+                        setEditingRewardId(null);
+                        setNewReward({ name: '', description: '', requiredPoints: 100, requiredLevel: 'bronze', rewardType: 'discount', percentage: 0, gift: '' });
+                        setShowRewardForm(!showRewardForm);
+                      }}
                       className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors"
                     >
                       <Plus size={18} /> Nova Recompensa
                     </button>
                   </div>
 
-                  {/* Add Reward Form */}
+                  {/* Add/Edit Reward Form */}
                   {showRewardForm && (
-                    <form onSubmit={handleAddReward} className="mb-6 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 space-y-4">
+                    <form onSubmit={handleAddReward} className="mb-6 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 space-y-4 animate-in slide-in-from-top-2">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Nome da Recompensa *</label>
@@ -299,7 +331,11 @@ export default function Gamification() {
                       <div className="flex gap-2 justify-end pt-4 border-t border-slate-200 dark:border-slate-700">
                         <button
                           type="button"
-                          onClick={() => setShowRewardForm(false)}
+                          onClick={() => {
+                            setShowRewardForm(false);
+                            setEditingRewardId(null);
+                            setNewReward({ name: '', description: '', requiredPoints: 100, requiredLevel: 'bronze', rewardType: 'discount', percentage: 0, gift: '' });
+                          }}
                           className="px-4 py-2 bg-slate-300 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg font-semibold transition-colors hover:bg-slate-400 dark:hover:bg-slate-600"
                         >
                           Cancelar
@@ -308,7 +344,7 @@ export default function Gamification() {
                           type="submit"
                           className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold transition-colors"
                         >
-                          Adicionar Recompensa
+                          {editingRewardId ? 'Salvar Alterações' : 'Adicionar Recompensa'}
                         </button>
                       </div>
                     </form>
@@ -343,6 +379,13 @@ export default function Gamification() {
                           </div>
                           <div className="flex gap-2 ml-4">
                             <button
+                              onClick={() => handleEditReward(reward)}
+                              className="p-2 hover:bg-blue-100 dark:hover:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded transition-colors"
+                              title="Editar recompensa"
+                            >
+                              <Edit2 size={18} />
+                            </button>
+                            <button
                               onClick={() => updateReward(reward.id, { active: !reward.active })}
                               className={cn("px-3 py-1 rounded text-sm font-semibold transition-colors", reward.active ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400")}
                             >
@@ -351,6 +394,7 @@ export default function Gamification() {
                             <button
                               onClick={() => deleteReward(reward.id)}
                               className="p-2 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 rounded transition-colors"
+                              title="Deletar recompensa"
                             >
                               <Trash2 size={18} />
                             </button>
