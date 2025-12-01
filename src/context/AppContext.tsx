@@ -117,6 +117,7 @@ const initialCompanySettings: CompanySettings = {
   website: 'www.cristalcare.com.br',
   instagram: 'https://instagram.com',
   facebook: 'https://facebook.com',
+  initialBalance: 15000.00,
   whatsapp: {
     enabled: true,
     session: {

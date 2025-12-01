@@ -299,6 +299,7 @@ export interface CompanySettings {
   instagram?: string; 
   facebook?: string; 
   primaryColor?: string;
+  initialBalance: number;
   whatsapp: WhatsappConfig; 
   landingPage: LandingPageConfig;
   preferences: CompanyPreferences;
