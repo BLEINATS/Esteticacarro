@@ -70,7 +70,7 @@ export default function VehicleDamageMap({ damages, onAddDamage, readOnly = fals
                 <AlertCircle size={16} />
               </div>
               <div>
-                <p className="text-sm font-bold text-slate-900 dark:text-white capitalize">{damage.area.replace('_', ' ')}</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-white capitalize">{damage?.area?.replace('_', ' ') || 'Área desconhecida'}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">{damage.type} - {damage.description}</p>
               </div>
             </div>

@@ -276,7 +276,7 @@ export default function Marketing() {
     if (!os) return { before: null, after: null };
 
     const before = os.damages.find(d => d.photoUrl && d.photoUrl !== 'pending')?.photoUrl || 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=300&q=80';
-    const after = os.dailyLog.flatMap(l => l.photos)[0] || 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=300&q=80'; // Fallback
+    const after = os.dailyLog?.flatMap?.(l => l.photos)?.[0] || 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=300&q=80'; // Fallback
 
     return { before, after };
   };

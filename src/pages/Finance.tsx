@@ -649,13 +649,8 @@ export default function Finance() {
                                         </div>
                                     </td>
                                 </tr>
-                            ))}
-                            {visibleTransactions.length === 0 && (
-                                <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
-                                        Nenhuma transação encontrada para este período.
-                                    </td>
-                                </tr>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>
