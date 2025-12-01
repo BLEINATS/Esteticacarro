@@ -14,6 +14,7 @@ import { cn, formatCurrency } from '../lib/utils';
 import VehicleDamageMap from './VehicleDamageMap';
 import ClientModal from './ClientModal';
 import WorkOrderPrintTemplate from './WorkOrderPrintTemplate';
+import SignaturePad from './SignaturePad';
 import { useDialog } from '../context/DialogContext';
 
 interface WorkOrderModalProps {
@@ -61,6 +62,8 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const [currentDamageArea, setCurrentDamageArea] = useState<DamagePoint['area'] | null>(null);
   const [damageDesc, setDamageDesc] = useState('');
   const [damagePhoto, setDamagePhoto] = useState<string | null>(null);
+  const [isSignaturePadOpen, setIsSignaturePadOpen] = useState(false);
+  const [clientSignature, setClientSignature] = useState<string | null>(workOrder.clientSignature || null);
 
   // --- PRICE STATE (EDITABLE) ---
   // Initialize with existing total minus extras, or 0
@@ -249,7 +252,8 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       service: serviceName,
       serviceId: selectedServiceIds[0], // Primary ID
       serviceIds: selectedServiceIds, // All IDs
-      status: workOrder.status
+      status: workOrder.status,
+      clientSignature: clientSignature
     };
 
     const exists = workOrders.some(o => o.id === workOrder.id);
@@ -300,7 +304,8 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           serviceIds: selectedServiceIds,
           totalValue: servicePrice, // Use the manual price
           damages,
-          vehicleInventory: inventory
+          vehicleInventory: inventory,
+          clientSignature: clientSignature
       };
 
       const exists = workOrders.some(o => o.id === workOrder.id);
@@ -617,9 +622,15 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const beforePhotos = damages.filter(d => d.photoUrl && d.photoUrl !== 'pending').map(d => ({ url: d.photoUrl!, desc: d.description }));
   const afterPhotos = dailyLog.flatMap(log => log.photos.map(url => ({ url, desc: log.description })));
 
+  const handleSignatureSave = (signature: string) => {
+    setClientSignature(signature);
+    setIsSignaturePadOpen(false);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-2 sm:p-4">
       {isClientModalOpen && <ClientModal onClose={() => setIsClientModalOpen(false)} />}
+      {isSignaturePadOpen && <SignaturePad onSave={handleSignatureSave} onClose={() => setIsSignaturePadOpen(false)} />}
       
       <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl w-full max-w-5xl max-h-[98vh] sm:max-h-[95vh] flex flex-col shadow-2xl animate-in fade-in zoom-in duration-200 border border-slate-200 dark:border-slate-800">
         
@@ -925,23 +936,29 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                  <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                    <PenTool size={20} className="text-blue-600" />
+                <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <h3 className="font-bold text-slate-900 dark:text-white mb-2 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
+                    <PenTool size={18} className="text-blue-600" />
                     Acordo com o Cliente
                   </h3>
-                  <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl h-32 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors">
-                    {workOrder.clientSignature ? (
-                      <div className="text-green-600 font-bold flex items-center gap-2">
-                        <CheckCircle2 /> Assinado Digitalmente
+                  <button
+                    onClick={() => setIsSignaturePadOpen(true)}
+                    className="w-full border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-lg sm:rounded-xl h-24 sm:h-32 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors"
+                  >
+                    {clientSignature ? (
+                      <div className="text-green-600 dark:text-green-400 font-bold flex items-center gap-2">
+                        <CheckCircle2 size={20} /> Assinado Digitalmente
                       </div>
                     ) : (
                       <>
-                        <p className="text-slate-400 font-medium">Toque aqui para o cliente assinar</p>
+                        <p className="text-slate-400 font-medium text-sm sm:text-base">Toque aqui para o cliente assinar</p>
                         <p className="text-xs text-slate-400 mt-1">Concordo com o estado do veículo descrito acima.</p>
                       </>
                     )}
-                  </div>
+                  </button>
+                  {clientSignature && (
+                    <img src={clientSignature} alt="Assinatura" className="w-full h-auto mt-3 sm:mt-4 border border-slate-200 dark:border-slate-700 rounded-lg" />
+                  )}
                 </div>
               </div>
             </div>
