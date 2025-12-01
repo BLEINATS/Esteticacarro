@@ -31,46 +31,12 @@ const StatusBadge = ({ status }: { status: string }) => {
 };
 
 export default function Operations() {
-  const { workOrders, clients, updateWorkOrder } = useApp();
+  const { workOrders, clients } = useApp();
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
   const [selectedOS, setSelectedOS] = useState<WorkOrder | null>(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
-  const [touchStart, setTouchStart] = useState(0);
-  const [draggedCard, setDraggedCard] = useState<{ osId: string; cardRef: React.RefObject<HTMLDivElement> } | null>(null);
 
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Cliente Desconhecido';
-
-  // Swipe gesture handling for Kanban cards
-  const handleSwipe = (osId: string, os: WorkOrder) => {
-    const distance = touchStart;
-    
-    if (distance > 50) {
-      // Swiped RIGHT - Move to right status (approval -> queue -> execution -> qa -> done)
-      const statusFlow = ['Aguardando Aprovação', 'Aguardando', 'Em Andamento', 'Controle de Qualidade', 'Concluído'];
-      const currentIndex = statusFlow.indexOf(os.status);
-      if (currentIndex < statusFlow.length - 1) {
-        updateWorkOrder(osId, { status: statusFlow[currentIndex + 1] as any });
-      }
-    } else if (distance < -50) {
-      // Swiped LEFT - Move to left status
-      const statusFlow = ['Aguardando Aprovação', 'Aguardando', 'Em Andamento', 'Controle de Qualidade', 'Concluído'];
-      const currentIndex = statusFlow.indexOf(os.status);
-      if (currentIndex > 0) {
-        updateWorkOrder(osId, { status: statusFlow[currentIndex - 1] as any });
-      }
-    }
-    setTouchStart(0);
-  };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStart(e.touches[0].clientX);
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent, osId: string, os: WorkOrder) => {
-    const touchEnd = e.changedTouches[0].clientX;
-    setTouchStart(touchEnd - touchStart);
-    handleSwipe(osId, os);
-  };
 
   const sortedWorkOrders = [...workOrders].sort((a, b) => {
     if (a.status === 'Aguardando Aprovação' && b.status !== 'Aguardando Aprovação') return -1;
@@ -259,9 +225,6 @@ export default function Operations() {
       {/* Kanban View (RESPONSIVE) */}
       {viewMode === 'kanban' && (
         <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="bg-white dark:bg-slate-900 p-2 sm:p-4 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm mb-2 text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-            💡 <strong>Mobile:</strong> Deslize para direita (→) para aprovar ou avançar. Deslize esquerda (←) para voltar.
-          </div>
           <div className="overflow-x-auto pb-2 flex-1">
             <div className="flex gap-2 sm:gap-4 min-w-min px-2 sm:px-4 h-full">
               {kanbanColumns.map((column) => {
@@ -288,10 +251,8 @@ export default function Operations() {
                         columnWorkOrders.map((os) => (
                           <div
                             key={os.id}
-                            onTouchStart={handleTouchStart}
-                            onTouchEnd={(e) => handleTouchEnd(e, os.id, os)}
                             onClick={() => setSelectedOS(os)}
-                            className="bg-white dark:bg-slate-800 p-2 sm:p-3 rounded-lg border border-slate-200 dark:border-slate-700 cursor-move hover:shadow-lg transition-all select-none touch-pan-y"
+                            className="bg-white dark:bg-slate-800 p-2 sm:p-3 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer hover:shadow-lg transition-all select-none"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex-1 min-w-0">
