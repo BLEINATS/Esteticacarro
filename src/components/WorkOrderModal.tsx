@@ -12,6 +12,7 @@ import { WorkOrder, DamagePoint, VehicleInventory, DailyLogEntry, AdditionalItem
 import { cn, formatCurrency } from '../lib/utils';
 import VehicleDamageMap from './VehicleDamageMap';
 import ClientModal from './ClientModal';
+import { useDialog } from '../context/DialogContext';
 
 interface WorkOrderModalProps {
   workOrder: WorkOrder;
@@ -20,6 +21,7 @@ interface WorkOrderModalProps {
 
 export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalProps) {
   const { addWorkOrder, updateWorkOrder, completeWorkOrder, submitNPS, clients, recipes, services, getPrice, getWhatsappLink, workOrders, addVehicle } = useApp();
+  const { showConfirm, showAlert } = useDialog();
   const [activeTab, setActiveTab] = useState<'reception' | 'execution' | 'quality' | 'finance'>('reception');
   
   // --- CLIENT & VEHICLE SELECTION STATE ---
@@ -207,9 +209,13 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedClientId || !selectedVehiclePlate) {
-        alert("Por favor, selecione um cliente e um veículo.");
+        await showAlert({
+            title: 'Dados Incompletos',
+            message: 'Por favor, selecione um cliente e um veículo antes de salvar.',
+            type: 'warning'
+        });
         setActiveTab('reception');
         return;
     }
@@ -259,11 +265,20 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
     
     onClose();
+    await showAlert({
+        title: 'Sucesso',
+        message: 'Ordem de Serviço salva com sucesso.',
+        type: 'success'
+    });
   };
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
       if (!selectedClientId || !selectedVehiclePlate) {
-        alert("Selecione o cliente antes de aprovar.");
+        await showAlert({
+            title: 'Atenção',
+            message: 'Selecione o cliente antes de aprovar.',
+            type: 'warning'
+        });
         return;
       }
       
@@ -299,6 +314,11 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           });
       }
       onClose();
+      await showAlert({
+        title: 'Aprovado',
+        message: 'Ordem de Serviço aprovada e enviada para a fila.',
+        type: 'success'
+      });
   };
 
   const handleAddDamage = (area: DamagePoint['area']) => {
@@ -336,15 +356,25 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
   const canComplete = qaList.every(q => !q.required || q.checked);
 
-  const handleStatusChange = (newStatus: WorkOrder['status']) => {
+  const handleStatusChange = async (newStatus: WorkOrder['status']) => {
     if (newStatus === 'Entregue' && !canComplete) {
-      alert('Opa! Precisamos completar o Checklist de Qualidade antes de entregar o carro.');
+      await showAlert({
+        title: 'Controle de Qualidade',
+        message: 'Opa! Precisamos completar o Checklist de Qualidade antes de entregar o carro.',
+        type: 'warning'
+      });
       return;
     }
     
     const exists = workOrders.some(o => o.id === workOrder.id);
     if (!exists) {
-        if (confirm("Para mudar o status, precisamos salvar a OS primeiro. Deseja salvar agora?")) {
+        const shouldSave = await showConfirm({
+            title: 'Salvar OS?',
+            message: 'Para mudar o status, precisamos salvar a OS primeiro. Deseja salvar agora?',
+            type: 'info'
+        });
+        
+        if (shouldSave) {
             handleSave();
         }
         return;
@@ -358,6 +388,11 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         const msg = `Olá ${selectedClient.name}! O serviço no seu ${selectedVehicleObj?.model || 'veículo'} foi concluído com sucesso. Valor Total: ${formatCurrency(workOrder.totalValue)}. Aguardamos sua retirada!`;
         window.open(getWhatsappLink(selectedClient.phone, msg), '_blank');
       }
+      await showAlert({
+        title: 'Serviço Concluído!',
+        message: 'O cliente será notificado e o estoque foi atualizado.',
+        type: 'success'
+      });
     }
   };
 

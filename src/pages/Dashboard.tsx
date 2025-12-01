@@ -318,7 +318,11 @@ export default function Dashboard() {
             </h3>
             <div className="space-y-4">
               {activeOS.slice(0, 3).map(os => (
-                <div key={os.id} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700">
+                <div 
+                  key={os.id} 
+                  onClick={() => setSelectedOS(os)}
+                  className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                >
                   <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs">
                     {os.technician.charAt(0)}
                   </div>
@@ -351,7 +355,11 @@ export default function Dashboard() {
             </h3>
             <div className="space-y-3">
               {inventory.filter(i => i.status === 'critical').slice(0, 2).map(item => (
-                <div key={item.id} className="flex items-start gap-3 text-sm">
+                <div 
+                  key={item.id} 
+                  onClick={() => navigate('/inventory')}
+                  className="flex items-start gap-3 text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 p-2 rounded-lg transition-colors"
+                >
                   <div className="w-2 h-2 rounded-full bg-red-500 mt-1.5" />
                   <div>
                     <p className="font-medium text-slate-900 dark:text-white">Estoque Crítico: {item.name}</p>
@@ -360,7 +368,10 @@ export default function Dashboard() {
                 </div>
               ))}
               {pendingApproval > 0 && (
-                <div className="flex items-start gap-3 text-sm">
+                <div 
+                  onClick={() => navigate('/operations')}
+                  className="flex items-start gap-3 text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 p-2 rounded-lg transition-colors"
+                >
                   <div className="w-2 h-2 rounded-full bg-purple-500 mt-1.5" />
                   <div>
                     <p className="font-medium text-slate-900 dark:text-white">{pendingApproval} OS aguardando aprovação</p>

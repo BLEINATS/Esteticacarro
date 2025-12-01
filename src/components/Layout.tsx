@@ -41,7 +41,7 @@ const SidebarItem = ({ icon: Icon, label, path, isActive, onClick }: any) => (
 );
 
 export default function Layout() {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   
@@ -58,7 +58,6 @@ export default function Layout() {
     navigate('/shop');
   };
 
-  // Close notifications when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
@@ -84,19 +83,21 @@ export default function Layout() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex font-sans transition-colors duration-300">
-      {/* Mobile Overlay */}
-      {isMobileMenuOpen && (
+    // FIX: Use 100dvh for mobile browsers to handle address bar correctly
+    <div className="h-screen supports-[height:100dvh]:h-[100dvh] w-full bg-slate-50 dark:bg-slate-950 flex font-sans transition-colors duration-300 overflow-hidden">
+      
+      {/* Overlay (Visible on ALL screens when menu is open) */}
+      {isMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setIsMobileMenuOpen(false)}
+          className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm transition-opacity"
+          onClick={() => setIsMenuOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar (Fixed Drawer on ALL screens) */}
       <aside className={cn(
-        "fixed lg:static inset-y-0 left-0 z-50 w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transform transition-all duration-300 ease-in-out lg:transform-none flex flex-col",
-        isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        "fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transform transition-all duration-300 ease-in-out flex flex-col shadow-2xl",
+        isMenuOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3">
           <img 
@@ -109,21 +110,21 @@ export default function Layout() {
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium tracking-wide">Gestão Integrada</p>
           </div>
           <button 
-            onClick={() => setIsMobileMenuOpen(false)}
-            className="lg:hidden ml-auto text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            onClick={() => setIsMenuOpen(false)}
+            className="ml-auto text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
           >
             <X size={24} />
           </button>
         </div>
 
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
           <div className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4 px-4">Menu Principal</div>
           {navItems.map((item) => (
             <div key={item.path} className="relative">
               <SidebarItem
                 {...item}
                 isActive={location.pathname === item.path}
-                onClick={() => setIsMobileMenuOpen(false)}
+                onClick={() => setIsMenuOpen(false)}
               />
               {item.path === '/operations' && pendingApprovals > 0 && (
                 <span className="absolute right-3 top-3 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
@@ -145,13 +146,14 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col min-w-0 h-full relative">
         {/* Top Header */}
-        <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 lg:px-8 transition-colors duration-300">
+        <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 lg:px-8 transition-colors duration-300 flex-shrink-0">
           <button 
-            onClick={() => setIsMobileMenuOpen(true)}
-            className="lg:hidden text-slate-600 dark:text-slate-300 p-2 -ml-2"
+            onClick={() => setIsMenuOpen(true)}
+            className="text-slate-600 dark:text-slate-300 p-2 -ml-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+            title="Abrir Menu"
           >
             <Menu size={24} />
           </button>
@@ -165,7 +167,7 @@ export default function Layout() {
               {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
             </button>
 
-            {/* Notification Bell with Dropdown */}
+            {/* Notification Bell */}
             <div className="relative" ref={notificationRef}>
                 <button 
                   onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
@@ -258,7 +260,7 @@ export default function Layout() {
           </div>
         </header>
 
-        {/* Page Content */}
+        {/* Page Content - Scrollable Area */}
         <div className="flex-1 overflow-y-auto p-4 lg:p-8 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
           <Outlet />
         </div>

@@ -84,31 +84,31 @@ const CampaignDetailsModal = ({ campaign, onClose }: { campaign: MarketingCampai
         <div className="flex-1 overflow-y-auto p-6 space-y-8">
           
           {/* Funil de Conversão */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
               <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2 text-sm font-medium">
                 <Send size={16} /> Enviados
               </div>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">{campaign.sentCount}</p>
+              <p className="text-lg font-bold text-slate-900 dark:text-white truncate" title={String(campaign.sentCount)}>{campaign.sentCount}</p>
             </div>
             <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
               <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2 text-sm font-medium">
-                <Eye size={16} /> Taxa Abertura
+                <Eye size={16} /> Abertura
               </div>
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">92%</p>
+              <p className="text-lg font-bold text-slate-900 dark:text-white truncate">92%</p>
               <p className="text-xs text-green-600 dark:text-green-400">Estimado</p>
             </div>
             <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
               <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-2 text-sm font-medium">
                 <MousePointerClick size={16} /> Conversões
               </div>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{campaign.conversionCount || 0}</p>
+              <p className="text-lg font-bold text-blue-600 dark:text-blue-400 truncate" title={String(campaign.conversionCount || 0)}>{campaign.conversionCount || 0}</p>
             </div>
             <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-100 dark:border-green-900/30">
               <div className="flex items-center gap-2 text-green-700 dark:text-green-400 mb-2 text-sm font-medium">
                 <DollarSign size={16} /> Receita
               </div>
-              <p className="text-2xl font-bold text-green-700 dark:text-green-400">{formatCurrency(campaign.revenueGenerated || 0)}</p>
+              <p className="text-lg font-bold text-green-700 dark:text-green-400 truncate" title={formatCurrency(campaign.revenueGenerated || 0)}>{formatCurrency(campaign.revenueGenerated || 0)}</p>
             </div>
           </div>
 

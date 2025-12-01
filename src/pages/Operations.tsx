@@ -32,70 +32,29 @@ const StatusBadge = ({ status }: { status: string }) => {
 
 export default function Operations() {
   const { workOrders, clients } = useApp();
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban'); // Default to Kanban for showcase
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
   const [selectedOS, setSelectedOS] = useState<WorkOrder | null>(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
 
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Cliente Desconhecido';
 
-  // Sort: Pending Approval first
   const sortedWorkOrders = [...workOrders].sort((a, b) => {
     if (a.status === 'Aguardando Aprovação' && b.status !== 'Aguardando Aprovação') return -1;
     if (a.status !== 'Aguardando Aprovação' && b.status === 'Aguardando Aprovação') return 1;
     return 0;
   });
 
-  // Kanban Configuration
   const kanbanColumns = [
-    {
-      id: 'approval',
-      title: 'Aprovação',
-      statuses: ['Aguardando Aprovação'],
-      color: 'purple',
-      borderColor: 'border-purple-500',
-      bgColor: 'bg-purple-50/50 dark:bg-purple-900/10',
-      icon: AlertCircle
-    },
-    {
-      id: 'queue',
-      title: 'Fila de Espera',
-      statuses: ['Aguardando'],
-      color: 'amber',
-      borderColor: 'border-amber-500',
-      bgColor: 'bg-amber-50/50 dark:bg-amber-900/10',
-      icon: Clock
-    },
-    {
-      id: 'execution',
-      title: 'Em Execução',
-      statuses: ['Em Andamento', 'Aguardando Peças'],
-      color: 'blue',
-      borderColor: 'border-blue-500',
-      bgColor: 'bg-blue-50/50 dark:bg-blue-900/10',
-      icon: Hammer
-    },
-    {
-      id: 'qa',
-      title: 'Qualidade (QA)',
-      statuses: ['Controle de Qualidade'],
-      color: 'indigo',
-      borderColor: 'border-indigo-500',
-      bgColor: 'bg-indigo-50/50 dark:bg-indigo-900/10',
-      icon: ShieldCheck
-    },
-    {
-      id: 'done',
-      title: 'Pronto / Entregue',
-      statuses: ['Concluído', 'Entregue'],
-      color: 'green',
-      borderColor: 'border-green-500',
-      bgColor: 'bg-green-50/50 dark:bg-green-900/10',
-      icon: CheckCircle2
-    }
+    { id: 'approval', title: 'Aprovação', statuses: ['Aguardando Aprovação'], color: 'purple', borderColor: 'border-purple-500', bgColor: 'bg-purple-50/50 dark:bg-purple-900/10', icon: AlertCircle },
+    { id: 'queue', title: 'Fila de Espera', statuses: ['Aguardando'], color: 'amber', borderColor: 'border-amber-500', bgColor: 'bg-amber-50/50 dark:bg-amber-900/10', icon: Clock },
+    { id: 'execution', title: 'Em Execução', statuses: ['Em Andamento', 'Aguardando Peças'], color: 'blue', borderColor: 'border-blue-500', bgColor: 'bg-blue-50/50 dark:bg-blue-900/10', icon: Hammer },
+    { id: 'qa', title: 'Qualidade (QA)', statuses: ['Controle de Qualidade'], color: 'indigo', borderColor: 'border-indigo-500', bgColor: 'bg-indigo-50/50 dark:bg-indigo-900/10', icon: ShieldCheck },
+    { id: 'done', title: 'Pronto / Entregue', statuses: ['Concluído', 'Entregue'], color: 'green', borderColor: 'border-green-500', bgColor: 'bg-green-50/50 dark:bg-green-900/10', icon: CheckCircle2 }
   ];
 
   return (
-    <div className="space-y-6 h-[calc(100vh-140px)] flex flex-col">
+    // FIX: Use h-auto on mobile to allow scrolling the page, h-full on desktop for internal scrolling
+    <div className="space-y-6 h-auto md:h-full flex flex-col">
       {selectedOS && (
         <WorkOrderModal 
           workOrder={selectedOS} 
@@ -143,7 +102,7 @@ export default function Operations() {
             onClick={() => {
                 const newOS: WorkOrder = {
                     id: `OS-${Math.floor(Math.random() * 10000)}`,
-                    clientId: '', // Empty to force selection
+                    clientId: '',
                     vehicle: 'Veículo Novo',
                     plate: '',
                     service: 'A Definir',
@@ -263,10 +222,11 @@ export default function Operations() {
         </div>
       )}
 
-      {/* Kanban View (ENHANCED) */}
+      {/* Kanban View (RESPONSIVE) */}
       {viewMode === 'kanban' && (
-        <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4">
-          <div className="flex gap-6 h-full min-w-[1200px] px-1">
+        // FIX: overflow-y-auto on mobile to scroll the page, overflow-x-auto on desktop to scroll columns
+        <div className="flex-1 overflow-y-auto md:overflow-y-hidden md:overflow-x-auto pb-4">
+          <div className="flex flex-col md:flex-row gap-6 h-auto md:h-full min-w-full md:min-w-[1200px] px-1">
             {kanbanColumns.map((col, index) => {
               const columnItems = workOrders.filter(o => col.statuses.includes(o.status));
               
@@ -274,10 +234,12 @@ export default function Operations() {
                 <div 
                   key={col.id} 
                   className={cn(
-                    "flex flex-col rounded-xl min-w-[280px] w-full max-w-xs border shadow-sm transition-all duration-300 animate-in fade-in slide-in-from-bottom-4",
+                    "flex flex-col rounded-xl w-full md:min-w-[280px] md:max-w-xs border shadow-sm transition-all duration-300 animate-in fade-in slide-in-from-bottom-4",
                     col.bgColor,
                     col.borderColor,
-                    "border-t-4 border-x border-b border-slate-200 dark:border-slate-800"
+                    "border-t-4 border-x border-b border-slate-200 dark:border-slate-800",
+                    // FIX: Auto height on mobile to stack properly, full height on desktop
+                    "h-auto md:h-full"
                   )}
                   style={{ animationDelay: `${index * 100}ms` }}
                 >
@@ -298,7 +260,7 @@ export default function Operations() {
                   </div>
 
                   {/* Column Content */}
-                  <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
+                  <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 min-h-[100px]">
                     {columnItems.map(os => (
                       <div 
                         key={os.id} 

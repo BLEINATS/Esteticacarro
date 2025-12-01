@@ -12,7 +12,7 @@ import TechPortal from './pages/TechPortal';
 import Marketing from './pages/Marketing';
 import Schedule from './pages/Schedule';
 import Settings from './pages/Settings';
-import ShopLanding from './pages/ShopLanding'; // Import new page
+import ShopLanding from './pages/ShopLanding';
 
 function App() {
   return (
@@ -21,12 +21,14 @@ function App() {
         {/* Rota Pública da Loja (Landing Page) */}
         <Route path="/shop" element={<ShopLanding />} />
 
-        {/* Rotas do Sistema (Admin) */}
+        {/* Portal do Técnico (Standalone - Sem Sidebar de Admin) */}
+        <Route path="/tech-portal" element={<TechPortal />} />
+
+        {/* Rotas do Sistema Admin (Com Layout/Sidebar) */}
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="schedule" element={<Schedule />} />
           <Route path="operations" element={<Operations />} />
-          <Route path="tech-portal" element={<TechPortal />} />
           <Route path="clients" element={<Clients />} />
           <Route path="marketing" element={<Marketing />} />
           <Route path="finance" element={<Finance />} />

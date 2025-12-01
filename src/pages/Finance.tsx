@@ -1,147 +1,400 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
   CreditCard, 
   DollarSign,
   Download,
-  PieChart,
   Plus,
   X,
-  Save
+  Save,
+  Pencil,
+  Trash2,
+  Filter,
+  Search,
+  Wallet,
+  Calculator,
+  CalendarClock,
+  CheckCircle2,
+  AlertCircle,
+  Calendar,
+  Landmark,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
-import { formatCurrency, cn } from '../lib/utils';
-
-const initialTransactions = [
-  { id: 1, desc: 'Pagamento OS #4092 - BMW X5', category: 'Serviços', amount: 2500.00, type: 'income', date: 'Hoje, 14:30', method: 'Cartão Crédito (3x)' },
-  { id: 2, desc: 'Compra de Insumos - Polimento', category: 'Estoque', amount: -450.00, type: 'expense', date: 'Hoje, 10:15', method: 'Boleto' },
-  { id: 3, desc: 'Pagamento Funcionários - Adiantamento', category: 'RH', amount: -3200.00, type: 'expense', date: 'Ontem', method: 'Transferência' },
-  { id: 4, desc: 'Serviço Avulso - Higienização', category: 'Serviços', amount: 350.00, type: 'income', date: 'Ontem', method: 'Pix' },
-  { id: 5, desc: 'Manutenção Compressores', category: 'Manutenção', amount: -890.00, type: 'expense', date: '12/03/2024', method: 'Cartão Débito' },
-];
+import { formatCurrency, cn, displayDate } from '../lib/utils';
+import { useDialog } from '../context/DialogContext';
+import { useApp } from '../context/AppContext';
+import { FinancialTransaction } from '../types';
 
 export default function Finance() {
-  const [transactions, setTransactions] = useState(initialTransactions);
+  const { financialTransactions, addFinancialTransaction, updateFinancialTransaction, deleteFinancialTransaction } = useApp();
+  const { showConfirm, showAlert } = useDialog();
+  
+  const [activeTab, setActiveTab] = useState<'cashflow' | 'payable' | 'receivable'>('cashflow');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newTrans, setNewTrans] = useState({
+  const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('Todas');
+  
+  // Filtros de Data (Padrão: Mês atual para Extrato ficar mais limpo, ou vazio para tudo)
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  
+  // Estado do Formulário
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [formData, setFormData] = useState({
     desc: '',
     amount: '',
-    type: 'income',
+    type: 'income' as 'income' | 'expense',
     category: 'Serviços',
-    method: 'Pix'
+    method: 'Pix',
+    date: new Date().toISOString().split('T')[0],
+    dueDate: new Date().toISOString().split('T')[0],
+    status: 'paid' as 'paid' | 'pending',
+    feeRate: '0',
+    installments: '1'
   });
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    const amount = parseFloat(newTrans.amount);
-    if (!newTrans.desc || isNaN(amount)) return;
+  // --- LÓGICA DE EXTRATO (LISTA PLANA) ---
+  const visibleTransactions = useMemo(() => {
+    // 1. Filtrar apenas pagos
+    let filtered = financialTransactions.filter(t => t.status === 'paid');
 
-    const transaction = {
-      id: Date.now(),
-      desc: newTrans.desc,
-      category: newTrans.category,
-      amount: newTrans.type === 'expense' ? -Math.abs(amount) : Math.abs(amount),
-      type: newTrans.type,
-      date: 'Hoje, Agora',
-      method: newTrans.method
-    };
+    // 2. Aplicar filtro de data se houver
+    if (startDate) {
+      const startStr = startDate; 
+      const endStr = endDate || '2100-01-01';
+      filtered = filtered.filter(t => t.date >= startStr && t.date <= endStr);
+    }
 
-    setTransactions([transaction, ...transactions]);
-    setIsModalOpen(false);
-    setNewTrans({ desc: '', amount: '', type: 'income', category: 'Serviços', method: 'Pix' });
+    // 3. Filtro de Texto
+    if (searchTerm) {
+        const lowerTerm = searchTerm.toLowerCase();
+        filtered = filtered.filter(t => t.desc.toLowerCase().includes(lowerTerm));
+    }
+
+    // 4. Filtro de Categoria
+    if (categoryFilter !== 'Todas') {
+        filtered = filtered.filter(t => t.category === categoryFilter);
+    }
+
+    // 5. Ordenar por Data (Mais recente primeiro)
+    return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [financialTransactions, startDate, endDate, searchTerm, categoryFilter]);
+
+  // --- LÓGICA PARA CONTAS A PAGAR/RECEBER ---
+  const pendingData = useMemo(() => {
+    const list = financialTransactions.filter(t => t.status === 'pending');
+    const payable = list.filter(t => t.type === 'expense');
+    const receivable = list.filter(t => t.type === 'income');
+    
+    const totalPayable = payable.reduce((acc, t) => acc + Math.abs(t.amount), 0);
+    const totalReceivable = receivable.reduce((acc, t) => acc + t.amount, 0);
+
+    return { payable, receivable, totalPayable, totalReceivable };
+  }, [financialTransactions]);
+
+
+  // --- AÇÕES ---
+
+  const handleEdit = (t: FinancialTransaction) => {
+    const feeRate = t.amount !== 0 ? ((t.fee / t.amount) * 100).toFixed(2) : '0';
+    setFormData({
+      desc: t.desc,
+      amount: Math.abs(t.amount).toString(),
+      type: t.type,
+      category: t.category,
+      method: t.method,
+      date: t.date,
+      dueDate: t.dueDate,
+      status: t.status,
+      feeRate: feeRate,
+      installments: t.installments ? t.installments.toString() : '1'
+    });
+    setEditingId(t.id);
+    setIsModalOpen(true);
   };
 
-  // Calculate totals
-  const totalBalance = transactions.reduce((acc, t) => acc + t.amount, 42300.50);
-  const totalIncome = transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 128500.00);
-  const totalExpense = transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + Math.abs(t.amount), 86200.00);
+  const handleDelete = async (id: number) => {
+    const confirmed = await showConfirm({
+      title: 'Excluir Transação',
+      message: 'Tem certeza que deseja excluir este lançamento?',
+      type: 'danger',
+      confirmText: 'Excluir',
+      cancelText: 'Cancelar'
+    });
+
+    if (confirmed) {
+      deleteFinancialTransaction(id);
+      await showAlert({
+        title: 'Excluído',
+        message: 'Transação removida com sucesso.',
+        type: 'success'
+      });
+    }
+  };
+
+  const handleSettle = async (id: number) => {
+    const confirmed = await showConfirm({
+        title: 'Confirmar Pagamento/Recebimento',
+        message: 'Deseja marcar este lançamento como realizado?',
+        type: 'info',
+        confirmText: 'Sim, Confirmar',
+        cancelText: 'Cancelar'
+    });
+
+    if (confirmed) {
+        updateFinancialTransaction(id, { status: 'paid', date: new Date().toISOString().split('T')[0] });
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amountVal = parseFloat(formData.amount);
+    const feeRateVal = parseFloat(formData.feeRate) || 0;
+    
+    if (!formData.desc || isNaN(amountVal)) return;
+
+    const feeValue = (amountVal * feeRateVal) / 100;
+    const netVal = amountVal - feeValue;
+
+    const newTransaction: FinancialTransaction = {
+      id: editingId || Date.now(),
+      desc: formData.desc,
+      category: formData.category,
+      amount: formData.type === 'expense' ? -amountVal : amountVal,
+      netAmount: formData.type === 'expense' ? -amountVal : netVal,
+      fee: formData.type === 'expense' ? 0 : feeValue,
+      type: formData.type,
+      date: formData.date,
+      dueDate: formData.dueDate,
+      method: formData.method,
+      installments: parseInt(formData.installments) || 1,
+      status: formData.status
+    };
+
+    if (editingId) {
+      updateFinancialTransaction(editingId, newTransaction);
+    } else {
+      addFinancialTransaction(newTransaction);
+    }
+
+    closeModal();
+    await showAlert({
+        title: 'Sucesso',
+        message: editingId ? 'Transação atualizada.' : 'Nova transação registrada.',
+        type: 'success'
+    });
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingId(null);
+    setFormData({
+      desc: '', amount: '', type: 'income', category: 'Serviços', 
+      method: 'Pix', date: new Date().toISOString().split('T')[0], 
+      dueDate: new Date().toISOString().split('T')[0],
+      status: 'paid', feeRate: '0', installments: '1'
+    });
+  };
 
   return (
     <div className="space-y-8">
-      {/* Modal Nova Transação */}
+      {/* --- MODAL DE TRANSAÇÃO --- */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
-              <h3 className="font-bold text-lg text-slate-900 dark:text-white">Nova Transação</h3>
-              <button onClick={() => setIsModalOpen(false)}><X className="text-slate-400" /></button>
+              <h3 className="font-bold text-lg text-slate-900 dark:text-white">
+                {editingId ? 'Editar Lançamento' : 'Nova Transação'}
+              </h3>
+              <button onClick={closeModal}><X className="text-slate-400" /></button>
             </div>
-            <form onSubmit={handleSave} className="p-6 space-y-4">
+            
+            <form onSubmit={handleSave} className="p-6 space-y-4 overflow-y-auto">
+              {/* Tipo de Transação */}
               <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
                 <button 
                   type="button"
-                  onClick={() => setNewTrans({...newTrans, type: 'income'})}
-                  className={cn("flex-1 py-2 rounded-md text-sm font-bold transition-colors", newTrans.type === 'income' ? "bg-white dark:bg-slate-700 text-green-600 shadow-sm" : "text-slate-500")}
+                  onClick={() => setFormData({...formData, type: 'income'})}
+                  className={cn("flex-1 py-2 rounded-md text-sm font-bold transition-colors", formData.type === 'income' ? "bg-white dark:bg-slate-700 text-green-600 shadow-sm" : "text-slate-500")}
                 >
-                  Entrada
+                  Receita (Entrada)
                 </button>
                 <button 
                   type="button"
-                  onClick={() => setNewTrans({...newTrans, type: 'expense'})}
-                  className={cn("flex-1 py-2 rounded-md text-sm font-bold transition-colors", newTrans.type === 'expense' ? "bg-white dark:bg-slate-700 text-red-600 shadow-sm" : "text-slate-500")}
+                  onClick={() => setFormData({...formData, type: 'expense'})}
+                  className={cn("flex-1 py-2 rounded-md text-sm font-bold transition-colors", formData.type === 'expense' ? "bg-white dark:bg-slate-700 text-red-600 shadow-sm" : "text-slate-500")}
                 >
-                  Saída
+                  Despesa (Saída)
                 </button>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Descrição</label>
-                <input 
-                  required
-                  type="text" 
-                  value={newTrans.desc}
-                  onChange={e => setNewTrans({...newTrans, desc: e.target.value})}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
-                  placeholder="Ex: Venda de Produto"
-                />
+
+              {/* Status */}
+              <div className="flex gap-4 items-center p-3 border border-slate-200 dark:border-slate-700 rounded-lg">
+                 <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Situação:</span>
+                 <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                        type="radio" 
+                        name="status" 
+                        checked={formData.status === 'paid'} 
+                        onChange={() => setFormData({...formData, status: 'paid'})}
+                        className="text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-slate-600 dark:text-slate-400">Pago / Recebido</span>
+                 </label>
+                 <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                        type="radio" 
+                        name="status" 
+                        checked={formData.status === 'pending'} 
+                        onChange={() => setFormData({...formData, status: 'pending'})}
+                        className="text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-slate-600 dark:text-slate-400">Pendente (Agendar)</span>
+                 </label>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+
+              {/* Descrição e Valor */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Descrição</label>
+                  <input 
+                    required
+                    type="text" 
+                    value={formData.desc}
+                    onChange={e => setFormData({...formData, desc: e.target.value})}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+                    placeholder="Ex: Pagamento OS #123"
+                  />
+                </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor (R$)</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor Bruto (R$)</label>
                   <input 
                     required
                     type="number" 
-                    value={newTrans.amount}
-                    onChange={e => setNewTrans({...newTrans, amount: e.target.value})}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+                    step="0.01"
+                    value={formData.amount}
+                    onChange={e => setFormData({...formData, amount: e.target.value})}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-bold"
                     placeholder="0,00"
                   />
                 </div>
                 <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                      {formData.status === 'pending' ? 'Vencimento' : 'Data Pagto'}
+                  </label>
+                  <input 
+                    type="date" 
+                    value={formData.status === 'pending' ? formData.dueDate : formData.date}
+                    onChange={e => formData.status === 'pending' ? setFormData({...formData, dueDate: e.target.value}) : setFormData({...formData, date: e.target.value})}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Categoria e Método */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Categoria</label>
                   <select 
-                    value={newTrans.category}
-                    onChange={e => setNewTrans({...newTrans, category: e.target.value})}
+                    value={formData.category}
+                    onChange={e => setFormData({...formData, category: e.target.value})}
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
                   >
                     <option>Serviços</option>
+                    <option>Produtos</option>
                     <option>Estoque</option>
+                    <option>Comissões</option>
                     <option>RH</option>
+                    <option>Aluguel/Fixo</option>
+                    <option>Marketing</option>
                     <option>Manutenção</option>
                     <option>Outros</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Método Pagto</label>
+                  <select 
+                    value={formData.method}
+                    onChange={e => setFormData({...formData, method: e.target.value})}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+                  >
+                    <option>Pix</option>
+                    <option>Dinheiro</option>
+                    <option>Cartão Crédito</option>
+                    <option>Cartão Débito</option>
+                    <option>Boleto</option>
+                    <option>Transferência</option>
+                  </select>
+                </div>
               </div>
-              <button type="submit" className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 flex items-center justify-center gap-2">
-                <Save size={18} /> Salvar
+
+              {/* Área de Taxas e Parcelas (Apenas se for Receita) */}
+              {formData.type === 'income' && (
+                <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+                  <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-sm">
+                    <Calculator size={16} className="text-blue-600" />
+                    Cálculo de Taxas (MDR)
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Taxa Maquininha (%)</label>
+                      <div className="relative">
+                        <input 
+                          type="number" 
+                          step="0.01"
+                          value={formData.feeRate}
+                          onChange={e => setFormData({...formData, feeRate: e.target.value})}
+                          className="w-full pl-3 pr-6 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                        />
+                        <span className="absolute right-3 top-2 text-slate-400 text-xs">%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Parcelas</label>
+                      <select 
+                        value={formData.installments}
+                        onChange={e => setFormData({...formData, installments: e.target.value})}
+                        className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
+                      >
+                        {[1,2,3,4,5,6,10,12].map(n => <option key={n} value={n}>{n}x</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  {parseFloat(formData.feeRate) > 0 && formData.amount && (
+                    <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-600 text-sm">
+                      <span className="text-slate-500">Valor Líquido Estimado:</span>
+                      <span className="font-bold text-green-600">
+                        {formatCurrency(parseFloat(formData.amount) * (1 - parseFloat(formData.feeRate)/100))}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <button type="submit" className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 transition-all">
+                <Save size={18} /> {editingId ? 'Salvar Alterações' : 'Lançar Transação'}
               </button>
             </form>
           </div>
         </div>
       )}
 
+      {/* --- HEADER --- */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Financeiro</h2>
-          <p className="text-slate-500 dark:text-slate-400">Controle de fluxo de caixa, DRE e conciliação bancária.</p>
+          <p className="text-slate-500 dark:text-slate-400">Gestão de fluxo de caixa, contas a pagar e receber.</p>
         </div>
         <div className="flex gap-2">
           <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
             <Download size={18} />
-            Exportar DRE
+            Relatório
           </button>
           <button 
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
           >
             <Plus size={18} />
             Nova Transação
@@ -149,83 +402,267 @@ export default function Finance() {
         </div>
       </div>
 
-      {/* Cards Resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-6 rounded-xl text-white shadow-lg shadow-blue-900/20">
-          <p className="text-blue-100 text-sm font-medium mb-1">Saldo Atual</p>
-          <h3 className="text-3xl font-bold mb-4">{formatCurrency(totalBalance)}</h3>
-          <div className="flex items-center gap-2 text-sm bg-white/10 w-fit px-3 py-1 rounded-full backdrop-blur-sm">
-            <ArrowUpRight size={16} className="text-green-300" />
-            <span>+12% vs mês anterior</span>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
-              <ArrowUpRight className="text-green-600 dark:text-green-400" size={24} />
-            </div>
-            <span className="text-xs font-bold text-slate-400 uppercase">Entradas (Mês)</span>
-          </div>
-          <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(totalIncome)}</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Previsão: {formatCurrency(140000)}</p>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
-              <ArrowDownRight className="text-red-600 dark:text-red-400" size={24} />
-            </div>
-            <span className="text-xs font-bold text-slate-400 uppercase">Saídas (Mês)</span>
-          </div>
-          <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(totalExpense)}</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Custos Fixos: {formatCurrency(45000)}</p>
-        </div>
+      {/* --- ABAS DE NAVEGAÇÃO --- */}
+      <div className="flex border-b border-slate-200 dark:border-slate-800">
+        {[
+            { id: 'cashflow', label: 'Extrato (Realizado)', icon: Landmark },
+            { id: 'payable', label: 'A Pagar', icon: ArrowDownRight },
+            { id: 'receivable', label: 'A Receber', icon: ArrowUpRight }
+        ].map(tab => (
+            <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={cn(
+                    "flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors",
+                    activeTab === tab.id 
+                        ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400" 
+                        : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                )}
+            >
+                <tab.icon size={18} />
+                {tab.label}
+            </button>
+        ))}
       </div>
 
-      {/* Transações Recentes */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-colors">
-        <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
-          <h3 className="text-lg font-bold text-slate-900 dark:text-white">Transações Recentes</h3>
-          <button className="text-sm text-blue-600 dark:text-blue-400 font-medium hover:underline">Ver todas</button>
+      {/* --- CONTEÚDO DA ABA --- */}
+      {activeTab === 'cashflow' ? (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+            
+            {/* FILTROS E TABELA */}
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                
+                {/* Toolbar */}
+                <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col lg:flex-row gap-4">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <input 
+                        type="text" 
+                        placeholder="Buscar no extrato..." 
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white placeholder-slate-400 transition-colors text-sm"
+                        />
+                    </div>
+                    
+                    {/* Date Filter */}
+                    <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-950 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-2 px-2">
+                            <Calendar size={16} className="text-slate-400" />
+                            <input 
+                                type="date" 
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="bg-transparent text-sm text-slate-600 dark:text-slate-300 focus:outline-none w-32"
+                                title="Data Inicial"
+                            />
+                        </div>
+                        <span className="text-slate-300 dark:text-slate-600">-</span>
+                        <div className="flex items-center gap-2 px-2">
+                            <input 
+                                type="date" 
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                className="bg-transparent text-sm text-slate-600 dark:text-slate-300 focus:outline-none w-32"
+                                title="Data Final"
+                            />
+                        </div>
+                        {(startDate || endDate) && (
+                            <button 
+                                onClick={() => { setStartDate(''); setEndDate(''); }}
+                                className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors"
+                                title="Limpar Filtro de Data"
+                            >
+                                <X size={14} />
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0">
+                        {['Todas', 'Serviços', 'Estoque', 'Comissões', 'RH', 'Manutenção', 'Aluguel/Fixo'].map(cat => (
+                        <button
+                            key={cat}
+                            onClick={() => setCategoryFilter(cat)}
+                            className={cn(
+                            "px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors border",
+                            categoryFilter === cat 
+                                ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800" 
+                                : "bg-transparent border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                            )}
+                        >
+                            {cat}
+                        </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* EXTRATO SIMPLIFICADO (SEM AGRUPAMENTO) */}
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+                            <tr>
+                                <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 w-32">Data</th>
+                                <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Descrição</th>
+                                <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Categoria</th>
+                                <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Valor</th>
+                                <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right w-24">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {visibleTransactions.map(t => (
+                                <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+                                    <td className="px-6 py-3 text-slate-500 dark:text-slate-400 font-medium">
+                                        {displayDate(t.date)}
+                                    </td>
+                                    <td className="px-6 py-3 font-medium text-slate-900 dark:text-white">
+                                        <div className="flex items-center gap-2">
+                                            <span>{t.desc}</span>
+                                            <span className="text-[10px] text-slate-400 font-normal px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                                                {t.method} {t.installments && t.installments > 1 && `• ${t.installments}x`}
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-3">
+                                        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-[10px] font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                            {t.category}
+                                        </span>
+                                    </td>
+                                    <td className={cn(
+                                        "px-6 py-3 text-right font-bold",
+                                        t.type === 'income' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                                    )}>
+                                        <div>
+                                            {t.type === 'income' ? '+' : ''} {formatCurrency(t.type === 'income' ? (t.netAmount ?? t.amount) : Math.abs(t.amount))}
+                                        </div>
+                                        {t.type === 'income' && t.fee > 0 && (
+                                            <div className="text-[10px] font-normal text-slate-400 mt-0.5">
+                                                Bruto: {formatCurrency(t.amount)} (-{formatCurrency(t.fee)})
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-3 text-right">
+                                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button 
+                                                onClick={() => handleEdit(t)}
+                                                className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors" 
+                                                title="Editar"
+                                            >
+                                                <Pencil size={14} />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDelete(t.id)}
+                                                className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" 
+                                                title="Excluir"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                            {visibleTransactions.length === 0 && (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                                        Nenhuma transação encontrada para este período.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-              <tr>
-                <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">Descrição</th>
-                <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">Categoria</th>
-                <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">Método</th>
-                <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">Data</th>
-                <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300 text-right">Valor</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {transactions.map((t) => (
-                <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                  <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{t.desc}</td>
-                  <td className="px-6 py-4">
-                    <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-md text-xs font-medium text-slate-600 dark:text-slate-300">
-                      {t.category}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-slate-600 dark:text-slate-400 flex items-center gap-2">
-                    <CreditCard size={14} />
-                    {t.method}
-                  </td>
-                  <td className="px-6 py-4 text-slate-500 dark:text-slate-400">{t.date}</td>
-                  <td className={cn(
-                    "px-6 py-4 text-right font-bold",
-                    t.type === 'income' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
-                  )}>
-                    {t.type === 'income' ? '+' : ''} {formatCurrency(t.amount)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      ) : (
+        // --- ABAS DE CONTAS A PAGAR / RECEBER (Mantido layout anterior simplificado) ---
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className={cn("p-6 rounded-xl text-white shadow-lg", activeTab === 'payable' ? "bg-gradient-to-br from-red-600 to-red-800 shadow-red-900/20" : "bg-gradient-to-br from-green-600 to-green-800 shadow-green-900/20")}>
+                    <p className={cn("text-sm font-medium mb-1 flex items-center gap-2", activeTab === 'payable' ? "text-red-100" : "text-green-100")}>
+                        {activeTab === 'payable' ? <ArrowDownRight size={16} /> : <ArrowUpRight size={16} />}
+                        Total {activeTab === 'payable' ? 'a Pagar' : 'a Receber'}
+                    </p>
+                    <h3 className="text-3xl font-bold mb-2">
+                        {formatCurrency(activeTab === 'payable' ? pendingData.totalPayable : pendingData.totalReceivable)}
+                    </h3>
+                    <p className={cn("text-xs opacity-80", activeTab === 'payable' ? "text-red-200" : "text-green-200")}>
+                        {activeTab === 'payable' ? 'Contas pendentes' : 'Previsão de entrada'}
+                    </p>
+                </div>
+             </div>
+
+             <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+                        <tr>
+                            <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">Vencimento</th>
+                            <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">Descrição</th>
+                            <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">Categoria</th>
+                            <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300 text-right">Valor</th>
+                            <th className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300 text-right">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {(activeTab === 'payable' ? pendingData.payable : pendingData.receivable).map(t => {
+                            const isLate = new Date(t.dueDate) < new Date() && new Date(t.dueDate).toDateString() !== new Date().toDateString();
+                            return (
+                                <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+                                    <td className="px-6 py-4 text-slate-500 dark:text-slate-400">
+                                        <div className="flex items-center gap-2">
+                                            <CalendarClock size={14} className={isLate ? "text-red-500" : "text-slate-400"} />
+                                            <span className={cn(isLate ? "text-red-600 font-bold" : "")}>
+                                                {displayDate(t.dueDate)}
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{t.desc}</td>
+                                    <td className="px-6 py-4">
+                                        <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-medium text-slate-600 dark:text-slate-300">
+                                            {t.category}
+                                        </span>
+                                    </td>
+                                    <td className={cn("px-6 py-4 text-right font-bold", t.type === 'income' ? "text-green-600" : "text-red-600")}>
+                                        {formatCurrency(Math.abs(t.amount))}
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="flex justify-end gap-2">
+                                            <button 
+                                                onClick={() => handleSettle(t.id)}
+                                                className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors" 
+                                                title={t.type === 'income' ? "Receber" : "Pagar"}
+                                            >
+                                                <CheckCircle2 size={18} />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleEdit(t)}
+                                                className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors" 
+                                                title="Editar"
+                                            >
+                                                <Pencil size={16} />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDelete(t.id)}
+                                                className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" 
+                                                title="Excluir"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                        {(activeTab === 'payable' ? pendingData.payable : pendingData.receivable).length === 0 && (
+                            <tr>
+                                <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                                    Nenhuma conta pendente.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+             </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

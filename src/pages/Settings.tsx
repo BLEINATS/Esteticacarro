@@ -4,10 +4,10 @@ import {
   Upload, CheckCircle2, Layout, MessageCircle,
   QrCode, Smartphone, Wifi, Battery, LogOut, Loader2, RefreshCw,
   Globe, ExternalLink, Image as ImageIcon,
-  Instagram, Facebook
+  Instagram, Facebook, ChevronRight, Moon, Sun, Bell, Globe2
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { cn } from '../lib/utils';
+import { cn, formatCurrency } from '../lib/utils';
 import { Link } from 'react-router-dom';
 
 export default function Settings() {
@@ -18,7 +18,9 @@ export default function Settings() {
     connectWhatsapp, 
     disconnectWhatsapp,
     services,
-    updateService
+    updateService,
+    toggleTheme,
+    theme
   } = useApp();
   const [activeTab, setActiveTab] = useState<'general' | 'billing' | 'integrations' | 'preferences' | 'landing'>('general');
   
@@ -101,8 +103,39 @@ export default function Settings() {
     }
   };
 
+  const handlePreferenceChange = (key: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      preferences: {
+        ...prev.preferences,
+        [key]: value
+      }
+    }));
+  };
+
+  const handleNotificationChange = (key: string, value: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      preferences: {
+        ...prev.preferences,
+        notifications: {
+          ...prev.preferences.notifications,
+          [key]: value
+        }
+      }
+    }));
+  };
+
+  // Sync local theme change with global theme
+  const handleThemeChange = (newTheme: 'light' | 'dark') => {
+    handlePreferenceChange('theme', newTheme);
+    if (theme !== newTheme) {
+        toggleTheme();
+    }
+  };
+
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto pb-20 lg:pb-0">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Configurações</h2>
@@ -110,53 +143,55 @@ export default function Settings() {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-8">
-        {/* Sidebar Navigation */}
-        <div className="w-full lg:w-64 flex-shrink-0 space-y-2">
-          {[
-            { id: 'general', label: 'Dados da Empresa', icon: Building2 },
-            { id: 'landing', label: 'Página Web (Loja)', icon: Globe }, // NEW TAB
-            { id: 'integrations', label: 'WhatsApp (QR Code)', icon: QrCode },
-            { id: 'billing', label: 'Assinatura & Faturas', icon: CreditCard },
-            { id: 'preferences', label: 'Preferências', icon: Layout },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all text-left",
-                activeTab === tab.id 
-                  ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200 dark:border-slate-700" 
-                  : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"
-              )}
-            >
-              <tab.icon size={18} />
-              {tab.label}
-            </button>
-          ))}
+      <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+        {/* Navigation - Horizontal Scroll on Mobile, Vertical Sidebar on Desktop */}
+        <div className="w-full lg:w-64 flex-shrink-0">
+          <div className="flex lg:flex-col gap-2 overflow-x-auto pb-2 lg:pb-0 no-scrollbar">
+            {[
+              { id: 'general', label: 'Dados da Empresa', icon: Building2 },
+              { id: 'landing', label: 'Página Web', icon: Globe },
+              { id: 'integrations', label: 'WhatsApp', icon: QrCode },
+              { id: 'billing', label: 'Assinatura', icon: CreditCard },
+              { id: 'preferences', label: 'Preferências', icon: Layout },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all whitespace-nowrap flex-shrink-0 lg:w-full text-left",
+                  activeTab === tab.id 
+                    ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200 dark:border-slate-700" 
+                    : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50"
+                )}
+              >
+                <tab.icon size={18} />
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Content Area */}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           
           {/* TAB: GENERAL (COMPANY INFO) */}
           {activeTab === 'general' && (
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden animate-in fade-in slide-in-from-right">
-              <div className="p-6 border-b border-slate-100 dark:border-slate-800">
+              <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800">
                 <h3 className="font-bold text-lg text-slate-900 dark:text-white">Identidade da Empresa</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400">Esses dados aparecerão nas Ordens de Serviço e Faturas.</p>
               </div>
               
-              <form onSubmit={handleSave} className="p-6 space-y-6">
+              <form onSubmit={handleSave} className="p-4 sm:p-6 space-y-6">
                 {/* Logo Upload Simulation */}
-                <div className="flex items-center gap-6">
+                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
                   <img 
                     src={formData.logoUrl} 
                     alt="Logo" 
                     className="w-24 h-24 rounded-full object-cover border-4 border-slate-100 dark:border-slate-800"
                   />
-                  <div>
-                    <button type="button" className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-bold text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                  <div className="text-center sm:text-left">
+                    <button type="button" className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-bold text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors mx-auto sm:mx-0">
                       <Upload size={16} /> Alterar Logo
                     </button>
                     <p className="text-xs text-slate-400 mt-2">Recomendado: 500x500px (PNG/JPG)</p>
@@ -258,13 +293,13 @@ export default function Settings() {
                     </div>
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
                   {isSaved ? (
                     <span className="text-green-600 dark:text-green-400 font-bold flex items-center gap-2 animate-in fade-in">
                       <CheckCircle2 size={20} /> Alterações salvas!
                     </span>
-                  ) : <span></span>}
-                  <button type="submit" className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all flex items-center gap-2">
+                  ) : <span className="hidden sm:block"></span>}
+                  <button type="submit" className="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2">
                     <Save size={20} /> Salvar Alterações
                   </button>
                 </div>
@@ -275,20 +310,19 @@ export default function Settings() {
           {/* TAB: LANDING PAGE (NEW) */}
           {activeTab === 'landing' && (
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden animate-in fade-in slide-in-from-right">
-              <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+              <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h3 className="font-bold text-lg text-slate-900 dark:text-white">Página Web da Loja</h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400">Configure sua vitrine online para captar clientes.</p>
                 </div>
-                {/* REMOVED target="_blank" to fix preview issue */}
-                <Link to="/shop" className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 rounded-lg font-bold text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
+                <Link to="/shop" className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 rounded-lg font-bold text-sm hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors w-full sm:w-auto justify-center">
                     <ExternalLink size={16} /> Ver Página
                 </Link>
               </div>
               
-              <form onSubmit={handleSave} className="p-6 space-y-6">
+              <form onSubmit={handleSave} className="p-4 sm:p-6 space-y-6">
                 
-                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 gap-4">
                     <div>
                         <span className="font-bold text-slate-900 dark:text-white block">Página Ativa</span>
                         <span className="text-xs text-slate-500 dark:text-slate-400">Se desativado, clientes verão uma tela de manutenção.</span>
@@ -320,8 +354,8 @@ export default function Settings() {
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Imagem de Capa (Hero Image)</label>
-                        <div className="flex gap-4 items-center">
-                            <div className="relative flex-1">
+                        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                            <div className="relative flex-1 w-full">
                                 <input 
                                     type="text" 
                                     value={formData.landingPage.heroImage}
@@ -330,7 +364,7 @@ export default function Settings() {
                                     placeholder="URL da imagem..."
                                 />
                             </div>
-                            <label className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                            <label className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors w-full sm:w-auto">
                                 <Upload size={18} className="text-slate-600 dark:text-slate-300" />
                                 <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Upload</span>
                                 <input type="file" accept="image/*" className="hidden" onChange={handleHeroImageUpload} />
@@ -344,7 +378,7 @@ export default function Settings() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <label className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
                         <input 
                             type="checkbox"
@@ -404,13 +438,13 @@ export default function Settings() {
                     </div>
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
                   {isSaved ? (
                     <span className="text-green-600 dark:text-green-400 font-bold flex items-center gap-2 animate-in fade-in">
                       <CheckCircle2 size={20} /> Alterações salvas!
                     </span>
-                  ) : <span></span>}
-                  <button type="submit" className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all flex items-center gap-2">
+                  ) : <span className="hidden sm:block"></span>}
+                  <button type="submit" className="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2">
                     <Save size={20} /> Salvar Página
                   </button>
                 </div>
@@ -423,7 +457,7 @@ export default function Settings() {
             <div className="space-y-6 animate-in fade-in slide-in-from-right">
               
               {/* Connection Status Card */}
-              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
                     <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg text-green-600 dark:text-green-400">
@@ -436,7 +470,7 @@ export default function Settings() {
                   </div>
                 </div>
 
-                <div className="bg-slate-50 dark:bg-slate-950 rounded-xl p-8 flex flex-col items-center justify-center min-h-[300px]">
+                <div className="bg-slate-50 dark:bg-slate-950 rounded-xl p-4 sm:p-8 flex flex-col items-center justify-center min-h-[300px]">
                   
                   {/* STATE: DISCONNECTED */}
                   {companySettings.whatsapp.session.status === 'disconnected' && (
@@ -535,7 +569,7 @@ export default function Settings() {
 
               {/* Templates Section */}
               {companySettings.whatsapp.session.status === 'connected' && (
-                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 animate-in slide-in-from-bottom-4">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-6 animate-in slide-in-from-bottom-4">
                     <div className="mb-6">
                         <h3 className="font-bold text-lg text-slate-900 dark:text-white">Templates de Mensagem</h3>
                         <p className="text-sm text-slate-500 dark:text-slate-400">Personalize o texto padrão. Use variáveis como <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded text-blue-600">{`{cliente}`}</code>, <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded text-blue-600">{`{veiculo}`}</code> e <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded text-blue-600">{`{valor}`}</code>.</p>
@@ -564,7 +598,7 @@ export default function Settings() {
                     <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800 flex justify-end">
                         <button 
                             onClick={handleSave}
-                            className="px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all flex items-center gap-2"
+                            className="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2"
                         >
                             <Save size={20} /> Salvar Configurações
                         </button>
@@ -577,7 +611,7 @@ export default function Settings() {
           {/* TAB: BILLING (SAAS) */}
           {activeTab === 'billing' && (
             <div className="space-y-6 animate-in fade-in slide-in-from-right">
-              <div className="bg-gradient-to-br from-slate-900 to-slate-800 dark:from-black dark:to-slate-900 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden">
+              <div className="bg-gradient-to-br from-slate-900 to-slate-800 dark:from-black dark:to-slate-900 rounded-2xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
                 
                 <div className="relative z-10 flex flex-col md:flex-row justify-between gap-8">
@@ -610,44 +644,194 @@ export default function Settings() {
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800">
                   <h3 className="font-bold text-lg text-slate-900 dark:text-white">Histórico de Faturas</h3>
                 </div>
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-800/50">
-                    <tr>
-                      <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Data</th>
-                      <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Valor</th>
-                      <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Status</th>
-                      <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Download</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {subscription.invoices.map(inv => (
-                      <tr key={inv.id}>
-                        <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{new Date(inv.date).toLocaleDateString('pt-BR')}</td>
-                        <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">R$ {inv.amount.toFixed(2).replace('.', ',')}</td>
-                        <td className="px-6 py-4">
-                          <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-1 rounded-full text-xs font-bold">Pago</span>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <button className="text-blue-600 dark:text-blue-400 hover:underline font-medium text-xs">PDF</button>
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 dark:bg-slate-800/50">
+                      <tr>
+                        <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Data</th>
+                        <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Valor</th>
+                        <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Status</th>
+                        <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Download</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {subscription.invoices.map(inv => (
+                        <tr key={inv.id}>
+                          <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{new Date(inv.date).toLocaleDateString('pt-BR')}</td>
+                          <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">R$ {inv.amount.toFixed(2).replace('.', ',')}</td>
+                          <td className="px-6 py-4">
+                            <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-1 rounded-full text-xs font-bold">Pago</span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button className="text-blue-600 dark:text-blue-400 hover:underline font-medium text-xs">PDF</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
 
           {/* TAB: PREFERENCES */}
           {activeTab === 'preferences' && (
-             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-8 text-center animate-in fade-in slide-in-from-right">
-                <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
-                    <Layout size={32} />
+             <div className="space-y-6 animate-in fade-in slide-in-from-right">
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+                        <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600 dark:text-blue-400">
+                            <Layout size={20} />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-lg text-slate-900 dark:text-white">Aparência</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Personalize como o sistema é exibido para você.</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">Tema do Sistema</label>
+                            <div className="flex gap-3">
+                                <button 
+                                    type="button"
+                                    onClick={() => handleThemeChange('light')}
+                                    className={cn(
+                                        "flex-1 flex items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all",
+                                        formData.preferences.theme === 'light'
+                                            ? "border-blue-600 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                                            : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
+                                    )}
+                                >
+                                    <Sun size={20} />
+                                    <span className="font-medium">Claro</span>
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={() => handleThemeChange('dark')}
+                                    className={cn(
+                                        "flex-1 flex items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all",
+                                        formData.preferences.theme === 'dark'
+                                            ? "border-blue-600 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                                            : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
+                                    )}
+                                >
+                                    <Moon size={20} />
+                                    <span className="font-medium">Escuro</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Preferências do Sistema</h3>
-                <p className="text-slate-500 dark:text-slate-400 mb-6">
-                    Configurações de tema, notificações e permissões de usuários estarão disponíveis aqui em breve.
-                </p>
+
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+                        <div className="p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-amber-600 dark:text-amber-400">
+                            <Bell size={20} />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-lg text-slate-900 dark:text-white">Notificações</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Escolha quais alertas você deseja receber no painel.</p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-4">
+                        <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <div>
+                                <span className="block font-bold text-slate-900 dark:text-white">Estoque Baixo</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400">Alertar quando produtos atingirem o nível crítico.</span>
+                            </div>
+                            <div className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    className="sr-only peer" 
+                                    checked={formData.preferences.notifications.lowStock}
+                                    onChange={e => handleNotificationChange('lowStock', e.target.checked)}
+                                />
+                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                            </div>
+                        </label>
+
+                        <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <div>
+                                <span className="block font-bold text-slate-900 dark:text-white">Atualizações de OS</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400">Notificar quando uma OS mudar de status ou precisar de aprovação.</span>
+                            </div>
+                            <div className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    className="sr-only peer" 
+                                    checked={formData.preferences.notifications.osUpdates}
+                                    onChange={e => handleNotificationChange('osUpdates', e.target.checked)}
+                                />
+                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                            </div>
+                        </label>
+
+                        <label className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <div>
+                                <span className="block font-bold text-slate-900 dark:text-white">Marketing & CRM</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400">Avisar sobre lembretes de retorno e performance de campanhas.</span>
+                            </div>
+                            <div className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    className="sr-only peer" 
+                                    checked={formData.preferences.notifications.marketing}
+                                    onChange={e => handleNotificationChange('marketing', e.target.checked)}
+                                />
+                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+                        <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-purple-600 dark:text-purple-400">
+                            <Globe2 size={20} />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-lg text-slate-900 dark:text-white">Localização</h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Configurações regionais do sistema.</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Idioma</label>
+                            <select 
+                                value={formData.preferences.language}
+                                onChange={e => handlePreferenceChange('language', e.target.value)}
+                                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            >
+                                <option value="pt-BR">Português (Brasil)</option>
+                                <option value="en-US">English (US)</option>
+                                <option value="es-ES">Español</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5">Fuso Horário</label>
+                            <select 
+                                disabled
+                                className="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                            >
+                                <option>Horário de Brasília (GMT-3)</option>
+                            </select>
+                            <p className="text-xs text-slate-400 mt-1">Definido automaticamente pelo navegador.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  {isSaved ? (
+                    <span className="text-green-600 dark:text-green-400 font-bold flex items-center gap-2 animate-in fade-in">
+                      <CheckCircle2 size={20} /> Preferências salvas!
+                    </span>
+                  ) : <span className="hidden sm:block"></span>}
+                  <button type="submit" onClick={handleSave} className="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2">
+                    <Save size={20} /> Salvar Preferências
+                  </button>
+                </div>
              </div>
           )}
 

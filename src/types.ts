@@ -24,7 +24,7 @@ export interface ServiceCatalogItem {
   active: boolean;
   standardTimeMinutes: number;
   returnIntervalDays?: number;
-  imageUrl?: string; // Nova propriedade para a foto do serviço
+  imageUrl?: string;
 }
 
 export interface PriceMatrixEntry {
@@ -98,6 +98,8 @@ export interface Employee {
   name: string;
   role: 'Manager' | 'Detailer' | 'Funileiro' | 'Lavador' | 'Pintor';
   pin: string;
+  salaryType: 'commission' | 'fixed'; 
+  fixedSalary: number; 
   commissionRate: number;
   commissionBase: 'gross' | 'net';
   active: boolean;
@@ -128,11 +130,27 @@ export interface Task {
 export interface EmployeeTransaction {
   id: string;
   employeeId: string;
-  type: 'commission' | 'advance' | 'payment';
+  type: 'commission' | 'advance' | 'payment' | 'salary'; 
   amount: number;
   description: string;
   date: string;
   relatedWorkOrderId?: string;
+}
+
+// --- FINANCIAL TYPES ---
+export interface FinancialTransaction {
+  id: number;
+  desc: string;
+  category: string;
+  amount: number; // Valor Bruto (Positivo=Entrada, Negativo=Saída)
+  netAmount: number; // Valor Líquido (após taxas)
+  fee: number; // Taxa em R$
+  type: 'income' | 'expense';
+  date: string; // Data de Competência/Lançamento (YYYY-MM-DD)
+  dueDate: string; // Data de Vencimento (YYYY-MM-DD)
+  method: string;
+  installments?: number; // Parcelas
+  status: 'paid' | 'pending'; // Status do pagamento
 }
 
 export interface DamagePoint {
@@ -197,7 +215,7 @@ export interface WorkOrder {
   plate: string;
   service: string; 
   serviceId?: string; 
-  serviceIds?: string[]; // Support for multiple services
+  serviceIds?: string[]; 
   status: 'Aguardando Aprovação' | 'Aguardando' | 'Em Andamento' | 'Aguardando Peças' | 'Controle de Qualidade' | 'Concluído' | 'Entregue' | 'Cancelado';
   technician: string;
   deadline: string;
@@ -222,7 +240,7 @@ export interface WorkOrder {
   npsScore?: number; 
   npsComment?: string;
   
-  origin?: 'manual' | 'web_lead'; // Rastreamento de origem
+  origin?: 'manual' | 'web_lead'; 
 }
 
 // --- SAAS & CONFIG TYPES ---
@@ -259,6 +277,16 @@ export interface LandingPageConfig {
   showTestimonials: boolean;
 }
 
+export interface CompanyPreferences {
+  theme: 'light' | 'dark';
+  language: string;
+  notifications: {
+    lowStock: boolean;
+    osUpdates: boolean;
+    marketing: boolean;
+  };
+}
+
 export interface CompanySettings {
   name: string;
   responsibleName: string;
@@ -268,11 +296,12 @@ export interface CompanySettings {
   address: string;
   logoUrl: string;
   website?: string;
-  instagram?: string; // Novo
-  facebook?: string; // Novo
+  instagram?: string; 
+  facebook?: string; 
   primaryColor?: string;
   whatsapp: WhatsappConfig; 
   landingPage: LandingPageConfig;
+  preferences: CompanyPreferences;
 }
 
 export interface SubscriptionPlan {

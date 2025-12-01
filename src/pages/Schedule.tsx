@@ -43,10 +43,8 @@ export default function Schedule() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedOS, setSelectedOS] = useState<WorkOrder | null>(null);
   
-  // NOVO: State para o diálogo de explicação
   const [showScheduleHelp, setShowScheduleHelp] = useState(false);
 
-  // Navegação do Calendário
   const next = () => {
     if (viewMode === 'week') {
       setCurrentDate(addWeeks(currentDate, 1));
@@ -69,7 +67,6 @@ export default function Schedule() {
     setSelectedDate(today);
   };
 
-  // Geração da Grade do Calendário
   let startDate, endDate;
 
   if (viewMode === 'month') {
@@ -84,7 +81,6 @@ export default function Schedule() {
 
   const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
 
-  // Função Inteligente para Interpretar Datas
   const getEventDate = (os: WorkOrder): Date => {
     if (os.deadline) {
       const lower = os.deadline.toLowerCase();
@@ -116,7 +112,6 @@ export default function Schedule() {
   const selectedDayEvents = getVisualEvents(selectedDate);
   const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
-  // Título do Cabeçalho
   const getHeaderTitle = () => {
     if (viewMode === 'week') {
       return `Semana de ${format(startDate, "d 'de' MMM", { locale: ptBR })}`;
@@ -124,25 +119,21 @@ export default function Schedule() {
     return format(currentDate, 'MMMM yyyy', { locale: ptBR });
   };
 
-  // NOVO: Função para iniciar o agendamento real
   const handleNewAppointment = () => {
-    // Fecha o diálogo de ajuda se estiver aberto
     setShowScheduleHelp(false);
-
-    // Formata a data selecionada para o padrão "Dia/Mês" ou "Hoje" se for hoje
     let deadlineStr = format(selectedDate, "dd/MM", { locale: ptBR });
     if (isToday(selectedDate)) deadlineStr = "Hoje";
     else if (isSameDay(selectedDate, addDays(new Date(), 1))) deadlineStr = "Amanhã";
 
     const newOS: WorkOrder = {
         id: `OS-${Math.floor(Math.random() * 10000)}`,
-        clientId: '', // Empty to force selection
+        clientId: '',
         vehicle: 'Veículo Novo',
         plate: '',
         service: 'A Definir',
-        status: 'Aguardando', // Status crucial para agendamento
+        status: 'Aguardando',
         technician: 'A Definir',
-        deadline: deadlineStr, // Preenche com a data do calendário
+        deadline: deadlineStr,
         priority: 'medium',
         totalValue: 0,
         damages: [],
@@ -156,7 +147,8 @@ export default function Schedule() {
   };
 
   return (
-    <div className="space-y-4 md:space-y-6 h-[calc(100vh-80px)] md:h-[calc(100vh-140px)] flex flex-col animate-in fade-in duration-500">
+    // FIX: Use h-auto on mobile to allow scrolling, h-full on desktop
+    <div className="space-y-4 md:space-y-6 h-auto md:h-full flex flex-col animate-in fade-in duration-500">
       {selectedOS && (
         <WorkOrderModal 
           workOrder={selectedOS} 
@@ -164,7 +156,6 @@ export default function Schedule() {
         />
       )}
 
-      {/* DIÁLOGO DE EXPLICAÇÃO (MODAL) */}
       {showScheduleHelp && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
@@ -207,7 +198,7 @@ export default function Schedule() {
         </div>
       )}
 
-      {/* Header - Responsivo com Wrap */}
+      {/* Header */}
       <div className="flex flex-col gap-4 flex-shrink-0">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -263,10 +254,10 @@ export default function Schedule() {
         </div>
       </div>
 
-      {/* Main Content - Stack on Mobile, Row on Desktop */}
+      {/* Main Content */}
       <div className="flex flex-col lg:flex-row gap-4 md:gap-6 flex-1 min-h-0 overflow-hidden">
         
-        {/* Calendar Area - Order 2 on Mobile (Below Details) */}
+        {/* Calendar Area */}
         <div className="flex-1 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden order-2 lg:order-1">
           
           {/* Toolbar */}
@@ -287,7 +278,7 @@ export default function Schedule() {
             </div>
           </div>
 
-          {/* Grid View (Week or Month) - Scrollable Horizontal on Mobile */}
+          {/* Grid View (Week or Month) */}
           {(viewMode === 'month' || viewMode === 'week') && (
             <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-950 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
               <div className="min-w-[700px] lg:min-w-full h-full flex flex-col"> 
@@ -342,6 +333,10 @@ export default function Schedule() {
                           {events.map(ev => (
                             <div 
                               key={ev.id} 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedOS(ev);
+                              }}
                               className={cn(
                                 "text-[10px] md:text-[11px] px-1.5 py-1 md:px-2 md:py-1.5 rounded-md font-medium flex flex-col gap-0.5 border shadow-sm transition-all hover:scale-[1.02]",
                                 ev.status === 'Concluído' ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800" :
@@ -415,7 +410,7 @@ export default function Schedule() {
           )}
         </div>
 
-        {/* Side Panel: Selected Day Details - Order 1 on Mobile (Top) */}
+        {/* Side Panel */}
         <div className="w-full lg:w-80 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col flex-shrink-0 h-auto max-h-[300px] lg:max-h-none lg:h-auto order-1 lg:order-2">
           <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 rounded-t-xl">
             <h3 className="font-bold text-slate-900 dark:text-white capitalize">

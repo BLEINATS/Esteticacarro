@@ -1,25 +1,34 @@
 import React, { useState } from 'react';
 import { 
   Tags, Filter, Plus, ArrowUpRight, Calculator, Info,
-  CheckCircle2, Clock, RotateCcw
+  CheckCircle2, Clock, RotateCcw, ToggleLeft, ToggleRight, Image as ImageIcon, Upload,
+  Search, Trash2
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatCurrency, cn } from '../lib/utils';
 import { VehicleSize, VEHICLE_SIZES, ServiceCatalogItem } from '../types';
 import ServiceModal from '../components/ServiceModal';
+import { useDialog } from '../context/DialogContext';
 
 export default function ServicesPricing() {
-  const { services, priceMatrix, updatePrice, bulkUpdatePrices, updateServiceInterval } = useApp();
+  const { services, priceMatrix, updatePrice, bulkUpdatePrices, updateServiceInterval, deleteService } = useApp();
+  const { showConfirm, showAlert } = useDialog();
   const [activeTab, setActiveTab] = useState<'matrix' | 'catalog'>('matrix');
   const [bulkPercentage, setBulkPercentage] = useState<number>(10);
   const [bulkTarget, setBulkTarget] = useState<VehicleSize | 'all'>('large');
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Modal States
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<ServiceCatalogItem | null>(null);
 
   const sizes: VehicleSize[] = ['small', 'medium', 'large', 'xl'];
+
+  const filteredServices = services.filter(s => 
+    s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    s.category.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const handleBulkUpdate = () => {
     bulkUpdatePrices(bulkTarget, bulkPercentage);
@@ -34,6 +43,37 @@ export default function ServicesPricing() {
   const handleEditService = (service: ServiceCatalogItem) => {
     setSelectedService(service);
     setIsServiceModalOpen(true);
+  };
+
+  const handleDeleteService = async (id: string) => {
+    const confirmed = await showConfirm({
+        title: 'Excluir Serviço',
+        message: 'Tem certeza que deseja excluir este serviço? Isso removerá também os preços associados.',
+        type: 'danger',
+        confirmText: 'Sim, Excluir',
+        cancelText: 'Cancelar'
+    });
+
+    if (confirmed) {
+        deleteService(id);
+        await showAlert({
+            title: 'Excluído',
+            message: 'Serviço removido com sucesso.',
+            type: 'success'
+        });
+    }
+  };
+
+  const getCategoryStyle = (category: string) => {
+    const styles: Record<string, string> = {
+        'Lavagem': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800',
+        'Polimento': 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 border-purple-200 dark:border-purple-800',
+        'Proteção': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 border-green-200 dark:border-green-800',
+        'Interior': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+        'Funilaria': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-800',
+        'Acessórios': 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+    };
+    return styles[category] || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700';
   };
 
   return (
@@ -78,12 +118,34 @@ export default function ServicesPricing() {
         </div>
       </div>
 
+      {/* Search & Filter Bar (Visible on both tabs for convenience) */}
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+          <input 
+            type="text" 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar serviço por nome ou categoria..." 
+            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white placeholder-slate-400 transition-colors"
+          />
+        </div>
+        {activeTab === 'catalog' && (
+            <button 
+                onClick={handleNewService}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm transition-colors"
+            >
+                <Plus size={18} />
+                Novo Serviço
+            </button>
+        )}
+      </div>
+
       {/* TAB: MATRIX */}
       {activeTab === 'matrix' && (
         <div className="space-y-6 animate-in fade-in slide-in-from-left duration-300">
           {/* Bulk Update Tool */}
           <div className="bg-gradient-to-r from-slate-800 to-slate-900 dark:from-slate-900 dark:to-slate-950 p-6 rounded-xl text-white shadow-lg border border-slate-700">
-            {/* ... (Conteúdo da ferramenta de reajuste mantido igual) ... */}
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
               <div className="flex items-start gap-4">
                 <div className="p-3 bg-blue-600/20 rounded-lg text-blue-400">
@@ -161,11 +223,15 @@ export default function ServicesPricing() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {services.map((service) => (
+                {filteredServices.map((service) => (
                   <tr key={service.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                     <td className="px-6 py-4">
                       <p className="font-bold text-slate-900 dark:text-white">{service.name}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{service.category}</p>
+                      <div className="flex mt-1">
+                        <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-bold border", getCategoryStyle(service.category))}>
+                            {service.category}
+                        </span>
+                      </div>
                     </td>
                     {sizes.map(size => {
                       const entry = priceMatrix.find(p => p.serviceId === service.id && p.size === size);
@@ -186,6 +252,13 @@ export default function ServicesPricing() {
                     })}
                   </tr>
                 ))}
+                {filteredServices.length === 0 && (
+                    <tr>
+                        <td colSpan={5} className="px-6 py-8 text-center text-slate-400">
+                            Nenhum serviço encontrado.
+                        </td>
+                    </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -195,18 +268,8 @@ export default function ServicesPricing() {
       {/* TAB: CATALOG */}
       {activeTab === 'catalog' && (
         <div className="space-y-6 animate-in fade-in slide-in-from-right duration-300">
-           <div className="flex justify-end">
-             <button 
-                onClick={handleNewService}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm transition-colors"
-             >
-              <Plus size={18} />
-              Novo Serviço
-            </button>
-           </div>
-
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-             {services.map(service => {
+             {filteredServices.map(service => {
                // Calculate prices
                const prices = priceMatrix.filter(p => p.serviceId === service.id).map(p => p.price);
                const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
@@ -225,7 +288,13 @@ export default function ServicesPricing() {
                    <div className={cn("w-3 h-3 rounded-full", service.active ? "bg-green-500" : "bg-slate-300")} />
                  </div>
                  
-                 <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-2 relative z-10">{service.name}</h3>
+                 <div className="flex flex-wrap items-center gap-2 mb-2 relative z-10">
+                    <h3 className="font-bold text-lg text-slate-900 dark:text-white">{service.name}</h3>
+                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-bold border uppercase", getCategoryStyle(service.category))}>
+                        {service.category}
+                    </span>
+                 </div>
+
                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 min-h-[40px] relative z-10">{service.description}</p>
                  
                  {/* Price Display */}
@@ -257,17 +326,31 @@ export default function ServicesPricing() {
                     </p>
                  </div>
 
-                 <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800 relative z-10">
-                   <span className="text-xs font-bold text-slate-400 uppercase">{service.category}</span>
-                   <button 
-                    onClick={() => handleEditService(service)}
-                    className="text-sm text-blue-600 dark:text-blue-400 font-medium hover:underline flex items-center gap-1"
-                   >
-                     Editar <ArrowUpRight size={14} />
-                   </button>
+                 <div className="flex items-center justify-end pt-4 border-t border-slate-100 dark:border-slate-800 relative z-10">
+                   <div className="flex gap-2">
+                        <button 
+                            onClick={() => handleEditService(service)}
+                            className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                            title="Editar"
+                        >
+                            <ArrowUpRight size={16} />
+                        </button>
+                        <button 
+                            onClick={() => handleDeleteService(service.id)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                            title="Excluir"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                   </div>
                  </div>
                </div>
              )})}
+             {filteredServices.length === 0 && (
+                <div className="col-span-full text-center py-12 text-slate-400">
+                    <p>Nenhum serviço encontrado para "{searchTerm}".</p>
+                </div>
+             )}
            </div>
         </div>
       )}

@@ -185,7 +185,8 @@ export default function ShopLanding() {
       </motion.nav>
 
       {/* --- HERO SECTION --- */}
-      <section className="relative h-screen flex items-center justify-center overflow-hidden">
+      {/* FIX: min-h-screen instead of h-screen to prevent cutoff on small screens */}
+      <section className="relative min-h-screen flex items-center justify-center overflow-hidden py-20">
         {/* Background Parallax */}
         <motion.div 
           style={{ y: heroY, opacity: heroOpacity }}
