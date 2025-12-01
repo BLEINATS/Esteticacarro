@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { 
   X, User, Phone, Mail, MapPin, Calendar, Car, 
-  History, TrendingUp, MessageCircle, Plus, AlertCircle
+  History, TrendingUp, MessageCircle, Plus, AlertCircle, Zap
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Client, Vehicle, VEHICLE_SIZES, VehicleSize } from '../types';
 import { cn, formatCurrency } from '../lib/utils';
+import FidelityCard from './FidelityCard';
 
 interface ClientDetailsModalProps {
   client: Client;
@@ -13,8 +14,8 @@ interface ClientDetailsModalProps {
 }
 
 export default function ClientDetailsModal({ client, onClose }: ClientDetailsModalProps) {
-  const { workOrders, reminders, addVehicle } = useApp();
-  const [activeTab, setActiveTab] = useState<'overview' | 'vehicles' | 'history' | 'crm'>('overview');
+  const { workOrders, reminders, addVehicle, getClientPoints, getFidelityCard, companySettings } = useApp();
+  const [activeTab, setActiveTab] = useState<'overview' | 'vehicles' | 'history' | 'crm' | 'fidelidade'>('overview');
   const [showAddVehicle, setShowAddVehicle] = useState(false);
   const [newVehicle, setNewVehicle] = useState<Partial<Vehicle>>({ model: '', plate: '', color: '', year: '', size: 'medium' });
 
@@ -86,7 +87,8 @@ Podemos agendar para esta semana?`;
               { id: 'vehicles', label: 'Veículos', icon: Car },
               { id: 'history', label: 'Histórico', icon: History },
               { id: 'crm', label: 'CRM', icon: TrendingUp },
-            ].map(tab => (
+              ...(companySettings.gamification?.enabled ? [{ id: 'fidelidade', label: 'Fidelidade', icon: Zap }] : [])
+            ].map((tab: any) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
@@ -106,6 +108,21 @@ Podemos agendar para esta semana?`;
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-50/50 dark:bg-slate-950/50">
+          
+          {/* TAB: FIDELIDADE */}
+          {activeTab === 'fidelidade' && companySettings.gamification?.enabled && (
+            <div className="flex justify-center">
+              <FidelityCard
+                clientName={client.name}
+                clientPhone={client.phone}
+                totalPoints={getClientPoints(client.id)?.totalPoints || 0}
+                currentLevel={getClientPoints(client.id)?.currentLevel || 1}
+                tier={getClientPoints(client.id)?.tier || 'bronze'}
+                cardNumber={getFidelityCard(client.id)?.cardNumber || 'CC00000000'}
+                servicesCompleted={getClientPoints(client.id)?.servicesCompleted || 0}
+              />
+            </div>
+          )}
           
           {/* TAB: OVERVIEW */}
           {activeTab === 'overview' && (

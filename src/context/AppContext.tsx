@@ -654,6 +654,26 @@ const initialFinancialTransactions: FinancialTransaction[] = [
   { id: 12, desc: 'Agua e Eletricidade - Novembro', category: 'Utilidades', amount: -680.00, netAmount: -680.00, fee: 0, type: 'expense', date: formatISO(subDays(today, 1)), dueDate: formatISO(subDays(today, 1)), method: 'Boleto', installments: 1, status: 'paid' },
 ];
 
+const initialClientPoints: ClientPoints[] = [
+  { clientId: 'c1', totalPoints: 2850, currentLevel: 3, tier: 'gold', lastServiceDate: formatISO(subDays(today, 2)), servicesCompleted: 12, pointsHistory: [
+    { id: 'p1', workOrderId: 'os-001', points: 280, description: 'Vitrificação - Porsche Macan', date: formatISO(subDays(today, 2)) }
+  ]},
+  { clientId: 'c2', totalPoints: 820, currentLevel: 2, tier: 'silver', lastServiceDate: formatISO(subDays(today, 3)), servicesCompleted: 8, pointsHistory: [] },
+  { clientId: 'c3', totalPoints: 1240, currentLevel: 2, tier: 'silver', lastServiceDate: formatISO(subDays(today, 7)), servicesCompleted: 6, pointsHistory: [] },
+  { clientId: 'c4', totalPoints: 560, currentLevel: 1, tier: 'bronze', lastServiceDate: formatISO(subDays(today, 14)), servicesCompleted: 4, pointsHistory: [] },
+  { clientId: 'c5', totalPoints: 1890, currentLevel: 3, tier: 'gold', lastServiceDate: formatISO(subDays(today, 2)), servicesCompleted: 10, pointsHistory: [] },
+  { clientId: 'c6', totalPoints: 120, currentLevel: 1, tier: 'bronze', lastServiceDate: formatISO(subDays(today, 1)), servicesCompleted: 1, pointsHistory: [] },
+];
+
+const initialFidelityCards: FidelityCard[] = initialClientPoints.map(cp => ({
+  clientId: cp.clientId,
+  cardNumber: `CC${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+  cardHolder: clients.find(c => c.id === cp.clientId)?.name || '',
+  cardColor: cp.tier === 'gold' ? 'amber' : cp.tier === 'silver' ? 'emerald' : 'blue',
+  qrCode: `https://qrcode.example.com/${cp.clientId}`,
+  issueDate: formatISO(subDays(today, 30)),
+  expiresAt: formatISO(addDays(today, 365))
+}));
 
 export function AppProvider({ children }: { children: ReactNode }) {
   // State Initialization
@@ -670,8 +690,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   
   const [employees, setEmployees] = useState<Employee[]>(() => getStorage('employees_v9', initialEmployees)); 
   const [employeeTransactions, setEmployeeTransactions] = useState<EmployeeTransaction[]>(() => getStorage('employeeTransactions_v8', initialEmployeeTransactions));
-  // FIXED: Updated version key to force clean state for finance
   const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>(() => getStorage('financialTransactions_v3', initialFinancialTransactions));
+  const [clientPoints, setClientPoints] = useState<ClientPoints[]>(() => getStorage('clientPoints_v1', initialClientPoints));
+  const [fidelityCards, setFidelityCards] = useState<FidelityCard[]>(() => getStorage('fidelityCards_v1', initialFidelityCards));
 
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>(() => getStorage<MarketingCampaign[]>('campaigns_v7', initialCampaigns));
   
@@ -875,10 +896,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   
   const completeWorkOrder = (id: string) => {
       const os = workOrders.find(o => o.id === id);
-      if (os) {
+      if (os && companySettings.gamification?.enabled) {
+        const points = Math.round(os.totalValue * (companySettings.gamification.pointsMultiplier || 1));
+        addPointsToClient(os.clientId, id, points, `Serviço concluído: ${os.service}`);
         updateWorkOrder(id, { status: 'Concluído' });
         generateReminders(os); 
         deductStock(os.service); 
+      } else if (os) {
+        updateWorkOrder(id, { status: 'Concluído' });
+        generateReminders(os); 
+        deductStock(os.service);
       }
   };
   
@@ -949,12 +976,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const createCampaign = (campaign: MarketingCampaign) => setCampaigns(prev => [campaign, ...prev]);
   const getWhatsappLink = (phone: string, message: string) => `https://wa.me/55${phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
 
+  // --- GAMIFICATION ACTIONS ---
+  const addPointsToClient = (clientId: string, workOrderId: string, points: number, description: string) => {
+    setClientPoints(prev => {
+      const existing = prev.find(cp => cp.clientId === clientId);
+      if (existing) {
+        const newTotal = existing.totalPoints + points;
+        const levelThresholds = [500, 1500, 3000, 5000];
+        const newLevel = Math.min(4, levelThresholds.findIndex(t => newTotal <= t) + 1);
+        const tierMap: Record<number, 'bronze' | 'silver' | 'gold' | 'platinum'> = { 1: 'bronze', 2: 'silver', 3: 'gold', 4: 'platinum' };
+        return prev.map(cp => cp.clientId === clientId ? {
+          ...cp, 
+          totalPoints: newTotal,
+          currentLevel: newLevel,
+          tier: tierMap[newLevel],
+          servicesCompleted: cp.servicesCompleted + 1,
+          lastServiceDate: formatISO(new Date()),
+          pointsHistory: [...cp.pointsHistory, { id: `p-${Date.now()}`, workOrderId, points, description, date: formatISO(new Date()) }]
+        } : cp);
+      }
+      return prev;
+    });
+  };
+
+  const getClientPoints = (clientId: string): ClientPoints | undefined => clientPoints.find(cp => cp.clientId === clientId);
+
+  const createFidelityCard = (clientId: string): FidelityCard => {
+    const client = clients.find(c => c.id === clientId);
+    const points = clientPoints.find(cp => cp.clientId === clientId);
+    const tierColors: Record<string, 'blue' | 'purple' | 'emerald' | 'amber'> = { bronze: 'blue', silver: 'emerald', gold: 'amber', platinum: 'purple' };
+    const card: FidelityCard = {
+      clientId,
+      cardNumber: `CC${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+      cardHolder: client?.name || '',
+      cardColor: tierColors[points?.tier || 'bronze'],
+      qrCode: `https://qrcode.example.com/${clientId}`,
+      issueDate: formatISO(new Date()),
+      expiresAt: formatISO(addDays(new Date(), 365))
+    };
+    setFidelityCards(prev => [...prev, card]);
+    return card;
+  };
+
+  const getFidelityCard = (clientId: string): FidelityCard | undefined => fidelityCards.find(c => c.clientId === clientId);
+
   return (
     <AppContext.Provider value={{ 
       inventory, workOrders, clients, recipes, reminders, services, priceMatrix, theme,
-      employees, employeeTransactions, currentUser, campaigns,
+      employees, employeeTransactions, currentUser, campaigns, clientPoints, fidelityCards,
       companySettings, subscription, updateCompanySettings,
-      financialTransactions, // EXPORTED
+      financialTransactions,
       login, logout,
       addWorkOrder, updateWorkOrder, completeWorkOrder, submitNPS,
       addClient, updateClient, addVehicle,
@@ -963,9 +1034,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updatePrice, updateServiceInterval, bulkUpdatePrices, getPrice, addService, updateService, deleteService,
       assignTask, startTask, stopTask, addEmployeeTransaction, updateEmployeeTransaction, deleteEmployeeTransaction,
       addEmployee, updateEmployee, deleteEmployee,
-      addFinancialTransaction, updateFinancialTransaction, deleteFinancialTransaction, // EXPORTED
+      addFinancialTransaction, updateFinancialTransaction, deleteFinancialTransaction,
       createCampaign, getWhatsappLink,
-      connectWhatsapp, disconnectWhatsapp
+      connectWhatsapp, disconnectWhatsapp,
+      addPointsToClient, getClientPoints, createFidelityCard, getFidelityCard
     }}>
       {children}
     </AppContext.Provider>
