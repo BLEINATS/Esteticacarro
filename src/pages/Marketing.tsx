@@ -532,9 +532,9 @@ export default function Marketing() {
                                         {campaign.targetSegment === 'all' ? 'Todos' : campaign.targetSegment}
                                     </span>
                                 </td>
-                                <td className="px-4 sm:px-6 py-3 sm:py-4 text-slate-600 dark:text-slate-400 text-xs sm:text-sm">{campaign.sentCount}</td>
-                                <td className="px-4 sm:px-6 py-3 sm:py-4 font-medium text-green-600 dark:text-green-400 text-xs sm:text-sm">{formatCurrency(campaign.revenueGenerated || 0)}</td>
-                                <td className="px-4 sm:px-6 py-3 sm:py-4 text-slate-500 dark:text-slate-400 text-xs sm:text-sm">{new Date(campaign.date).toLocaleDateString('pt-BR')}</td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4 text-slate-600 dark:text-slate-400 text-xs sm:text-sm">{campaign.sentCount || 0}</td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4 font-medium text-green-600 dark:text-green-400 text-xs sm:text-sm">{campaign.revenueGenerated ? formatCurrency(campaign.revenueGenerated) : 'R$ 0,00'}</td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4 text-slate-500 dark:text-slate-400 text-xs sm:text-sm">{campaign.date ? new Date(campaign.date).toLocaleDateString('pt-BR') : 'S/D'}</td>
                                 <td className="px-4 sm:px-6 py-3 sm:py-4">
                                     <span className="px-2 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-full text-xs font-bold">
                                         Enviado
@@ -571,15 +571,15 @@ export default function Marketing() {
                     <div className="grid grid-cols-3 gap-2 text-xs">
                       <div>
                         <p className="text-slate-500 dark:text-slate-400">Enviados</p>
-                        <p className="font-bold text-slate-900 dark:text-white">{campaign.sentCount}</p>
+                        <p className="font-bold text-slate-900 dark:text-white">{campaign.sentCount || 0}</p>
                       </div>
                       <div>
                         <p className="text-slate-500 dark:text-slate-400">Receita</p>
-                        <p className="font-bold text-green-600 dark:text-green-400">{formatCurrency(campaign.revenueGenerated || 0)}</p>
+                        <p className="font-bold text-green-600 dark:text-green-400">{campaign.revenueGenerated ? formatCurrency(campaign.revenueGenerated) : 'R$ 0,00'}</p>
                       </div>
                       <div>
                         <p className="text-slate-500 dark:text-slate-400">Data</p>
-                        <p className="font-bold text-slate-900 dark:text-white">{new Date(campaign.date).toLocaleDateString('pt-BR')}</p>
+                        <p className="font-bold text-slate-900 dark:text-white">{campaign.date ? new Date(campaign.date).toLocaleDateString('pt-BR') : 'S/D'}</p>
                       </div>
                     </div>
                   </div>

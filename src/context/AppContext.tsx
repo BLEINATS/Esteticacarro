@@ -557,12 +557,72 @@ const initialEmployeeTransactions: EmployeeTransaction[] = [
   { id: 'et-006', employeeId: 'e1', type: 'commission', amount: 150.00, description: 'Comissão OS-006 - Lavagem BMW', date: formatISO(today), referenceId: 'os-006' },
 ];
 const initialCampaigns: MarketingCampaign[] = [
-  { id: 'camp-001', name: 'Promoção Vitrificação - Março', status: 'active', startDate: formatISO(today), endDate: formatISO(addDays(today, 30)), budget: 1500.00, spent: 450.00 },
-  { id: 'camp-002', name: 'Black Friday Antecipada', status: 'draft', startDate: formatISO(addDays(today, 60)), endDate: formatISO(addDays(today, 65)), budget: 5000.00, spent: 0 },
-  { id: 'camp-003', name: 'Campanha WhatsApp - VIP', status: 'active', startDate: formatISO(subDays(today, 15)), endDate: formatISO(addDays(today, 15)), budget: 800.00, spent: 320.00 },
-  { id: 'camp-004', name: 'Email Marketing - Retenção', status: 'active', startDate: formatISO(subDays(today, 30)), endDate: formatISO(addDays(today, 30)), budget: 2000.00, spent: 1850.00 },
-  { id: 'camp-005', name: 'Anúncio Google Ads', status: 'paused', startDate: formatISO(subDays(today, 45)), endDate: formatISO(addDays(today, 15)), budget: 3000.00, spent: 2750.00 },
-  { id: 'camp-006', name: 'Programa de Indicação', status: 'active', startDate: formatISO(subDays(today, 60)), endDate: formatISO(addDays(today, 120)), budget: 5000.00, spent: 1200.00 },
+  { 
+    id: 'camp-001', 
+    name: 'Promoção Vitrificação - Março', 
+    targetSegment: 'recurring',
+    date: formatISO(subDays(today, 5)),
+    status: 'sent',
+    messageTemplate: 'Olá {cliente}, conheça nossa promoção de vitrificação em março com proteção estendida!',
+    sentCount: 45,
+    conversionCount: 8,
+    revenueGenerated: 3200.00
+  },
+  { 
+    id: 'camp-002', 
+    name: 'Black Friday Antecipada', 
+    targetSegment: 'vip',
+    date: formatISO(subDays(today, 2)),
+    status: 'sent',
+    messageTemplate: 'Olá {cliente}, Black Friday 2025 chegou antecipada com descontos de até 30%!',
+    sentCount: 32,
+    conversionCount: 5,
+    revenueGenerated: 1850.00
+  },
+  { 
+    id: 'camp-003', 
+    name: 'Campanha WhatsApp - VIP', 
+    targetSegment: 'vip',
+    date: formatISO(subDays(today, 10)),
+    status: 'sent',
+    messageTemplate: 'Olá VIP {cliente}, seus benefícios exclusivos estão ativos. Agende seu serviço agora!',
+    sentCount: 28,
+    conversionCount: 6,
+    revenueGenerated: 2150.00
+  },
+  { 
+    id: 'camp-004', 
+    name: 'Email Marketing - Retenção', 
+    targetSegment: 'inactive',
+    date: formatISO(subDays(today, 15)),
+    status: 'sent',
+    messageTemplate: 'Sentimos sua falta! Volte para receber um desconto especial em seu próximo serviço.',
+    sentCount: 62,
+    conversionCount: 7,
+    revenueGenerated: 1950.00
+  },
+  { 
+    id: 'camp-005', 
+    name: 'Anúncio Google Ads', 
+    targetSegment: 'new',
+    date: formatISO(subDays(today, 20)),
+    status: 'sent',
+    messageTemplate: 'Qualidade premium em detailing automotivo. Primeira lavagem com 20% de desconto!',
+    sentCount: 156,
+    conversionCount: 12,
+    revenueGenerated: 2800.00
+  },
+  { 
+    id: 'camp-006', 
+    name: 'Programa de Indicação', 
+    targetSegment: 'all',
+    date: formatISO(subDays(today, 30)),
+    status: 'sent',
+    messageTemplate: 'Indique um amigo e ganhe R$ 50 de crédito em serviços. Quanto mais indica, mais ganha!',
+    sentCount: 85,
+    conversionCount: 14,
+    revenueGenerated: 3450.00
+  },
 ];
 
 const initialFinancialTransactions: FinancialTransaction[] = [
