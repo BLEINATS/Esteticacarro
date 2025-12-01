@@ -5,13 +5,15 @@ import {
   ShieldCheck, ClipboardCheck, CalendarClock, Hammer,
   CreditCard, UploadCloud, Lock, Share2, Plus, Trash2,
   DollarSign, Wrench, Check, Smile, Star, ListTodo,
-  Image as ImageIcon, Search, Car, UserPlus, ChevronDown
+  Image as ImageIcon, Search, Car, UserPlus, ChevronDown,
+  Printer, Send
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { WorkOrder, DamagePoint, VehicleInventory, DailyLogEntry, AdditionalItem, QualityChecklistItem, ScopeItem, Vehicle, VehicleSize, VEHICLE_SIZES } from '../types';
 import { cn, formatCurrency } from '../lib/utils';
 import VehicleDamageMap from './VehicleDamageMap';
 import ClientModal from './ClientModal';
+import WorkOrderPrintTemplate from './WorkOrderPrintTemplate';
 import { useDialog } from '../context/DialogContext';
 
 interface WorkOrderModalProps {
@@ -401,6 +403,213 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     submitNPS(workOrder.id, score);
   };
 
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      showAlert({
+        title: 'Erro',
+        message: 'Não foi possível abrir a janela de impressão. Verifique o bloqueador de pop-ups.',
+        type: 'error'
+      });
+      return;
+    }
+    
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8" />
+        <title>OS #${workOrder.id}</title>
+        <style>
+          body { font-family: Arial, sans-serif; color: #000; background: #fff; margin: 0; }
+          @page { size: A4; margin: 10mm; }
+          @media print { body { margin: 0; } }
+          .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+          .header { border-bottom: 2px solid #ccc; padding-bottom: 20px; margin-bottom: 20px; }
+          .header h1 { margin: 0 0 10px 0; font-size: 32px; }
+          .header-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+          .os-title { font-size: 28px; font-weight: bold; color: #2563eb; }
+          .section { border: 1px solid #ccc; padding: 15px; margin-bottom: 15px; border-radius: 5px; }
+          .section h3 { margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 8px; font-weight: bold; }
+          .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+          .grid-2.full { grid-template-columns: 1fr; }
+          .info-row { margin-bottom: 8px; }
+          .info-label { font-weight: bold; display: inline-block; width: 120px; }
+          .damage-list { list-style-position: inside; padding: 0; }
+          .damage-list li { margin-bottom: 5px; }
+          .financial { background-color: #f5f5f5; border: 2px solid #ccc; }
+          .total-value { font-size: 20px; font-weight: bold; color: #2563eb; }
+          .signature-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 40px; }
+          .signature-box { border-top: 1px solid #000; padding-top: 10px; text-align: center; font-size: 12px; }
+          .footer { text-align: center; font-size: 11px; color: #666; margin-top: 30px; border-top: 1px solid #ccc; padding-top: 10px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>ORDEM DE SERVIÇO</h1>
+            <div class="header-top">
+              <div>
+                <div><strong>Oficina:</strong> Cristal Care Auto Detail</div>
+                <div><strong>Endereço:</strong> [Endereço da Oficina]</div>
+                <div><strong>Telefone:</strong> [Telefone]</div>
+              </div>
+              <div style="text-align: right;">
+                <div class="os-title">OS #${workOrder.id}</div>
+                <div style="font-size: 12px; color: #666;">Data: ${new Date(workOrder.createdAt).toLocaleDateString('pt-BR')} ${new Date(workOrder.createdAt).toLocaleTimeString('pt-BR')}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="section">
+              <h3>CLIENTE</h3>
+              ${selectedClient ? `
+                <div class="info-row"><span class="info-label">Nome:</span> ${selectedClient.name}</div>
+                <div class="info-row"><span class="info-label">Telefone:</span> ${selectedClient.phone}</div>
+                <div class="info-row"><span class="info-label">Email:</span> ${selectedClient.email}</div>
+                ${selectedClient.address ? `<div class="info-row"><span class="info-label">Endereço:</span> ${selectedClient.address}</div>` : ''}
+              ` : '<div style="color: #999;">Dados do cliente não disponíveis</div>'}
+            </div>
+
+            <div class="section">
+              <h3>VEÍCULO</h3>
+              <div class="info-row"><span class="info-label">Modelo:</span> ${workOrder.vehicle}</div>
+              <div class="info-row"><span class="info-label">Placa:</span> ${workOrder.plate}</div>
+              <div class="info-row"><span class="info-label">Status:</span> ${workOrder.status}</div>
+              <div class="info-row"><span class="info-label">Técnico:</span> ${workOrder.technician}</div>
+            </div>
+          </div>
+
+          <div class="section grid-2 full">
+            <h3>SERVIÇOS SOLICITADOS</h3>
+            <div style="font-size: 16px; margin-bottom: 10px;">${workOrder.service}</div>
+            ${workOrder.damages && workOrder.damages.length > 0 ? `
+              <div style="margin-top: 10px;">
+                <strong>Danos Identificados:</strong>
+                <ul class="damage-list">
+                  ${workOrder.damages.map(d => `<li>${d.area.toUpperCase()}: ${d.description} (${d.type})</li>`).join('')}
+                </ul>
+              </div>
+            ` : ''}
+          </div>
+
+          ${workOrder.vehicleInventory ? `
+            <div class="section grid-2 full">
+              <h3>INVENTÁRIO DO VEÍCULO</h3>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
+                <div>Estepe: ${workOrder.vehicleInventory.estepe ? '✓ Presente' : '✗ Ausente'}</div>
+                <div>Macaco: ${workOrder.vehicleInventory.macaco ? '✓ Presente' : '✗ Ausente'}</div>
+                <div>Chave Roda: ${workOrder.vehicleInventory.chaveRoda ? '✓ Presente' : '✗ Ausente'}</div>
+                <div>Tapetes: ${workOrder.vehicleInventory.tapetes ? '✓ Presente' : '✗ Ausente'}</div>
+                <div>Manual: ${workOrder.vehicleInventory.manual ? '✓ Presente' : '✗ Ausente'}</div>
+                <div>Antena: ${workOrder.vehicleInventory.antena ? '✓ Presente' : '✗ Ausente'}</div>
+              </div>
+              ${workOrder.vehicleInventory.pertences ? `<div style="margin-top: 10px;"><strong>Pertences:</strong> ${workOrder.vehicleInventory.pertences}</div>` : ''}
+            </div>
+          ` : ''}
+
+          ${workOrder.additionalItems && workOrder.additionalItems.length > 0 ? `
+            <div class="section grid-2 full">
+              <h3>ITENS ADICIONAIS</h3>
+              <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+                <tr style="border-bottom: 1px solid #ddd;">
+                  <th style="text-align: left; padding: 5px;">Descrição</th>
+                  <th style="text-align: right; padding: 5px;">Valor</th>
+                </tr>
+                ${workOrder.additionalItems.map(item => `
+                  <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 5px;">${item.description}</td>
+                    <td style="text-align: right; padding: 5px;">R$ ${item.value.toFixed(2).replace('.', ',')}</td>
+                  </tr>
+                `).join('')}
+              </table>
+            </div>
+          ` : ''}
+
+          <div class="section financial grid-2 full">
+            <h3>RESUMO FINANCEIRO</h3>
+            <div style="font-size: 18px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <span>Valor Total:</span>
+                <span class="total-value">R$ ${workOrder.totalValue.toFixed(2).replace('.', ',')}</span>
+              </div>
+              ${workOrder.insuranceDetails?.isInsurance ? `
+                <div style="border-top: 1px solid #999; padding-top: 10px; font-size: 13px;">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                    <span>Cobertura Seguro:</span>
+                    <span>R$ ${(workOrder.insuranceDetails.insuranceCoveredAmount || 0).toFixed(2).replace('.', ',')}</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between;">
+                    <span>Franquia:</span>
+                    <span>R$ ${(workOrder.insuranceDetails.deductibleAmount || 0).toFixed(2).replace('.', ',')}</span>
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+
+          <div style="background-color: #f9f9f9; border: 1px solid #ddd; padding: 10px; font-size: 11px; margin-bottom: 20px; border-radius: 3px;">
+            <strong>Termos e Condições:</strong>
+            <ul style="margin: 5px 0; padding-left: 20px; font-size: 11px;">
+              <li>O cliente autoriza os reparos descritos nesta OS</li>
+              <li>Fotos antes e depois serão tiradas para documentação</li>
+              <li>Qualquer dano adicional encontrado será informado ao cliente</li>
+              <li>Prazo estimado: ${workOrder.deadline}</li>
+              <li>A oficina não se responsabiliza por pertences deixados no veículo</li>
+            </ul>
+          </div>
+
+          <div class="signature-row">
+            <div class="signature-box">
+              Assinatura do Cliente<br/>
+              _______________
+            </div>
+            <div class="signature-box">
+              Assinatura do Técnico<br/>
+              _______________
+            </div>
+            <div class="signature-box">
+              Data<br/>
+              ${new Date().toLocaleDateString('pt-BR')}
+            </div>
+          </div>
+
+          <div class="footer">
+            Obrigado por confiar em nossos serviços!<br/>
+            Cristal Care Auto Detail - Estética Automotiva e Funilaria
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
+  };
+
+  const handleSendWhatsApp = async () => {
+    if (!selectedClient) {
+      await showAlert({
+        title: 'Atenção',
+        message: 'Selecione um cliente antes de enviar a OS via WhatsApp.',
+        type: 'warning'
+      });
+      return;
+    }
+
+    const itemsText = workOrder.additionalItems && workOrder.additionalItems.length > 0 
+      ? workOrder.additionalItems.map(item => `\n• ${item.description}: R$ ${item.value.toFixed(2)}`).join('')
+      : '';
+
+    const message = `Olá ${selectedClient.name}! 👋\n\nSua Ordem de Serviço foi registrada:\n\n📋 *OS #${workOrder.id}*\n🚗 ${workOrder.vehicle} - ${workOrder.plate}\n🔧 Serviço: ${workOrder.service}\n💰 Valor: R$ ${workOrder.totalValue.toFixed(2)}${itemsText}\n⏱️ Prazo: ${workOrder.deadline}\n\nStatus: ${workOrder.status}\n\nAguardamos sua confirmação!\n\nCristal Care Auto Detail`;
+    
+    window.open(getWhatsappLink(selectedClient.phone, message), '_blank');
+  };
+
   // Calculations for Display
   const currentExtrasTotal = additionalItems.reduce((acc, item) => acc + item.value, 0);
   const currentTotal = servicePrice + currentExtrasTotal;
@@ -452,6 +661,12 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     <Save size={16} /> Salvar Tudo
                 </button>
             )}
+            <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg text-sm font-medium hover:bg-slate-700 transition-colors">
+                <Printer size={16} /> Imprimir
+            </button>
+            <button onClick={handleSendWhatsApp} className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors">
+                <Send size={16} /> WhatsApp
+            </button>
             <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors">
               <X size={24} />
             </button>
