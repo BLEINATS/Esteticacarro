@@ -981,7 +981,78 @@ export default function Finance() {
                         )}
                     </tbody>
                 </table>
-             </div>
+                </div>
+
+                {/* Mobile Card View */}
+                <div className="sm:hidden space-y-2 p-3">
+                    {(activeTab === 'payable' ? pendingData.payable : pendingData.receivable).map(t => {
+                        const isLate = new Date(t.dueDate) < new Date() && new Date(t.dueDate).toDateString() !== new Date().toDateString();
+                        return (
+                            <div 
+                                key={t.id} 
+                                className={cn(
+                                    "p-3 rounded-lg border transition-all",
+                                    activeTab === 'payable'
+                                        ? "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800"
+                                        : "bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800"
+                                )}
+                            >
+                                <div className="flex items-start justify-between gap-2 mb-2">
+                                    <div className="flex-1">
+                                        <p className={cn("text-xs font-bold mb-0.5 flex items-center gap-1", isLate ? "text-red-600" : "text-slate-600 dark:text-slate-400")}>
+                                            <CalendarClock size={12} />
+                                            {t.dueDate ? displayDate(t.dueDate) : 'S/D'}
+                                        </p>
+                                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                                            {t.desc || 'S/D'}
+                                        </p>
+                                    </div>
+                                    <p className={cn(
+                                        "text-sm font-bold whitespace-nowrap",
+                                        activeTab === 'payable' ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
+                                    )}>
+                                        {t.amount ? formatCurrency(Math.abs(t.amount)) : 'R$ 0,00'}
+                                    </p>
+                                </div>
+                                
+                                <div className="flex items-center justify-between gap-2 text-xs mb-2">
+                                    <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-[10px] font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                        {t.category || 'S/D'}
+                                    </span>
+                                    <div className="flex gap-1">
+                                        <button 
+                                            onClick={() => handleSettle(t.id)}
+                                            className="p-1.5 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 rounded transition-colors"
+                                            title={t.type === 'income' ? "Receber" : "Pagar"}
+                                        >
+                                            <CheckCircle2 size={14} />
+                                        </button>
+                                        <button 
+                                            onClick={() => handleEdit(t)}
+                                            className="p-1.5 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
+                                            title="Editar"
+                                        >
+                                            <Pencil size={14} />
+                                        </button>
+                                        <button 
+                                            onClick={() => handleDelete(t.id)}
+                                            className="p-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
+                                            title="Excluir"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                    {(activeTab === 'payable' ? pendingData.payable : pendingData.receivable).length === 0 && (
+                        <div className="text-center py-8 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 text-sm">
+                            Nenhuma conta pendente
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
       )}
     </div>
