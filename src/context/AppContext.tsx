@@ -565,12 +565,18 @@ const initialCampaigns: MarketingCampaign[] = [
 ];
 
 const initialFinancialTransactions: FinancialTransaction[] = [
-  { id: 1, desc: 'Pagamento OS #4092 - BMW X5', category: 'Serviços', amount: 2500.00, netAmount: 2375.00, fee: 125.00, type: 'income', date: '2024-03-14', dueDate: '2024-03-14', method: 'Cartão Crédito (3x)', installments: 3, status: 'paid' },
-  { id: 2, desc: 'Compra de Insumos - Polimento', category: 'Estoque', amount: -450.00, netAmount: -450.00, fee: 0, type: 'expense', date: '2024-03-14', dueDate: '2024-03-14', method: 'Boleto', status: 'paid' },
-  { id: 3, desc: 'Aluguel do Galpão', category: 'Aluguel/Fixo', amount: -5000.00, netAmount: -5000.00, fee: 0, type: 'expense', date: '2024-03-01', dueDate: '2024-03-20', method: 'Transferência', status: 'pending' },
-  { id: 4, desc: 'Fatura Fornecedor Tintas', category: 'Estoque', amount: -1200.00, netAmount: -1200.00, fee: 0, type: 'expense', date: '2024-03-10', dueDate: '2024-03-10', method: 'Boleto', status: 'paid' },
-  { id: 5, desc: 'OS #4100 - Mercedes C180 (Faturado)', category: 'Serviços', amount: 3500.00, netAmount: 3500.00, fee: 0, type: 'income', date: '2024-03-15', dueDate: '2024-03-30', method: 'Boleto', status: 'pending' },
-  { id: 6, desc: 'Manutenção Compressores', category: 'Manutenção', amount: -890.00, netAmount: -890.00, fee: 0, type: 'expense', date: '2024-03-05', dueDate: '2024-03-05', method: 'Cartão Débito', status: 'paid' },
+  { id: 1, desc: 'Saldo Inicial - 1º de Dezembro', category: 'Sistema', amount: 15000.00, netAmount: 15000.00, fee: 0, type: 'income', date: formatISO(subDays(today, 1)), dueDate: formatISO(subDays(today, 1)), method: 'Saldo Anterior', installments: 1, status: 'paid' },
+  { id: 2, desc: 'Pagamento OS #001 - Porsche Macan (Vitrificação)', category: 'Serviços', amount: 2800.00, netAmount: 2660.00, fee: 140.00, type: 'income', date: formatISO(subDays(today, 5)), dueDate: formatISO(subDays(today, 5)), method: 'Cartão Crédito', installments: 1, status: 'paid' },
+  { id: 3, desc: 'Compra de Insumos - Polimentos Premium', category: 'Estoque', amount: -450.00, netAmount: -450.00, fee: 0, type: 'expense', date: formatISO(subDays(today, 5)), dueDate: formatISO(subDays(today, 5)), method: 'PIX', installments: 1, status: 'paid' },
+  { id: 4, desc: 'Aluguel do Galpão - Dezembro', category: 'Aluguel/Fixo', amount: -5000.00, netAmount: -5000.00, fee: 0, type: 'expense', date: formatISO(subDays(today, 3)), dueDate: formatISO(subDays(today, 3)), method: 'Transferência', installments: 1, status: 'paid' },
+  { id: 5, desc: 'Fatura Fornecedor Tintas e Ceras', category: 'Estoque', amount: -1200.00, netAmount: -1200.00, fee: 0, type: 'expense', date: formatISO(subDays(today, 8)), dueDate: formatISO(subDays(today, 8)), method: 'Boleto', installments: 1, status: 'paid' },
+  { id: 6, desc: 'Pagamento OS #004 - VW Tiguan (Lavagem)', category: 'Serviços', amount: 96.00, netAmount: 91.20, fee: 4.80, type: 'income', date: formatISO(subDays(today, 8)), dueDate: formatISO(subDays(today, 8)), method: 'PIX', installments: 1, status: 'paid' },
+  { id: 7, desc: 'Manutenção Compressores - Preventiva', category: 'Manutenção', amount: -890.00, netAmount: -890.00, fee: 0, type: 'expense', date: formatISO(subDays(today, 6)), dueDate: formatISO(subDays(today, 6)), method: 'Cartão Débito', installments: 1, status: 'paid' },
+  { id: 8, desc: 'Comissões Funcionários - Dezembro (1ª semana)', category: 'Salários', amount: -1230.00, netAmount: -1230.00, fee: 0, type: 'expense', date: formatISO(subDays(today, 4)), dueDate: formatISO(subDays(today, 4)), method: 'Transferência', installments: 1, status: 'paid' },
+  { id: 9, desc: 'Pagamento OS #002 - Mercedes C180 (Polimento)', category: 'Serviços', amount: 1150.00, netAmount: 1092.50, fee: 57.50, type: 'income', date: formatISO(subDays(today, 2)), dueDate: formatISO(subDays(today, 2)), method: 'Boleto', installments: 1, status: 'paid' },
+  { id: 10, desc: 'Recarga de Ozônio Sanitizador', category: 'Estoque', amount: -320.00, netAmount: -320.00, fee: 0, type: 'expense', date: formatISO(today), dueDate: formatISO(today), method: 'PIX', installments: 1, status: 'paid' },
+  { id: 11, desc: 'Pagamento OS #006 - BMW X5 (Lavagem)', category: 'Serviços', amount: 110.00, netAmount: 104.50, fee: 5.50, type: 'income', date: formatISO(today), dueDate: formatISO(today), method: 'PIX', installments: 1, status: 'paid' },
+  { id: 12, desc: 'Agua e Eletricidade - Novembro', category: 'Utilidades', amount: -680.00, netAmount: -680.00, fee: 0, type: 'expense', date: formatISO(subDays(today, 1)), dueDate: formatISO(subDays(today, 1)), method: 'Boleto', installments: 1, status: 'paid' },
 ];
 
 

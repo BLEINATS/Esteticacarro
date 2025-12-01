@@ -55,32 +55,53 @@ export default function Finance() {
     installments: '1'
   });
 
+  // --- CÁLCULO DE SALDOS PARA EXTRATO ESTILO BANCO ---
+  const balanceData = useMemo(() => {
+    const paid = financialTransactions.filter(t => t.status === 'paid');
+    
+    let initialBalance = 0;
+    let transactions = paid;
+    
+    // Se há filtro de data, calcular saldo inicial
+    if (startDate) {
+      const startDate_obj = new Date(startDate);
+      const beforeStart = paid.filter(t => new Date(t.date) < startDate_obj);
+      initialBalance = beforeStart.reduce((acc, t) => acc + t.netAmount, 0);
+      
+      const endStr = endDate || '2100-01-01';
+      transactions = paid.filter(t => t.date >= startDate && t.date <= endStr);
+    } else {
+      // Sem filtro: saldo inicial é a primeira transação
+      if (paid.length > 0) {
+        initialBalance = paid[0].netAmount || 15000.00;
+        transactions = paid.slice(1);
+      }
+    }
+    
+    const totalMovement = transactions.reduce((acc, t) => acc + t.netAmount, 0);
+    const finalBalance = initialBalance + totalMovement;
+    
+    return { initialBalance, transactions: transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), totalMovement, finalBalance };
+  }, [financialTransactions, startDate, endDate]);
+
   // --- LÓGICA DE EXTRATO (LISTA PLANA) ---
   const visibleTransactions = useMemo(() => {
-    // 1. Filtrar apenas pagos
-    let filtered = financialTransactions.filter(t => t.status === 'paid');
+    // 1. Começar com transações do balanceData (já filtradas por data)
+    let filtered = balanceData.transactions;
 
-    // 2. Aplicar filtro de data se houver
-    if (startDate) {
-      const startStr = startDate; 
-      const endStr = endDate || '2100-01-01';
-      filtered = filtered.filter(t => t.date >= startStr && t.date <= endStr);
-    }
-
-    // 3. Filtro de Texto
+    // 2. Filtro de Texto
     if (searchTerm) {
         const lowerTerm = searchTerm.toLowerCase();
         filtered = filtered.filter(t => t.desc.toLowerCase().includes(lowerTerm));
     }
 
-    // 4. Filtro de Categoria
+    // 3. Filtro de Categoria
     if (categoryFilter !== 'Todas') {
         filtered = filtered.filter(t => t.category === categoryFilter);
     }
 
-    // 5. Ordenar por Data (Mais recente primeiro)
-    return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [financialTransactions, startDate, endDate, searchTerm, categoryFilter]);
+    return filtered;
+  }, [balanceData, searchTerm, categoryFilter]);
 
   // --- LÓGICA PARA CONTAS A PAGAR/RECEBER ---
   const pendingData = useMemo(() => {
@@ -429,6 +450,57 @@ export default function Finance() {
       {activeTab === 'cashflow' ? (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
             
+            {/* EXTRATO ESTILO BANCO COM SALDO INICIAL E FINAL */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Saldo Inicial */}
+              <div className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs uppercase font-bold text-slate-500 dark:text-slate-400 mb-1">Saldo Inicial</p>
+                    <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(balanceData.initialBalance)}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Período anterior</p>
+                  </div>
+                  <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400">
+                    <Landmark size={24} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Movimento do Período */}
+              <div className={cn("bg-gradient-to-br rounded-xl border p-6 shadow-sm", 
+                balanceData.totalMovement >= 0 
+                  ? "from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-900/10 border-green-200 dark:border-green-800" 
+                  : "from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-900/10 border-red-200 dark:border-red-800"
+              )}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs uppercase font-bold text-slate-500 dark:text-slate-400 mb-1">Movimento</p>
+                    <p className={cn("text-2xl font-bold", balanceData.totalMovement >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400")}>
+                      {formatCurrency(balanceData.totalMovement)}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">{visibleTransactions.length} transações</p>
+                  </div>
+                  <div className={cn("p-3 rounded-full", balanceData.totalMovement >= 0 ? "bg-green-200 dark:bg-green-900/30 text-green-600 dark:text-green-400" : "bg-red-200 dark:bg-red-900/30 text-red-600 dark:text-red-400")}>
+                    {balanceData.totalMovement >= 0 ? <ArrowUpRight size={24} /> : <ArrowDownRight size={24} />}
+                  </div>
+                </div>
+              </div>
+
+              {/* Saldo Final */}
+              <div className="bg-gradient-to-br from-slate-900 to-slate-950 dark:from-slate-950 dark:to-slate-900 rounded-xl border border-slate-700 dark:border-slate-800 p-6 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs uppercase font-bold text-slate-400 mb-1">Saldo Final</p>
+                    <p className="text-2xl font-bold text-white">{formatCurrency(balanceData.finalBalance)}</p>
+                    <p className="text-xs text-slate-400 mt-2">Saldo Atual</p>
+                  </div>
+                  <div className="p-3 bg-slate-700 dark:bg-slate-800 rounded-full text-slate-300">
+                    <Wallet size={24} />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
             {/* FILTROS E TABELA */}
             <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
                 
@@ -509,19 +581,37 @@ export default function Finance() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {visibleTransactions.map(t => (
-                                <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
-                                    <td className="px-6 py-3 text-slate-500 dark:text-slate-400 font-medium">
-                                        {displayDate(t.date)}
-                                    </td>
-                                    <td className="px-6 py-3 font-medium text-slate-900 dark:text-white">
-                                        <div className="flex items-center gap-2">
-                                            <span>{t.desc}</span>
-                                            <span className="text-[10px] text-slate-400 font-normal px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                                                {t.method} {t.installments && t.installments > 1 && `• ${t.installments}x`}
-                                            </span>
+                            {visibleTransactions.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                                        <div className="flex flex-col items-center gap-2">
+                                            <DollarSign size={32} className="opacity-50" />
+                                            <p>Nenhuma transação no período</p>
                                         </div>
                                     </td>
+                                </tr>
+                            ) : (
+                                visibleTransactions.map((t, idx) => {
+                                    // Calcular saldo acumulado até esta transação
+                                    const accumulatedBalance = balanceData.initialBalance + 
+                                      visibleTransactions.slice(0, idx + 1).reduce((acc, tx) => acc + tx.netAmount, 0);
+                                    
+                                    return (
+                                    <tr key={t.id} className={cn(
+                                        "hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group",
+                                        t.type === 'income' ? "bg-green-50/30 dark:bg-green-900/5" : ""
+                                    )}>
+                                        <td className="px-6 py-3 text-slate-500 dark:text-slate-400 font-medium">
+                                            {displayDate(t.date)}
+                                        </td>
+                                        <td className="px-6 py-3 font-medium text-slate-900 dark:text-white">
+                                            <div className="flex items-center gap-2">
+                                                <span>{t.desc}</span>
+                                                <span className="text-[10px] text-slate-400 font-normal px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                                                    {t.method} {t.installments && t.installments > 1 && `• ${t.installments}x`}
+                                                </span>
+                                            </div>
+                                        </td>
                                     <td className="px-6 py-3">
                                         <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-[10px] font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                                             {t.category}
