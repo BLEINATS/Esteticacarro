@@ -135,7 +135,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-20 lg:pb-0">
+    <div className="h-full flex flex-col space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Configurações</h2>
@@ -143,10 +143,10 @@ export default function Settings() {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+      <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 flex-1 min-h-0 overflow-hidden">
         {/* Navigation - Horizontal Scroll on Mobile, Vertical Sidebar on Desktop */}
         <div className="w-full lg:w-64 flex-shrink-0">
-          <div className="flex lg:flex-col gap-2 overflow-x-auto pb-2 lg:pb-0 no-scrollbar">
+          <div className="flex lg:flex-col gap-2 overflow-x-auto pb-2 lg:pb-0 lg:overflow-y-auto no-scrollbar lg:h-full">
             {[
               { id: 'general', label: 'Dados da Empresa', icon: Building2 },
               { id: 'landing', label: 'Página Web', icon: Globe },
@@ -172,7 +172,7 @@ export default function Settings() {
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 overflow-y-auto lg:pr-4">
           
           {/* TAB: GENERAL (COMPANY INFO) */}
           {activeTab === 'general' && (
