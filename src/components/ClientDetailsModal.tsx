@@ -30,13 +30,21 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
     const baseUrl = window.location.origin;
     setShareLink(`${baseUrl}/client-profile/${client.id}`);
     
-    // Gerar QR code
+    // Gerar QR code com dados completos do cartão
     if (card) {
-      QRCode.toDataURL(card.cardNumber, { width: 300 })
+      const qrData = {
+        clientId: client.id,
+        cardNumber: card.cardNumber,
+        clientName: client.name,
+        totalPoints: points?.totalPoints || 0,
+        tier: points?.tier || 'bronze',
+        timestamp: new Date().toISOString()
+      };
+      QRCode.toDataURL(JSON.stringify(qrData), { width: 300 })
         .then(setQrCodeUrl)
         .catch(console.error);
     }
-  }, [client.id, card]);
+  }, [client.id, card, points]);
 
   const clientWorkOrders = workOrders.filter(os => os.clientId === client.id);
   const clientReminders = reminders.filter(r => r.clientId === client.id);
@@ -131,87 +139,102 @@ Podemos agendar para esta semana?`;
           {/* TAB: FIDELIDADE - Simplified QR + Wallet only */}
           {activeTab === 'fidelidade' && companySettings.gamification?.enabled && points && card && (
             <div className="space-y-4 max-w-md mx-auto">
-              {/* QR Code */}
-              <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
-                <p className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-3">QR Code para Validação</p>
-                {qrCodeUrl && <img src={qrCodeUrl} alt="QR Code" className="w-48 h-48 mx-auto" />}
-              </div>
+              {/* Tier Color Mapping */}
+              {(() => {
+                const tierColorMap = {
+                  bronze: { bg: 'from-amber-500 to-amber-600', info: 'bg-amber-50 dark:bg-amber-900/20', border: 'border-amber-200 dark:border-amber-800', text: 'text-amber-900 dark:text-amber-200' },
+                  silver: { bg: 'from-slate-400 to-slate-600', info: 'bg-slate-50 dark:bg-slate-900/20', border: 'border-slate-200 dark:border-slate-800', text: 'text-slate-900 dark:text-slate-200' },
+                  gold: { bg: 'from-yellow-500 to-yellow-600', info: 'bg-yellow-50 dark:bg-yellow-900/20', border: 'border-yellow-200 dark:border-yellow-800', text: 'text-yellow-900 dark:text-yellow-200' },
+                  platinum: { bg: 'from-blue-500 to-blue-600', info: 'bg-blue-50 dark:bg-blue-900/20', border: 'border-blue-200 dark:border-blue-800', text: 'text-blue-900 dark:text-blue-200' }
+                };
+                const colors = tierColorMap[points.tier] || tierColorMap.bronze;
+                
+                return (
+                  <>
+                    {/* QR Code */}
+                    <div className={`${colors.info} ${colors.border} p-6 rounded-xl border text-center`}>
+                      <p className={`text-sm font-bold ${colors.text} mb-3`}>QR Code para Validação</p>
+                      {qrCodeUrl && <img src={qrCodeUrl} alt="QR Code" className="w-48 h-48 mx-auto" />}
+                    </div>
 
-              {/* Send via WhatsApp */}
-              <button
-                onClick={() => {
-                  const message = `Olá ${client.name}! 🎁\n\nSeu cartão de fidelidade ${companySettings.name} está pronto!\n\n📊 Dados:\n• Pontos: ${points.totalPoints}\n• Nível: ${points.tier.toUpperCase()}\n• Número: ${card.cardNumber}\n\nEscaneie o QR Code acima para validar seus pontos!\n\nAdicione ao Wallet para acompanhar em tempo real.`;
-                  const link = getWhatsappLink(client.phone, message);
-                  window.open(link, '_blank');
-                }}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold transition-colors"
-              >
-                💬 Enviar QR Code via WhatsApp
-              </button>
+                    {/* Send via WhatsApp */}
+                    <button
+                      onClick={() => {
+                        const message = `Olá ${client.name}! 🎁\n\nSeu cartão de fidelidade ${companySettings.name} está pronto!\n\n📊 Status:\n• Pontos: ${points.totalPoints}\n• Nível: ${points.tier.toUpperCase()}\n• Número: ${card.cardNumber}\n\nEscaneie o QR Code para validar seus pontos!\n\nAdicione ao Wallet para acompanhar em tempo real.`;
+                        const link = getWhatsappLink(client.phone, message);
+                        window.open(link, '_blank');
+                      }}
+                      className={`w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r ${colors.bg} text-white rounded-lg font-bold hover:shadow-lg transition-all`}
+                    >
+                      💬 Enviar via WhatsApp
+                    </button>
 
-              {/* Add to Wallet */}
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => {
-                    const url = generatePKPass(client.id);
-                    if (url) {
-                      const link = document.createElement('a');
-                      link.href = url;
-                      link.download = `cartao-${card.cardNumber}.txt`;
-                      link.click();
-                    }
-                  }}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition-colors text-sm"
-                >
-                  <Smartphone size={16} /> iOS
-                </button>
-                <button
-                  onClick={() => window.open(generateGoogleWallet(client.id), '_blank')}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold transition-colors text-sm"
-                >
-                  <Wallet size={16} /> Google
-                </button>
-              </div>
+                    {/* Add to Wallet */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => {
+                          const url = generatePKPass(client.id);
+                          if (url) {
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = `cartao-${card.cardNumber}.txt`;
+                            link.click();
+                          }
+                        }}
+                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-700 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-lg font-semibold transition-colors text-sm"
+                      >
+                        <Smartphone size={16} /> iOS
+                      </button>
+                      <button
+                        onClick={() => window.open(generateGoogleWallet(client.id), '_blank')}
+                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-700 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-lg font-semibold transition-colors text-sm"
+                      >
+                        <Wallet size={16} /> Google
+                      </button>
+                    </div>
 
-              {/* Info Card */}
-              <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800 text-center">
-                <p className="text-sm font-bold text-blue-900 dark:text-blue-200 mb-2">💳 Cartão no Wallet</p>
-                <p className="text-xs text-blue-700 dark:text-blue-400">O cliente pode acompanhar histórico e pontos direto no cartão!</p>
-              </div>
+                    {/* Info Card */}
+                    <div className={`${colors.info} ${colors.border} p-4 rounded-lg border text-center`}>
+                      <p className={`text-sm font-bold ${colors.text} mb-1`}>💳 Cartão no Wallet</p>
+                      <p className={`text-xs ${colors.text}`}>Acompanhe pontos e resgates em tempo real!</p>
+                    </div>
 
-              {/* Rewards Section */}
-              {points?.tier && getRewardsByLevel(points.tier).length > 0 && (
-                <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <h4 className="font-bold text-amber-900 dark:text-amber-200 text-sm mb-3">🎁 Recompensas para Resgatar</h4>
-                  <div className="space-y-2 max-h-56 overflow-y-auto">
-                    {getRewardsByLevel(points.tier).map(r => {
-                      const canClaim = points.totalPoints >= r.requiredPoints;
-                      return (
-                        <div key={r.id} className="bg-white dark:bg-slate-900 p-2.5 rounded border border-amber-200 dark:border-amber-800 text-xs">
-                          <div className="flex justify-between items-start gap-2 mb-1.5">
-                            <p className="font-bold text-amber-900 dark:text-amber-200">{r.name}</p>
-                            <span className="text-[10px] font-bold bg-amber-200 dark:bg-amber-800 px-2 py-0.5 rounded whitespace-nowrap">-{r.requiredPoints}</span>
-                          </div>
-                          <button
-                            onClick={() => {
-                              const result = claimReward(client.id, r.id);
-                              alert(result.message);
-                            }}
-                            disabled={!canClaim}
-                            className={`w-full text-xs font-bold py-1 rounded transition-colors ${
-                              canClaim
-                                ? 'bg-amber-500 hover:bg-amber-600 text-white'
-                                : 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed'
-                            }`}
-                          >
-                            {canClaim ? '🎁 Resgatar Agora' : `❌ Faltam ${r.requiredPoints - points.totalPoints}`}
-                          </button>
+                    {/* Rewards Section */}
+                    {getRewardsByLevel(points.tier).length > 0 && (
+                      <div className={`${colors.info} ${colors.border} p-4 rounded-lg border`}>
+                        <h4 className={`font-bold ${colors.text} text-sm mb-3`}>🎁 Recompensas Disponíveis</h4>
+                        <div className="space-y-2 max-h-56 overflow-y-auto">
+                          {getRewardsByLevel(points.tier).map(r => {
+                            const canClaim = points.totalPoints >= r.requiredPoints;
+                            return (
+                              <div key={r.id} className="bg-white dark:bg-slate-900 p-2.5 rounded border border-slate-200 dark:border-slate-700 text-xs">
+                                <div className="flex justify-between items-start gap-2 mb-1.5">
+                                  <p className="font-bold text-slate-900 dark:text-white">{r.name}</p>
+                                  <span className="text-[10px] font-bold bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded whitespace-nowrap">-{r.requiredPoints}</span>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    const result = claimReward(client.id, r.id);
+                                    alert(result.message);
+                                  }}
+                                  disabled={!canClaim}
+                                  className={`w-full text-xs font-bold py-1 rounded transition-colors ${
+                                    canClaim
+                                      ? 'bg-gradient-to-r ' + colors.bg + ' text-white hover:shadow-md'
+                                      : 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                                  }`}
+                                >
+                                  {canClaim ? '🎁 Resgatar' : `Faltam ${r.requiredPoints - points.totalPoints}`}
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
           
