@@ -6,7 +6,7 @@ import {
   CreditCard, UploadCloud, Lock, Share2, Plus, Trash2,
   DollarSign, Wrench, Check, Smile, Star, ListTodo,
   Image as ImageIcon, Search, Car, UserPlus, ChevronDown,
-  Printer, Send
+  Printer, Send, Tag
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { WorkOrder, DamagePoint, VehicleInventory, DailyLogEntry, AdditionalItem, QualityChecklistItem, ScopeItem, Vehicle, VehicleSize, VEHICLE_SIZES } from '../types';
@@ -64,6 +64,11 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const [damagePhoto, setDamagePhoto] = useState<string | null>(null);
   const [isSignaturePadOpen, setIsSignaturePadOpen] = useState(false);
   const [clientSignature, setClientSignature] = useState<string | null>(workOrder.clientSignature || null);
+  
+  // DISCOUNT STATE
+  const [discountType, setDiscountType] = useState<'value' | 'percentage' | 'service'>(workOrder.discount?.type || 'percentage');
+  const [discountAmount, setDiscountAmount] = useState<number>(workOrder.discount?.amount || 0);
+  const [discountDescription, setDiscountDescription] = useState<string>(workOrder.discount?.description || '');
 
   // --- PRICE STATE (EDITABLE) ---
   // Initialize with existing total minus extras, or 0
@@ -1208,7 +1213,11 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           {activeTab === 'finance' && (
             <div className="space-y-6">
               <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                {/* ... (Conteúdo Financeiro Mantido) ... */}
+                <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                  <DollarSign size={20} className="text-green-600" />
+                  Resumo Financeiro
+                </h3>
+                
                 <div className="flex flex-col gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
                     <div className="flex justify-between text-slate-500 dark:text-slate-400">
                     <span>Serviço (Tabela)</span>
@@ -1218,9 +1227,125 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     <span>Peças/Extras</span>
                     <span>{formatCurrency(currentExtrasTotal)}</span>
                     </div>
-                    <div className="flex justify-between items-center pt-2">
-                    <span className="font-bold text-lg text-slate-900 dark:text-white">Total Final</span>
-                    <span className="font-bold text-2xl text-blue-600 dark:text-blue-400">{formatCurrency(currentTotal)}</span>
+                </div>
+
+                {/* DISCOUNT SECTION */}
+                <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <h4 className="font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                    <Tag size={16} className="text-blue-600" />
+                    Aplicar Desconto
+                  </h4>
+                  
+                  <div className="space-y-3">
+                    <div className="flex gap-2">
+                      {(['percentage', 'value', 'service'] as const).map(type => (
+                        <button
+                          key={type}
+                          onClick={() => {setDiscountType(type); setDiscountAmount(0);}}
+                          className={cn(
+                            "flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all",
+                            discountType === type
+                              ? "bg-blue-600 text-white shadow-lg"
+                              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                          )}
+                        >
+                          {type === 'percentage' ? '%' : type === 'value' ? 'R$' : 'Serviço'}
+                        </button>
+                      ))}
+                    </div>
+
+                    {discountType === 'percentage' && (
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">Porcentagem de Desconto</label>
+                        <div className="flex gap-2">
+                          <input 
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={discountAmount}
+                            onChange={(e) => setDiscountAmount(Number(e.target.value))}
+                            className="flex-1 px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white"
+                            placeholder="Ex: 10"
+                          />
+                          <span className="py-2 px-3 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm font-bold text-slate-600 dark:text-slate-300">%</span>
+                        </div>
+                        {discountAmount > 0 && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Desconto: {formatCurrency((servicePrice + currentExtrasTotal) * (discountAmount / 100))}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {discountType === 'value' && (
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">Valor de Desconto (R$)</label>
+                        <div className="flex gap-2">
+                          <span className="py-2 px-3 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm font-bold text-slate-600 dark:text-slate-300">R$</span>
+                          <input 
+                            type="number"
+                            min="0"
+                            value={discountAmount}
+                            onChange={(e) => setDiscountAmount(Number(e.target.value))}
+                            className="flex-1 px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white"
+                            placeholder="Ex: 50.00"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {discountType === 'service' && (
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">Motivo do Desconto</label>
+                        <input 
+                          type="text"
+                          value={discountDescription}
+                          onChange={(e) => setDiscountDescription(e.target.value)}
+                          placeholder="Ex: Cliente VIP, Cortesia..."
+                          className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
+                        />
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 mt-2">Valor a Descontar (R$)</label>
+                        <input 
+                          type="number"
+                          min="0"
+                          value={discountAmount}
+                          onChange={(e) => setDiscountAmount(Number(e.target.value))}
+                          className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white"
+                          placeholder="Ex: 100.00"
+                        />
+                      </div>
+                    )}
+
+                    {discountAmount > 0 && (
+                      <button
+                        onClick={() => {setDiscountAmount(0); setDiscountDescription('');}}
+                        className="w-full py-2 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                      >
+                        Remover Desconto
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* FINAL TOTALS */}
+                <div className="flex flex-col gap-3 pt-4 mt-4 border-t border-slate-200 dark:border-slate-700">
+                    <div className="flex justify-between py-2 px-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                      <span className="text-sm text-slate-600 dark:text-slate-300">Subtotal</span>
+                      <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(servicePrice + currentExtrasTotal)}</span>
+                    </div>
+                    {discountAmount > 0 && (
+                      <div className="flex justify-between py-2 px-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                        <span className="text-sm text-red-600 dark:text-red-400 font-bold">Desconto ({discountType === 'percentage' ? discountAmount + '%' : 'Valor'})</span>
+                        <span className="font-bold text-red-600 dark:text-red-400">-{formatCurrency(discountType === 'percentage' ? (servicePrice + currentExtrasTotal) * (discountAmount / 100) : discountAmount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center py-3 px-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <span className="font-bold text-lg text-slate-900 dark:text-white">Total Final</span>
+                      <span className="font-bold text-2xl text-blue-600 dark:text-blue-400">
+                        {formatCurrency(
+                          discountType === 'percentage' 
+                            ? (servicePrice + currentExtrasTotal) * (1 - discountAmount / 100)
+                            : servicePrice + currentExtrasTotal - discountAmount
+                        )}
+                      </span>
                     </div>
                 </div>
               </div>

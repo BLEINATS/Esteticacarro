@@ -201,6 +201,13 @@ export interface AdditionalItem {
   value: number;
 }
 
+export interface Discount {
+  type: 'value' | 'percentage' | 'service';
+  amount: number;
+  description?: string;
+  appliedServiceId?: string;
+}
+
 export interface ScopeItem {
     id: string;
     label: string;
@@ -224,6 +231,7 @@ export interface WorkOrder {
   totalValue: number;
   insuranceDetails?: InsuranceDetails;
   additionalItems?: AdditionalItem[]; 
+  discount?: Discount;
 
   damages: DamagePoint[];
   vehicleInventory: VehicleInventory;
