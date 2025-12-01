@@ -33,7 +33,7 @@ import WorkOrderModal from '../components/WorkOrderModal';
 import { WorkOrder } from '../types';
 import { useNavigate } from 'react-router-dom';
 
-const StatCard = ({ title, value, subtext, icon: Icon, color, trend }: any) => (
+const StatCard = ({ title, value, subtext, icon: Icon, color, trend, tooltip }: any) => (
   <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
     <div className={cn("absolute right-0 top-0 w-24 h-24 opacity-10 rounded-bl-full transition-transform group-hover:scale-110", color.replace('text-', 'bg-'))} />
     <div className="flex items-center justify-between mb-4">
@@ -54,6 +54,12 @@ const StatCard = ({ title, value, subtext, icon: Icon, color, trend }: any) => (
     <h3 className="text-slate-500 dark:text-slate-400 text-sm font-medium">{title}</h3>
     <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{value}</p>
     <p className="text-xs text-slate-400 mt-2">{subtext}</p>
+    
+    {tooltip && (
+      <div className="absolute left-0 right-0 bottom-0 px-6 py-3 bg-slate-900 dark:bg-slate-950 text-white text-xs rounded-b-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+        {tooltip}
+      </div>
+    )}
   </div>
 );
 
@@ -181,7 +187,8 @@ export default function Dashboard() {
           subtext="Média das últimas avaliações"
           trend="up" 
           icon={Star} 
-          color="text-yellow-500 dark:text-yellow-400" 
+          color="text-yellow-500 dark:text-yellow-400"
+          tooltip="NPS (Net Promoter Score) mede a satisfação do cliente. Escala de 0-10: 9-10 é promotor, 7-8 é passivo, 0-6 é detrator."
         />
         <StatCard 
           title="Risco de Churn" 
@@ -189,7 +196,8 @@ export default function Dashboard() {
           subtext="Clientes inativos > 60 dias"
           trend="down" 
           icon={Users} 
-          color="text-red-500 dark:text-red-400" 
+          color="text-red-500 dark:text-red-400"
+          tooltip="Clientes identificados como em risco de não retornar. Sem interação há mais de 60 dias. Recomendado contato urgente."
         />
       </div>
 
