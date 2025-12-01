@@ -466,56 +466,57 @@ export default function Team() {
              </div>
            </div>
         </div>
-        <div className="overflow-x-auto">
+        {/* Desktop Table */}
+        <div className="hidden sm:block overflow-x-auto">
             <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                 <tr>
-                <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Data</th>
-                <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Funcionário</th>
-                <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Descrição</th>
-                <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Tipo</th>
-                <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Valor</th>
-                <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Ações</th>
+                <th className="px-4 sm:px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-xs sm:text-sm">Data</th>
+                <th className="px-4 sm:px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-xs sm:text-sm">Funcionário</th>
+                <th className="px-4 sm:px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-xs sm:text-sm">Descrição</th>
+                <th className="px-4 sm:px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-xs sm:text-sm">Tipo</th>
+                <th className="px-4 sm:px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right text-xs sm:text-sm">Valor</th>
+                <th className="px-4 sm:px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right text-xs sm:text-sm">Ações</th>
                 </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredTransactions.map((t) => (
                 <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    <td className="px-6 py-3 text-slate-500 dark:text-slate-400">
+                    <td className="px-4 sm:px-6 py-3 text-slate-500 dark:text-slate-400 text-xs sm:text-sm">
                         {new Date(t.date).toLocaleDateString('pt-BR')}
                     </td>
-                    <td className="px-6 py-3 font-medium text-slate-900 dark:text-white">
-                    {employees.find(e => e.id === t.employeeId)?.name || 'Funcionário Removido'}
+                    <td className="px-4 sm:px-6 py-3 font-medium text-slate-900 dark:text-white text-xs sm:text-sm">
+                    {employees.find(e => e.id === t.employeeId)?.name || 'Removido'}
                     </td>
-                    <td className="px-6 py-3 text-slate-500 dark:text-slate-400">{t.description}</td>
-                    <td className="px-6 py-3">
+                    <td className="px-4 sm:px-6 py-3 text-slate-500 dark:text-slate-400 text-xs sm:text-sm">{t.description}</td>
+                    <td className="px-4 sm:px-6 py-3 text-xs sm:text-sm">
                     <span className={cn(
-                        "px-2 py-1 rounded-full text-xs font-bold",
+                        "px-2 py-1 rounded-full text-[10px] sm:text-xs font-bold",
                         t.type === 'commission' || t.type === 'salary' ? "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400" : 
                         t.type === 'payment' ? "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400" :
                         "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400"
                     )}>
-                        {t.type === 'commission' ? 'Comissão' : t.type === 'salary' ? 'Salário' : t.type === 'payment' ? 'Pagamento' : 'Vale / Saída'}
+                        {t.type === 'commission' ? 'Comissão' : t.type === 'salary' ? 'Salário' : t.type === 'payment' ? 'Pagamento' : 'Vale'}
                     </span>
                     </td>
-                    <td className={cn("px-6 py-3 text-right font-bold", t.type === 'commission' || t.type === 'salary' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
+                    <td className={cn("px-4 sm:px-6 py-3 text-right font-bold text-xs sm:text-sm", t.type === 'commission' || t.type === 'salary' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
                     {t.type === 'commission' || t.type === 'salary' ? '+' : '-'} {formatCurrency(t.amount)}
                     </td>
-                    <td className="px-6 py-3 text-right">
-                        <div className="flex justify-end gap-2">
+                    <td className="px-4 sm:px-6 py-3 text-right">
+                        <div className="flex justify-end gap-1 sm:gap-2">
                             <button 
                                 onClick={() => handleEditTransaction(t)}
-                                className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors" 
+                                className="p-1 sm:p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors" 
                                 title="Editar"
                             >
-                                <Pencil size={16} />
+                                <Pencil size={14} className="sm:w-4 sm:h-4" />
                             </button>
                             <button 
                                 onClick={() => handleDeleteTransaction(t.id)}
-                                className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" 
+                                className="p-1 sm:p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" 
                                 title="Excluir"
                             >
-                                <Trash2 size={16} />
+                                <Trash2 size={14} className="sm:w-4 sm:h-4" />
                             </button>
                         </div>
                     </td>
@@ -523,11 +524,62 @@ export default function Team() {
                 ))}
                 {filteredTransactions.length === 0 && (
                 <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-slate-400">Nenhum lançamento encontrado para este período.</td>
+                    <td colSpan={6} className="px-4 sm:px-6 py-8 text-center text-slate-400">Nenhum lançamento.</td>
                 </tr>
                 )}
             </tbody>
             </table>
+        </div>
+
+        {/* Mobile Cards */}
+        <div className="sm:hidden space-y-2 p-3">
+          {filteredTransactions.map((t) => (
+            <div key={t.id} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">
+                    {new Date(t.date).toLocaleDateString('pt-BR')}
+                  </p>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">
+                    {employees.find(e => e.id === t.employeeId)?.name || 'Removido'}
+                  </p>
+                </div>
+                <p className={cn("text-sm font-bold", t.type === 'commission' || t.type === 'salary' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
+                  {t.type === 'commission' || t.type === 'salary' ? '+' : '-'} {formatCurrency(t.amount)}
+                </p>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">{t.description}</p>
+              <div className="flex items-center justify-between gap-2">
+                <span className={cn(
+                  "px-2 py-1 rounded-full text-[10px] font-bold",
+                  t.type === 'commission' || t.type === 'salary' ? "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400" : 
+                  t.type === 'payment' ? "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400" :
+                  "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400"
+                )}>
+                  {t.type === 'commission' ? 'Comissão' : t.type === 'salary' ? 'Salário' : t.type === 'payment' ? 'Pagamento' : 'Vale'}
+                </span>
+                <div className="flex gap-1">
+                  <button 
+                    onClick={() => handleEditTransaction(t)}
+                    className="p-1.5 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
+                    title="Editar"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteTransaction(t.id)}
+                    className="p-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
+                    title="Excluir"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {filteredTransactions.length === 0 && (
+            <div className="text-center py-8 text-slate-400">Nenhum lançamento encontrado.</div>
+          )}
         </div>
       </div>
     </div>

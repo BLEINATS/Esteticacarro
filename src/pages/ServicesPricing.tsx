@@ -211,15 +211,15 @@ export default function ServicesPricing() {
 
           {/* Pricing Matrix Table */}
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+            {/* Desktop View */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left text-xs sm:text-sm">
                 <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                   <tr>
                     <th className="px-2 sm:px-6 py-3 sm:py-4 font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider min-w-[140px]">Serviço</th>
                     {sizes.map(size => (
                       <th key={size} className="px-1 sm:px-6 py-3 sm:py-4 font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-center whitespace-nowrap min-w-[80px]">
-                        <span className="hidden sm:inline">{VEHICLE_SIZES[size]}</span>
-                        <span className="sm:hidden">{size === 'small' ? 'P' : size === 'medium' ? 'M' : size === 'large' ? 'G' : 'XG'}</span>
+                        {VEHICLE_SIZES[size]}
                       </th>
                     ))}
                   </tr>
@@ -263,6 +263,44 @@ export default function ServicesPricing() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile View */}
+            <div className="sm:hidden space-y-2 p-3">
+              {filteredServices.map((service) => (
+                <div key={service.id} className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <div className="mb-3">
+                    <p className="font-bold text-slate-900 dark:text-white text-sm">{service.name}</p>
+                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-bold border w-fit block mt-1", getCategoryStyle(service.category))}>
+                      {service.category}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {sizes.map(size => {
+                      const entry = priceMatrix.find(p => p.serviceId === service.id && p.size === size);
+                      const price = entry ? entry.price : 0;
+                      const sizeLabel = size === 'small' ? 'Pequeno' : size === 'medium' ? 'Médio' : size === 'large' ? 'Grande' : 'Extra G.';
+                      return (
+                        <div key={size} className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{sizeLabel}</label>
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">R$</span>
+                            <input 
+                              type="number"
+                              value={price}
+                              onChange={(e) => updatePrice(service.id, size, Number(e.target.value))}
+                              className="w-full pl-6 pr-2 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded text-right font-medium text-slate-900 dark:text-white text-sm"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              {filteredServices.length === 0 && (
+                <div className="text-center py-8 text-slate-400">Nenhum serviço encontrado.</div>
+              )}
             </div>
           </div>
         </div>
