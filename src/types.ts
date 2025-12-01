@@ -233,12 +233,28 @@ export interface ClientPoints {
 
 export interface FidelityCard {
   clientId: string;
-  cardNumber: string; // Gerado automaticamente
+  cardNumber: string;
   cardHolder: string;
   cardColor: 'blue' | 'purple' | 'emerald' | 'amber';
   qrCode: string;
   expiresAt: string;
   issueDate: string;
+}
+
+export interface Reward {
+  id: string;
+  name: string;
+  description: string;
+  requiredPoints: number;
+  requiredLevel: 'bronze' | 'silver' | 'gold' | 'platinum';
+  rewardType: 'discount' | 'service' | 'gift' | 'free_service';
+  value?: number;
+  percentage?: number;
+  serviceId?: string;
+  gift?: string;
+  active: boolean;
+  createdAt: string;
+  redeemedCount?: number;
 }
 
 export interface ScopeItem {

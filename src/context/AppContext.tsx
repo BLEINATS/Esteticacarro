@@ -3,7 +3,7 @@ import {
   Client, InventoryItem, WorkOrder, ServiceRecipe, Reminder, Vehicle, 
   ServiceCatalogItem, PriceMatrixEntry, VehicleSize, Employee, Task, 
   TimeLog, EmployeeTransaction, MarketingCampaign, ClientSegment,
-  CompanySettings, SubscriptionDetails, FinancialTransaction, ClientPoints, FidelityCard
+  CompanySettings, SubscriptionDetails, FinancialTransaction, ClientPoints, FidelityCard, Reward
 } from '../types';
 import { differenceInDays, addDays, subDays, formatISO, startOfWeek, addHours } from 'date-fns';
 
@@ -20,6 +20,7 @@ interface AppContextType {
   financialTransactions: FinancialTransaction[];
   clientPoints: ClientPoints[];
   fidelityCards: FidelityCard[];
+  rewards: Reward[];
   currentUser: Employee | null;
   theme: 'light' | 'dark';
   campaigns: MarketingCampaign[];
@@ -89,6 +90,12 @@ interface AppContextType {
   getClientPoints: (clientId: string) => ClientPoints | undefined;
   createFidelityCard: (clientId: string) => FidelityCard;
   getFidelityCard: (clientId: string) => FidelityCard | undefined;
+  
+  // Rewards Actions
+  addReward: (reward: Omit<Reward, 'id' | 'createdAt'>) => void;
+  updateReward: (id: string, updates: Partial<Reward>) => void;
+  deleteReward: (id: string) => void;
+  getRewardsByLevel: (level: 'bronze' | 'silver' | 'gold' | 'platinum') => Reward[];
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -675,6 +682,15 @@ const initialFidelityCards: FidelityCard[] = initialClientPoints.map(cp => ({
   expiresAt: formatISO(addDays(today, 365))
 }));
 
+const initialRewards: Reward[] = [
+  { id: 'r1', name: 'Desconto 5%', description: 'Desconto de 5% em todos os serviços', requiredPoints: 0, requiredLevel: 'bronze', rewardType: 'discount', percentage: 5, active: true, createdAt: formatISO(today) },
+  { id: 'r2', name: 'Desconto 10% + Frete Grátis', description: 'Desconto de 10% em todos os serviços + frete grátis', requiredPoints: 500, requiredLevel: 'silver', rewardType: 'discount', percentage: 10, active: true, createdAt: formatISO(today) },
+  { id: 'r3', name: 'Lavagem Grátis', description: 'Serviço de lavagem simples gratuito', requiredPoints: 800, requiredLevel: 'silver', rewardType: 'free_service', gift: 'Lavagem Simples', active: true, createdAt: formatISO(today) },
+  { id: 'r4', name: 'Desconto 15% + Atendimento VIP', description: 'Desconto de 15% em todos os serviços + atendimento prioritário', requiredPoints: 1500, requiredLevel: 'gold', rewardType: 'discount', percentage: 15, active: true, createdAt: formatISO(today) },
+  { id: 'r5', name: 'Polimento Premium Grátis', description: 'Serviço de polimento premium gratuito', requiredPoints: 1800, requiredLevel: 'gold', rewardType: 'free_service', gift: 'Polimento Premium', active: true, createdAt: formatISO(today) },
+  { id: 'r6', name: 'Desconto 20% + Brinde Exclusivo', description: 'Desconto de 20% em todos os serviços + brinde exclusivo (toalha premium)', requiredPoints: 3000, requiredLevel: 'platinum', rewardType: 'discount', percentage: 20, active: true, createdAt: formatISO(today) },
+];
+
 export function AppProvider({ children }: { children: ReactNode }) {
   // State Initialization
   const [companySettings, setCompanySettings] = useState<CompanySettings>(() => getStorage('companySettings_v12', initialCompanySettings)); 
@@ -693,6 +709,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>(() => getStorage('financialTransactions_v3', initialFinancialTransactions));
   const [clientPoints, setClientPoints] = useState<ClientPoints[]>(() => getStorage('clientPoints_v1', initialClientPoints));
   const [fidelityCards, setFidelityCards] = useState<FidelityCard[]>(() => getStorage('fidelityCards_v1', initialFidelityCards));
+  const [rewards, setRewards] = useState<Reward[]>(() => getStorage('rewards_v1', initialRewards));
 
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>(() => getStorage<MarketingCampaign[]>('campaigns_v7', initialCampaigns));
   
@@ -1020,10 +1037,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const getFidelityCard = (clientId: string): FidelityCard | undefined => fidelityCards.find(c => c.clientId === clientId);
 
+  // --- REWARDS ACTIONS ---
+  const addReward = (reward: Omit<Reward, 'id' | 'createdAt'>) => {
+    const newReward: Reward = {
+      ...reward,
+      id: `r-${Date.now()}`,
+      createdAt: formatISO(new Date())
+    };
+    setRewards(prev => [...prev, newReward]);
+  };
+
+  const updateReward = (id: string, updates: Partial<Reward>) => {
+    setRewards(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+  };
+
+  const deleteReward = (id: string) => {
+    setRewards(prev => prev.filter(r => r.id !== id));
+  };
+
+  const getRewardsByLevel = (level: 'bronze' | 'silver' | 'gold' | 'platinum'): Reward[] => {
+    return rewards.filter(r => r.active && r.requiredLevel === level);
+  };
+
   return (
     <AppContext.Provider value={{ 
       inventory, workOrders, clients, recipes, reminders, services, priceMatrix, theme,
-      employees, employeeTransactions, currentUser, campaigns, clientPoints, fidelityCards,
+      employees, employeeTransactions, currentUser, campaigns, clientPoints, fidelityCards, rewards,
       companySettings, subscription, updateCompanySettings,
       financialTransactions,
       login, logout,
@@ -1037,7 +1076,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addFinancialTransaction, updateFinancialTransaction, deleteFinancialTransaction,
       createCampaign, getWhatsappLink,
       connectWhatsapp, disconnectWhatsapp,
-      addPointsToClient, getClientPoints, createFidelityCard, getFidelityCard
+      addPointsToClient, getClientPoints, createFidelityCard, getFidelityCard,
+      addReward, updateReward, deleteReward, getRewardsByLevel
     }}>
       {children}
     </AppContext.Provider>

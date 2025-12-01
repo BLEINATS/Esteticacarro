@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Zap, Settings, Gift, Trophy, Star, TrendingUp, Users, Award } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { Zap, Settings, Gift, Trophy, Star, TrendingUp, Users, Award, Plus, Trash2, Edit2 } from 'lucide-react';
+import { cn, formatCurrency } from '../lib/utils';
 
 const levelColors = ['bg-slate-100', 'bg-blue-100', 'bg-purple-100', 'bg-emerald-100', 'bg-amber-100'];
 const levelNames = ['Iniciante', 'Bronze', 'Prata', 'Ouro', 'Platina'];
 
 export default function Gamification() {
-  const { companySettings, updateCompanySettings, clients } = useApp();
+  const { companySettings, updateCompanySettings, clients, rewards, addReward, deleteReward, updateReward, getRewardsByLevel } = useApp();
   const [isEnabled, setIsEnabled] = useState(companySettings.gamification?.enabled || false);
   const [multiplier, setMultiplier] = useState(companySettings.gamification?.pointsMultiplier || 1);
   const [levelSystem, setLevelSystem] = useState(companySettings.gamification?.levelSystem || true);
+  const [showRewardForm, setShowRewardForm] = useState(false);
+  const [newReward, setNewReward] = useState({ name: '', description: '', requiredPoints: 100, requiredLevel: 'bronze', rewardType: 'discount', percentage: 0, gift: '' });
 
   const handleToggle = (value: boolean) => {
     setIsEnabled(value);
@@ -43,6 +45,24 @@ export default function Gamification() {
         levelSystem: value,
       }
     });
+  };
+
+  const handleAddReward = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newReward.name && newReward.description) {
+      addReward({
+        name: newReward.name,
+        description: newReward.description,
+        requiredPoints: newReward.requiredPoints,
+        requiredLevel: newReward.requiredLevel as any,
+        rewardType: newReward.rewardType as any,
+        percentage: newReward.rewardType === 'discount' ? newReward.percentage : undefined,
+        gift: newReward.rewardType === 'gift' || newReward.rewardType === 'free_service' ? newReward.gift : undefined,
+        active: true
+      });
+      setNewReward({ name: '', description: '', requiredPoints: 100, requiredLevel: 'bronze', rewardType: 'discount', percentage: 0, gift: '' });
+      setShowRewardForm(false);
+    }
   };
 
   return (
