@@ -46,103 +46,105 @@ Podemos agendar para esta semana?`;
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-900 rounded-lg sm:rounded-2xl w-full h-full sm:max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
         
         {/* Header */}
-        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-start bg-slate-50/50 dark:bg-slate-900/50">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-lg shadow-blue-600/20">
+        <div className="p-3 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-start bg-slate-50/50 dark:bg-slate-900/50 flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+            <div className="w-10 sm:w-16 h-10 sm:h-16 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg sm:text-2xl shadow-lg shadow-blue-600/20 flex-shrink-0">
               {client.name.charAt(0)}
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{client.name}</h2>
-              <div className="flex items-center gap-2 mt-1">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base sm:text-2xl font-bold text-slate-900 dark:text-white truncate">{client.name}</h2>
+              <div className="flex items-center gap-1 sm:gap-2 mt-1 flex-wrap">
                 <span className={cn(
                   "px-2 py-0.5 rounded text-xs font-bold uppercase",
                   client.status === 'active' ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
                   client.status === 'churn_risk' ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
                   "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
                 )}>
-                  {client.status === 'active' ? 'Cliente Ativo' : client.status === 'churn_risk' ? 'Risco de Churn' : 'Inativo'}
+                  {client.status === 'active' ? 'Ativo' : client.status === 'churn_risk' ? 'Risco' : 'Inativo'}
                 </span>
-                <span className="text-slate-400 text-sm">•</span>
-                <span className="text-slate-500 dark:text-slate-400 text-sm flex items-center gap-1">
-                  <Calendar size={14} /> Última visita: {new Date(client.lastVisit).toLocaleDateString('pt-BR')}
+                <span className="text-slate-400 text-xs hidden sm:inline">•</span>
+                <span className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm flex items-center gap-1 whitespace-nowrap">
+                  <Calendar size={12} className="hidden sm:block" /> {new Date(client.lastVisit).toLocaleDateString('pt-BR')}
                 </span>
               </div>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors">
-            <X size={24} />
+          <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors flex-shrink-0">
+            <X size={20} />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-100 dark:border-slate-800 px-6">
-          {[
-            { id: 'overview', label: 'Visão Geral', icon: User },
-            { id: 'vehicles', label: 'Garagem (Veículos)', icon: Car },
-            { id: 'history', label: 'Histórico de Serviços', icon: History },
-            { id: 'crm', label: 'CRM & Retenção', icon: TrendingUp },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={cn(
-                "flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors",
-                activeTab === tab.id 
-                  ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400" 
-                  : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-              )}
-            >
-              <tab.icon size={18} />
-              {tab.label}
-            </button>
-          ))}
+        <div className="overflow-x-auto border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
+          <div className="flex">
+            {[
+              { id: 'overview', label: 'Visão Geral', icon: User },
+              { id: 'vehicles', label: 'Veículos', icon: Car },
+              { id: 'history', label: 'Histórico', icon: History },
+              { id: 'crm', label: 'CRM', icon: TrendingUp },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={cn(
+                  "flex items-center gap-1 sm:gap-2 px-2 sm:px-6 py-2 sm:py-4 text-xs sm:text-sm font-medium border-b-2 transition-colors flex-shrink-0 whitespace-nowrap",
+                  activeTab === tab.id 
+                    ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400" 
+                    : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                )}
+              >
+                <tab.icon size={16} />
+                <span className="hidden sm:inline">{tab.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 dark:bg-slate-950/50">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-50/50 dark:bg-slate-950/50">
           
           {/* TAB: OVERVIEW */}
           {activeTab === 'overview' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-                <h3 className="font-bold text-slate-900 dark:text-white mb-4">Dados de Contato</h3>
-                <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
-                  <Phone size={18} className="text-slate-400" />
-                  <span>{client.phone}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
+              <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 sm:space-y-4">
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base mb-3 sm:mb-4">Dados de Contato</h3>
+                <div className="flex items-start gap-2 sm:gap-3">
+                  <Phone size={16} className="text-slate-400 flex-shrink-0 mt-0.5" />
+                  <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 break-all">{client.phone}</span>
                 </div>
-                <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
-                  <Mail size={18} className="text-slate-400" />
-                  <span>{client.email}</span>
+                <div className="flex items-start gap-2 sm:gap-3">
+                  <Mail size={16} className="text-slate-400 flex-shrink-0 mt-0.5" />
+                  <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 break-all">{client.email}</span>
                 </div>
-                <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
-                  <MapPin size={18} className="text-slate-400" />
-                  <span>{client.address || 'Endereço não cadastrado'}</span>
+                <div className="flex items-start gap-2 sm:gap-3">
+                  <MapPin size={16} className="text-slate-400 flex-shrink-0 mt-0.5" />
+                  <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">{client.address || 'Endereço não cadastrado'}</span>
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                <h3 className="font-bold text-slate-900 dark:text-white mb-4">Métricas de Valor (LTV)</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Total Gasto</p>
-                    <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">{formatCurrency(client.ltv)}</p>
+              <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base mb-3 sm:mb-4">Métricas de Valor (LTV)</h3>
+                <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-3 sm:mb-4">
+                  <div className="p-2 sm:p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Total Gasto</p>
+                    <p className="text-base sm:text-2xl font-bold text-blue-700 dark:text-blue-400 break-all">{formatCurrency(client.ltv)}</p>
                   </div>
-                  <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                    <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Ticket Médio</p>
-                    <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">
+                  <div className="p-2 sm:p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                    <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Ticket Médio</p>
+                    <p className="text-base sm:text-2xl font-bold text-purple-700 dark:text-purple-400 break-all">
                       {clientWorkOrders.length > 0 
                         ? formatCurrency(client.ltv / clientWorkOrders.length) 
                         : 'R$ 0,00'}
                     </p>
                   </div>
                 </div>
-                <div className="mt-4">
-                  <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold mb-2">Notas Internas</p>
-                  <p className="text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 p-3 rounded-lg">
+                <div>
+                  <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 uppercase font-bold mb-2">Notas Internas</p>
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 p-2 sm:p-3 rounded-lg line-clamp-3">
                     {client.notes || 'Nenhuma observação.'}
                   </p>
                 </div>
@@ -152,73 +154,73 @@ Podemos agendar para esta semana?`;
 
           {/* TAB: VEHICLES */}
           {activeTab === 'vehicles' && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="font-bold text-slate-900 dark:text-white">Veículos Cadastrados</h3>
+            <div className="space-y-3 sm:space-y-4">
+              <div className="flex justify-between items-center gap-2">
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Veículos</h3>
                 <button 
                   onClick={() => setShowAddVehicle(!showAddVehicle)}
-                  className="flex items-center gap-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-3 py-1.5 rounded-lg transition-colors"
+                  className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-2 sm:px-3 py-1.5 rounded-lg transition-colors flex-shrink-0"
                 >
-                  <Plus size={16} /> Adicionar Veículo
+                  <Plus size={14} /> <span className="hidden sm:inline">Adicionar</span>
                 </button>
               </div>
 
               {showAddVehicle && (
-                <form onSubmit={handleAddVehicle} className="bg-slate-100 dark:bg-slate-800 p-4 rounded-xl mb-4 animate-in slide-in-from-top-2">
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
+                <form onSubmit={handleAddVehicle} className="bg-slate-100 dark:bg-slate-800 p-3 sm:p-4 rounded-lg sm:rounded-xl mb-3 sm:mb-4 animate-in slide-in-from-top-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 mb-2 sm:mb-3">
                     <input 
                       type="text" placeholder="Modelo" required
                       value={newVehicle.model} onChange={e => setNewVehicle({...newVehicle, model: e.target.value})}
-                      className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm"
+                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs sm:text-sm"
                     />
                     <input 
                       type="text" placeholder="Placa" required
                       value={newVehicle.plate} onChange={e => setNewVehicle({...newVehicle, plate: e.target.value})}
-                      className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm"
+                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs sm:text-sm"
                     />
                     <input 
                       type="text" placeholder="Cor"
                       value={newVehicle.color} onChange={e => setNewVehicle({...newVehicle, color: e.target.value})}
-                      className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm"
+                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs sm:text-sm"
                     />
                     <input 
                       type="text" placeholder="Ano"
                       value={newVehicle.year} onChange={e => setNewVehicle({...newVehicle, year: e.target.value})}
-                      className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm"
+                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs sm:text-sm"
                     />
                     <select
                       value={newVehicle.size}
                       onChange={e => setNewVehicle({...newVehicle, size: e.target.value as VehicleSize})}
-                      className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm"
+                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs sm:text-sm col-span-2 sm:col-span-1"
                     >
                       {Object.entries(VEHICLE_SIZES).map(([key, label]) => (
                         <option key={key} value={key}>{label}</option>
                       ))}
                     </select>
                   </div>
-                  <div className="flex justify-end gap-2">
-                    <button type="button" onClick={() => setShowAddVehicle(false)} className="text-xs font-bold text-slate-500 px-3 py-2">Cancelar</button>
-                    <button type="submit" className="text-xs font-bold bg-blue-600 text-white px-4 py-2 rounded-lg">Salvar</button>
+                  <div className="flex justify-end gap-1 sm:gap-2">
+                    <button type="button" onClick={() => setShowAddVehicle(false)} className="text-xs font-bold text-slate-500 px-2 sm:px-3 py-1.5 sm:py-2">Cancelar</button>
+                    <button type="submit" className="text-xs font-bold bg-blue-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg">Salvar</button>
                   </div>
                 </form>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                 {client.vehicles.length > 0 ? client.vehicles.map((vehicle) => (
-                  <div key={vehicle.id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-                    <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                      <Car size={24} className="text-slate-500 dark:text-slate-400" />
+                  <div key={vehicle.id} className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3 sm:gap-4">
+                    <div className="p-2 sm:p-3 bg-slate-100 dark:bg-slate-800 rounded-lg flex-shrink-0">
+                      <Car size={18} className="text-slate-500 dark:text-slate-400" />
                     </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900 dark:text-white">{vehicle.model}</h4>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">{vehicle.plate} • {vehicle.color}</p>
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-slate-900 dark:text-white text-sm truncate">{vehicle.model}</h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{vehicle.plate} • {vehicle.color}</p>
                       <span className="text-xs font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded mt-1 inline-block">
                         {VEHICLE_SIZES[vehicle.size]}
                       </span>
                     </div>
                   </div>
                 )) : (
-                  <div className="col-span-full text-center py-8 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
+                  <div className="col-span-full text-center py-6 sm:py-8 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 rounded-lg sm:rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-xs sm:text-sm">
                     Nenhum veículo cadastrado.
                   </div>
                 )}
@@ -228,9 +230,11 @@ Podemos agendar para esta semana?`;
 
           {/* TAB: HISTORY */}
           {activeTab === 'history' && (
-            <div className="space-y-4">
-              <h3 className="font-bold text-slate-900 dark:text-white">Histórico de Serviços</h3>
-              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+            <div className="space-y-3 sm:space-y-4">
+              <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Histórico de Serviços</h3>
+              
+              {/* Desktop Table View */}
+              <div className="hidden sm:block bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                     <tr>
@@ -244,10 +248,10 @@ Podemos agendar para esta semana?`;
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {clientWorkOrders.map((os) => (
                       <tr key={os.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{new Date(os.createdAt || '').toLocaleDateString('pt-BR')}</td>
-                        <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{os.service}</td>
-                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{os.vehicle}</td>
-                        <td className="px-4 py-3 text-slate-900 dark:text-white">{formatCurrency(os.totalValue)}</td>
+                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400 text-sm">{new Date(os.createdAt || '').toLocaleDateString('pt-BR')}</td>
+                        <td className="px-4 py-3 font-medium text-slate-900 dark:text-white text-sm truncate">{os.service}</td>
+                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400 text-sm">{os.vehicle}</td>
+                        <td className="px-4 py-3 text-slate-900 dark:text-white text-sm">{formatCurrency(os.totalValue)}</td>
                         <td className="px-4 py-3">
                           <span className={cn(
                             "px-2 py-0.5 rounded text-xs font-medium",
@@ -259,7 +263,37 @@ Podemos agendar para esta semana?`;
                   </tbody>
                 </table>
                 {clientWorkOrders.length === 0 && (
-                  <div className="p-8 text-center text-slate-500 dark:text-slate-400">Nenhum serviço encontrado.</div>
+                  <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm">Nenhum serviço encontrado.</div>
+                )}
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="sm:hidden space-y-2">
+                {clientWorkOrders.length > 0 ? clientWorkOrders.map((os) => (
+                  <div key={os.id} className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-slate-900 dark:text-white text-xs truncate">{os.service}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(os.createdAt || '').toLocaleDateString('pt-BR')}</p>
+                      </div>
+                      <span className={cn(
+                        "px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 whitespace-nowrap",
+                        os.status === 'Concluído' ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                      )}>{os.status}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <p className="text-slate-500 dark:text-slate-400">Veículo</p>
+                        <p className="font-medium text-slate-900 dark:text-white truncate">{os.vehicle}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500 dark:text-slate-400">Valor</p>
+                        <p className="font-medium text-slate-900 dark:text-white">{formatCurrency(os.totalValue)}</p>
+                      </div>
+                    </div>
+                  </div>
+                )) : (
+                  <div className="text-center py-6 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 text-xs">Nenhum serviço encontrado.</div>
                 )}
               </div>
             </div>
@@ -267,32 +301,31 @@ Podemos agendar para esta semana?`;
 
           {/* TAB: CRM / RETENTION */}
           {activeTab === 'crm' && (
-            <div className="space-y-6">
-              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 rounded-xl text-white shadow-lg">
-                <h3 className="font-bold text-lg mb-2">Gestão de Ciclo de Vida</h3>
-                <p className="text-blue-100 text-sm">
-                  O sistema monitora automaticamente serviços que requerem manutenção (como Vitrificação e Polimento) 
-                  e gera alertas para você contatar o cliente, garantindo a recorrência.
+            <div className="space-y-3 sm:space-y-6">
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-3 sm:p-6 rounded-lg sm:rounded-xl text-white shadow-lg">
+                <h3 className="font-bold text-sm sm:text-lg mb-1 sm:mb-2">Gestão de Ciclo de Vida</h3>
+                <p className="text-blue-100 text-xs sm:text-sm">
+                  O sistema monitora automaticamente serviços que requerem manutenção e gera alertas.
                 </p>
               </div>
 
               <div>
-                <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                  <AlertCircle size={20} className="text-amber-500" />
-                  Lembretes de Manutenção Ativos
+                <h3 className="font-bold text-slate-900 dark:text-white mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
+                  <AlertCircle size={18} className="text-amber-500 flex-shrink-0" />
+                  Lembretes Ativos
                 </h3>
                 
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-3">
                   {clientReminders.length > 0 ? clientReminders.map((reminder) => (
-                    <div key={reminder.id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div key={reminder.id} className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2">
                       <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-bold text-slate-900 dark:text-white">{reminder.serviceType}</span>
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">{reminder.serviceType}</span>
                           {new Date(reminder.dueDate) < new Date() && (
                             <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Vencido</span>
                           )}
                         </div>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
                           Vencimento: <span className="font-medium text-slate-700 dark:text-slate-300">{new Date(reminder.dueDate).toLocaleDateString('pt-BR')}</span>
                         </p>
                       </div>
@@ -301,15 +334,15 @@ Podemos agendar para esta semana?`;
                         href={`https://wa.me/55${client.phone.replace(/\D/g,'')}?text=${encodeURIComponent(generateReminderMessage(reminder))}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold px-4 py-2 rounded-lg transition-colors text-sm"
+                        className="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold px-3 sm:px-4 py-2 rounded-lg transition-colors text-xs sm:text-sm w-full"
                       >
-                        <MessageCircle size={18} />
-                        Enviar Lembrete WhatsApp
+                        <MessageCircle size={16} />
+                        WhatsApp
                       </a>
                     </div>
                   )) : (
-                    <div className="text-center py-8 text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-                      Nenhum lembrete de manutenção pendente para este cliente.
+                    <div className="text-center py-6 sm:py-8 text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-200 dark:border-slate-700 text-xs sm:text-sm">
+                      Nenhum lembrete de manutenção pendente.
                     </div>
                   )}
                 </div>
