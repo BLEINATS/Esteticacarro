@@ -668,7 +668,7 @@ const initialClientPoints: ClientPoints[] = [
 const initialFidelityCards: FidelityCard[] = initialClientPoints.map(cp => ({
   clientId: cp.clientId,
   cardNumber: `CC${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
-  cardHolder: clients.find(c => c.id === cp.clientId)?.name || '',
+  cardHolder: initialClients.find(c => c.id === cp.clientId)?.name || '',
   cardColor: cp.tier === 'gold' ? 'amber' : cp.tier === 'silver' ? 'emerald' : 'blue',
   qrCode: `https://qrcode.example.com/${cp.clientId}`,
   issueDate: formatISO(subDays(today, 30)),
