@@ -206,14 +206,19 @@ const initialClients: Client[] = [
     ltv: 1800.00, lastVisit: formatISO(subDays(today, 2)), visitCount: 1, status: 'active', segment: 'new'
   },
   {
-    id: 'c8', name: 'Gustavo Ribeiro', phone: '11981110000', email: 'gustavo.r@email.com', notes: 'Sem visita há 90 dias. Risco de churn.',
+    id: 'c8', name: 'Gustavo Ribeiro', phone: '11981110000', email: 'gustavo.r@email.com', notes: 'Sem visita há 90 dias. Risco de churn. Estratégia: Campanha de retenção via email.',
     vehicles: [{ id: 'v10', model: 'Hyundai HB20', plate: 'HYU-9999', color: 'Cinza', year: '2019', size: 'small' }],
     ltv: 2100.00, lastVisit: formatISO(subDays(today, 92)), visitCount: 3, status: 'churn_risk', segment: 'at_risk'
   },
   {
-    id: 'c9', name: 'Fernanda Costa', phone: '11980008888', email: 'fernanda.c@email.com', notes: 'Outro cliente em risco.',
+    id: 'c9', name: 'Fernanda Costa', phone: '11980008888', email: 'fernanda.c@email.com', notes: 'Risco de churn. Última compra de baixo valor. Candidata a programa de indicação.',
     vehicles: [{ id: 'v11', model: 'Fiat Uno', plate: 'FIA-4444', color: 'Vermelho', year: '2018', size: 'small' }],
     ltv: 1900.00, lastVisit: formatISO(subDays(today, 75)), visitCount: 2, status: 'churn_risk', segment: 'at_risk'
+  },
+  {
+    id: 'c10', name: 'Patricia Gomes', phone: '11979998765', email: 'patricia.g@email.com', notes: 'Cliente recorrente com alto potencial. Adepta de pacotes mensais.',
+    vehicles: [{ id: 'v12', model: 'Chevrolet Tracker', plate: 'CHE-3344', color: 'Branco', year: '2021', size: 'medium' }],
+    ltv: 9800.00, lastVisit: formatISO(subDays(today, 5)), visitCount: 15, status: 'active', segment: 'recurring'
   }
 ];
 const initialReminders: Reminder[] = []; 
@@ -500,16 +505,63 @@ const initialWorkOrders: WorkOrder[] = [
     totalValue: 540.00,
     paymentStatus: 'pending',
     paymentMethod: 'A Definir'
+  },
+  {
+    id: 'os-008',
+    clientId: 'c8',
+    clientName: 'Gustavo Ribeiro',
+    phone: '11981110000',
+    plate: 'HYU-9999',
+    vehicle: 'Hyundai HB20 2019',
+    service: 'Lavagem Técnica',
+    serviceId: 'srv1',
+    status: 'Aguardando',
+    technician: 'João Detalhista',
+    deadline: 'Próxima semana',
+    damages: [],
+    serviceNotes: 'Cliente em risco - Fila de espera. Campanha de retenção ativa.',
+    createdAt: formatISO(today),
+    totalPrice: 85.00,
+    totalValue: 85.00,
+    paymentStatus: 'pending',
+    paymentMethod: 'A Definir'
+  },
+  {
+    id: 'os-009',
+    clientId: 'c10',
+    clientName: 'Patricia Gomes',
+    phone: '11979998765',
+    plate: 'CHE-3344',
+    vehicle: 'Chevrolet Tracker 2021',
+    service: 'Pacote Mensal - Lavagem + Proteção',
+    serviceId: 'srv1',
+    status: 'Em Andamento',
+    technician: 'Mestre Miyagi',
+    deadline: 'Hoje',
+    damages: [],
+    serviceNotes: 'Cliente recorrente - Manutenção preventiva mensal.',
+    createdAt: formatISO(today),
+    totalPrice: 650.00,
+    totalValue: 650.00,
+    paymentStatus: 'pending',
+    paymentMethod: 'A Definir'
   }
 ];
 const initialEmployeeTransactions: EmployeeTransaction[] = [
-  { id: 'et-001', employeeId: 'e1', type: 'commission', amount: 450.00, description: 'Comissão OS-001', date: formatISO(subDays(today, 4)), referenceId: 'os-001' },
-  { id: 'et-002', employeeId: 'e2', type: 'commission', amount: 280.00, description: 'Comissão OS-004', date: formatISO(subDays(today, 8)), referenceId: 'os-004' },
+  { id: 'et-001', employeeId: 'e1', type: 'commission', amount: 450.00, description: 'Comissão OS-001 - Vitrificação', date: formatISO(subDays(today, 4)), referenceId: 'os-001' },
+  { id: 'et-002', employeeId: 'e2', type: 'commission', amount: 280.00, description: 'Comissão OS-004 - Lavagem', date: formatISO(subDays(today, 8)), referenceId: 'os-004' },
   { id: 'et-003', employeeId: 'e1', type: 'advance', amount: -500.00, description: 'Adiantamento solicitado', date: formatISO(subDays(today, 3)) },
+  { id: 'et-004', employeeId: 'e3', type: 'commission', amount: 320.00, description: 'Comissão OS-007 - Polimento', date: formatISO(subDays(today, 1)), referenceId: 'os-007' },
+  { id: 'et-005', employeeId: 'e2', type: 'salary', amount: 1200.00, description: 'Adiantamento de salário', date: formatISO(subDays(today, 5)) },
+  { id: 'et-006', employeeId: 'e1', type: 'commission', amount: 150.00, description: 'Comissão OS-006 - Lavagem BMW', date: formatISO(today), referenceId: 'os-006' },
 ];
 const initialCampaigns: MarketingCampaign[] = [
   { id: 'camp-001', name: 'Promoção Vitrificação - Março', status: 'active', startDate: formatISO(today), endDate: formatISO(addDays(today, 30)), budget: 1500.00, spent: 450.00 },
   { id: 'camp-002', name: 'Black Friday Antecipada', status: 'draft', startDate: formatISO(addDays(today, 60)), endDate: formatISO(addDays(today, 65)), budget: 5000.00, spent: 0 },
+  { id: 'camp-003', name: 'Campanha WhatsApp - VIP', status: 'active', startDate: formatISO(subDays(today, 15)), endDate: formatISO(addDays(today, 15)), budget: 800.00, spent: 320.00 },
+  { id: 'camp-004', name: 'Email Marketing - Retenção', status: 'active', startDate: formatISO(subDays(today, 30)), endDate: formatISO(addDays(today, 30)), budget: 2000.00, spent: 1850.00 },
+  { id: 'camp-005', name: 'Anúncio Google Ads', status: 'paused', startDate: formatISO(subDays(today, 45)), endDate: formatISO(addDays(today, 15)), budget: 3000.00, spent: 2750.00 },
+  { id: 'camp-006', name: 'Programa de Indicação', status: 'active', startDate: formatISO(subDays(today, 60)), endDate: formatISO(addDays(today, 120)), budget: 5000.00, spent: 1200.00 },
 ];
 
 const initialFinancialTransactions: FinancialTransaction[] = [

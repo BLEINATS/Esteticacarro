@@ -228,7 +228,7 @@ export default function Operations() {
         <div className="flex-1 overflow-y-auto md:overflow-y-hidden md:overflow-x-auto pb-4">
           <div className="flex flex-col md:flex-row gap-6 h-auto md:h-full min-w-full md:min-w-[1200px] px-1">
             {kanbanColumns.map((col, index) => {
-              const columnItems = workOrders.filter(o => col.statuses.includes(o.status));
+              const columnItems = workOrders.filter(o => col.statuses && col.statuses.includes(o.status));
               
               return (
                 <div 
