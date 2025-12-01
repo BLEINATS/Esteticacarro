@@ -166,13 +166,42 @@ const yesterday = subDays(today, 1);
 const initialClients: Client[] = [
   { 
     id: 'c1', name: 'Dr. Roberto Silva', phone: '11999998888', email: 'roberto.med@email.com', notes: 'Cliente VIP. Exigente com acabamento interno.',
-    vehicles: [{ id: 'v1', model: 'Porsche Macan', plate: 'POR-9111', color: 'Cinza Nardo', year: '2023', size: 'large' }],
+    vehicles: [
+      { id: 'v1', model: 'Porsche Macan', plate: 'POR-9111', color: 'Cinza Nardo', year: '2023', size: 'large' },
+      { id: 'v2', model: 'BMW X5', plate: 'BMW-5588', color: 'Preto Obsidiana', year: '2022', size: 'large' }
+    ],
     ltv: 15500.00, lastVisit: formatISO(yesterday), visitCount: 12, status: 'active', segment: 'vip'
   },
+  {
+    id: 'c2', name: 'Márcia Oliveira', phone: '11988887777', email: 'marcia.oliv@email.com', notes: 'Gerente de RH em startup tech.',
+    vehicles: [{ id: 'v3', model: 'Mercedes C180', plate: 'MER-4455', color: 'Branco Pérola', year: '2021', size: 'medium' }],
+    ltv: 8200.00, lastVisit: formatISO(subDays(today, 3)), visitCount: 8, status: 'active', segment: 'regular'
+  },
+  {
+    id: 'c3', name: 'Felipe Santos', phone: '11987776666', email: 'felipe@constructora.com', notes: 'Proprietário de construtora. Ama carros de luxo.',
+    vehicles: [
+      { id: 'v4', model: 'Audi A6', plate: 'AUD-2233', color: 'Cinza', year: '2023', size: 'medium' },
+      { id: 'v5', model: 'Land Rover Discovery', plate: 'LRD-7788', color: 'Preto', year: '2022', size: 'xl' }
+    ],
+    ltv: 12400.00, lastVisit: formatISO(subDays(today, 7)), visitCount: 6, status: 'active', segment: 'premium'
+  },
+  {
+    id: 'c4', name: 'Juliana Costa', phone: '11986665555', email: 'ju.costa@hotmail.com', notes: 'Vendedora de imóveis. Preocupada com apresentação do carro.',
+    vehicles: [{ id: 'v6', model: 'Volkswagen Tiguan', plate: 'VW-1199', color: 'Prata', year: '2020', size: 'medium' }],
+    ltv: 5600.00, lastVisit: formatISO(subDays(today, 14)), visitCount: 4, status: 'active', segment: 'regular'
+  },
+  {
+    id: 'c5', name: 'Carlos Mendes', phone: '11985554444', email: 'carlos.m@email.com', notes: 'Advogado. Quer apenas o melhor para seu Jaguar.',
+    vehicles: [{ id: 'v7', model: 'Jaguar XF', plate: 'JAG-3344', color: 'Vermelho', year: '2021', size: 'large' }],
+    ltv: 18900.00, lastVisit: formatISO(subDays(today, 2)), visitCount: 10, status: 'active', segment: 'vip'
+  }
 ];
 const initialReminders: Reminder[] = []; 
 const initialEmployees: Employee[] = [
   { id: 'e1', name: 'Mestre Miyagi', role: 'Funileiro', pin: '1234', salaryType: 'commission', fixedSalary: 0, commissionRate: 30, commissionBase: 'net', active: true, balance: 3450.00 },
+  { id: 'e2', name: 'João Detalhista', role: 'Detalhista', pin: '5678', salaryType: 'commission', fixedSalary: 0, commissionRate: 25, commissionBase: 'net', active: true, balance: 2890.50 },
+  { id: 'e3', name: 'Lucas Polidor', role: 'Polidor', pin: '2468', salaryType: 'commission', fixedSalary: 500, commissionRate: 20, commissionBase: 'net', active: true, balance: 1250.00 },
+  { id: 'e4', name: 'Ana Administrativo', role: 'Recepcionista', pin: '1357', salaryType: 'fixed', fixedSalary: 2500, commissionRate: 0, commissionBase: 'gross', active: true, balance: 0 },
   { id: 'e5', name: 'Fernanda Gerente', role: 'Manager', pin: '9999', salaryType: 'fixed', fixedSalary: 3500, commissionRate: 0, commissionBase: 'gross', active: true, balance: 0 },
 ];
 
@@ -298,12 +327,115 @@ const initialInventory: InventoryItem[] = [
     { id: 7, name: 'Lixa d\'água 1200', category: 'Funilaria', stock: 100, unit: 'un', minStock: 50, status: 'ok', costPrice: 2.50 },
     { id: 8, name: 'APC Flotador', category: 'Interior', stock: 20, unit: 'L', minStock: 15, status: 'ok', costPrice: 18.00 },
     { id: 9, name: 'Vitrificador 9H', category: 'Proteção', stock: 8, unit: 'un', minStock: 3, status: 'ok', costPrice: 350.00 },
-    { id: 10, name: 'Pincel Detalhamento', category: 'Acessórios', stock: 12, unit: 'un', minStock: 10, status: 'ok', costPrice: 15.00 }
+    { id: 10, name: 'Pincel Detalhamento', category: 'Acessórios', stock: 12, unit: 'un', minStock: 10, status: 'ok', costPrice: 15.00 },
+    { id: 11, name: 'Spray Protetor de Pneu', category: 'Acabamento', stock: 25, unit: 'un', minStock: 15, status: 'ok', costPrice: 12.50 },
+    { id: 12, name: 'Toalha Microfibra Premium', category: 'Acessórios', stock: 35, unit: 'un', minStock: 20, status: 'ok', costPrice: 8.00 },
+    { id: 13, name: 'Spray Secante', category: 'Lavagem', stock: 18, unit: 'un', minStock: 10, status: 'ok', costPrice: 25.00 },
+    { id: 14, name: 'Ozônio Sanitizador', category: 'Interior', stock: 6, unit: 'un', minStock: 5, status: 'warning', costPrice: 85.00 }
 ];
 
-const initialWorkOrders: WorkOrder[] = [];
-const initialEmployeeTransactions: EmployeeTransaction[] = [];
-const initialCampaigns: MarketingCampaign[] = [];
+const initialWorkOrders: WorkOrder[] = [
+  {
+    id: 'os-001',
+    clientId: 'c1',
+    clientName: 'Dr. Roberto Silva',
+    phone: '11999998888',
+    plate: 'POR-9111',
+    vehicle: 'Porsche Macan 2023',
+    service: 'Vitrificação 3 Anos',
+    serviceId: 'srv3',
+    status: 'Concluído',
+    damages: [],
+    serviceNotes: 'Cliente solicitou polimento antes da vitrificação.',
+    createdAt: formatISO(subDays(today, 5)),
+    completedAt: formatISO(subDays(today, 4)),
+    totalPrice: 2800.00,
+    paymentStatus: 'paid',
+    paymentMethod: 'Cartão Crédito',
+    npsScore: 9,
+    npsComment: 'Excelente trabalho! Brilho perfeito.'
+  },
+  {
+    id: 'os-002',
+    clientId: 'c2',
+    clientName: 'Márcia Oliveira',
+    phone: '11988887777',
+    plate: 'MER-4455',
+    vehicle: 'Mercedes C180 2021',
+    service: 'Lavagem Técnica + Polimento Comercial',
+    serviceId: 'srv1',
+    status: 'Aguardando Pagamento',
+    damages: ['Pequeno risco no pneu dianteiro esquerdo'],
+    serviceNotes: 'Carro estava muito sujo. Aplicar protetor de pneus.',
+    createdAt: formatISO(subDays(today, 2)),
+    totalPrice: 1150.00,
+    paymentStatus: 'pending',
+    paymentMethod: 'Boleto'
+  },
+  {
+    id: 'os-003',
+    clientId: 'c3',
+    clientName: 'Felipe Santos',
+    phone: '11987776666',
+    plate: 'AUD-2233',
+    vehicle: 'Audi A6 2023',
+    service: 'Higienização Interna + Oxi-Sanitização',
+    serviceId: 'srv4',
+    status: 'Em Andamento',
+    damages: ['Mancha em um assento'],
+    serviceNotes: 'Cliente urgente - prioridade máxima.',
+    createdAt: formatISO(today),
+    totalPrice: 890.00,
+    paymentStatus: 'pending',
+    paymentMethod: 'Cartão Débito'
+  },
+  {
+    id: 'os-004',
+    clientId: 'c4',
+    clientName: 'Juliana Costa',
+    phone: '11986665555',
+    plate: 'VW-1199',
+    vehicle: 'Volkswagen Tiguan 2020',
+    service: 'Lavagem Técnica',
+    serviceId: 'srv1',
+    status: 'Concluído',
+    damages: [],
+    serviceNotes: 'Rotina mensal do cliente.',
+    createdAt: formatISO(subDays(today, 8)),
+    completedAt: formatISO(subDays(today, 8)),
+    totalPrice: 96.00,
+    paymentStatus: 'paid',
+    paymentMethod: 'PIX',
+    npsScore: 8,
+    npsComment: 'Muito satisfeito com o resultado.'
+  },
+  {
+    id: 'os-005',
+    clientId: 'c5',
+    clientName: 'Carlos Mendes',
+    phone: '11985554444',
+    plate: 'JAG-3344',
+    vehicle: 'Jaguar XF 2021',
+    service: 'PPF (Frontal)',
+    serviceId: 'srv8',
+    status: 'Orçamento',
+    damages: [],
+    serviceNotes: 'Carro novo. Cliente quer proteger a frente com película.',
+    createdAt: formatISO(today),
+    totalPrice: 3500.00,
+    paymentStatus: 'pending',
+    paymentMethod: 'A Definir'
+  }
+];
+const initialEmployeeTransactions: EmployeeTransaction[] = [
+  { id: 'et-001', employeeId: 'e1', type: 'commission', amount: 450.00, description: 'Comissão OS-001', date: formatISO(subDays(today, 4)), referenceId: 'os-001' },
+  { id: 'et-002', employeeId: 'e2', type: 'commission', amount: 280.00, description: 'Comissão OS-004', date: formatISO(subDays(today, 8)), referenceId: 'os-004' },
+  { id: 'et-003', employeeId: 'e1', type: 'advance', amount: -500.00, description: 'Adiantamento solicitado', date: formatISO(subDays(today, 3)) },
+];
+const initialCampaigns: MarketingCampaign[] = [
+  { id: 'camp-001', name: 'Promoção Vitrificação - Março', status: 'active', startDate: formatISO(today), endDate: formatISO(addDays(today, 30)), budget: 1500.00, spent: 450.00 },
+  { id: 'camp-002', name: 'Black Friday Antecipada', status: 'draft', startDate: formatISO(addDays(today, 60)), endDate: formatISO(addDays(today, 65)), budget: 5000.00, spent: 0 },
+];
 
 const initialFinancialTransactions: FinancialTransaction[] = [
   { id: 1, desc: 'Pagamento OS #4092 - BMW X5', category: 'Serviços', amount: 2500.00, netAmount: 2375.00, fee: 125.00, type: 'income', date: '2024-03-14', dueDate: '2024-03-14', method: 'Cartão Crédito (3x)', installments: 3, status: 'paid' },
