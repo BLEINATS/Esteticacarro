@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Search, Filter, Plus, Clock, 
   MoreHorizontal, Car,
   UserPlus, AlertCircle, CheckCircle2, 
-  Hammer, ShieldCheck, PackageX
+  Hammer, ShieldCheck, PackageX,
+  ChevronRight, ChevronLeft
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useApp } from '../context/AppContext';
@@ -31,12 +32,46 @@ const StatusBadge = ({ status }: { status: string }) => {
 };
 
 export default function Operations() {
-  const { workOrders, clients } = useApp();
+  const { workOrders, clients, updateWorkOrder } = useApp();
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
   const [selectedOS, setSelectedOS] = useState<WorkOrder | null>(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
+  const [touchStart, setTouchStart] = useState(0);
+  const [draggedCard, setDraggedCard] = useState<{ osId: string; cardRef: React.RefObject<HTMLDivElement> } | null>(null);
 
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Cliente Desconhecido';
+
+  // Swipe gesture handling for Kanban cards
+  const handleSwipe = (osId: string, os: WorkOrder) => {
+    const distance = touchStart;
+    
+    if (distance > 50) {
+      // Swiped RIGHT - Move to right status (approval -> queue -> execution -> qa -> done)
+      const statusFlow = ['Aguardando Aprovação', 'Aguardando', 'Em Andamento', 'Controle de Qualidade', 'Concluído'];
+      const currentIndex = statusFlow.indexOf(os.status);
+      if (currentIndex < statusFlow.length - 1) {
+        updateWorkOrder(osId, { status: statusFlow[currentIndex + 1] as any });
+      }
+    } else if (distance < -50) {
+      // Swiped LEFT - Move to left status
+      const statusFlow = ['Aguardando Aprovação', 'Aguardando', 'Em Andamento', 'Controle de Qualidade', 'Concluído'];
+      const currentIndex = statusFlow.indexOf(os.status);
+      if (currentIndex > 0) {
+        updateWorkOrder(osId, { status: statusFlow[currentIndex - 1] as any });
+      }
+    }
+    setTouchStart(0);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStart(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent, osId: string, os: WorkOrder) => {
+    const touchEnd = e.changedTouches[0].clientX;
+    setTouchStart(touchEnd - touchStart);
+    handleSwipe(osId, os);
+  };
 
   const sortedWorkOrders = [...workOrders].sort((a, b) => {
     if (a.status === 'Aguardando Aprovação' && b.status !== 'Aguardando Aprovação') return -1;
@@ -224,102 +259,100 @@ export default function Operations() {
 
       {/* Kanban View (RESPONSIVE) */}
       {viewMode === 'kanban' && (
-        // FIX: overflow-y-auto on mobile to scroll the page, overflow-x-auto on desktop to scroll columns
-        <div className="flex-1 overflow-y-auto md:overflow-y-hidden md:overflow-x-auto pb-4">
-          <div className="flex flex-col md:flex-row gap-6 h-auto md:h-full min-w-full md:min-w-[1200px] px-1">
-            {kanbanColumns.map((col, index) => {
-              const columnItems = workOrders.filter(o => col.statuses && col.statuses.includes(o.status));
-              
-              return (
-                <div 
-                  key={col.id} 
-                  className={cn(
-                    "flex flex-col rounded-xl w-full md:min-w-[280px] md:max-w-xs border shadow-sm transition-all duration-300 animate-in fade-in slide-in-from-bottom-4",
-                    col.bgColor,
-                    col.borderColor,
-                    "border-t-4 border-x border-b border-slate-200 dark:border-slate-800",
-                    // FIX: Auto height on mobile to stack properly, full height on desktop
-                    "h-auto md:h-full"
-                  )}
-                  style={{ animationDelay: `${index * 100}ms` }}
-                >
-                  {/* Column Header */}
-                  <div className="p-4 flex items-center justify-between border-b border-slate-200/50 dark:border-slate-700/50">
-                    <div className="flex items-center gap-2">
-                      <div className={cn(
-                        "p-1.5 rounded-md",
-                        `text-${col.color}-600 dark:text-${col.color}-400 bg-white dark:bg-slate-800`
-                      )}>
-                        <col.icon size={16} />
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <div className="bg-white dark:bg-slate-900 p-2 sm:p-4 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm mb-2 text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+            💡 <strong>Mobile:</strong> Deslize para direita (→) para aprovar ou avançar. Deslize esquerda (←) para voltar. <strong>Desktop:</strong> Use as setas → e ← nos cartões.
+          </div>
+          <div className="overflow-x-auto pb-2 flex-1">
+            <div className="flex gap-2 sm:gap-4 min-w-min px-2 sm:px-4 h-full">
+              {kanbanColumns.map((column) => {
+                const columnWorkOrders = workOrders.filter(os => column.statuses.includes(os.status));
+                const Icon = column.icon;
+                
+                return (
+                  <div key={column.id} className="flex-shrink-0 w-72 sm:w-80 flex flex-col">
+                    {/* Column Header */}
+                    <div className={cn(
+                      "flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-3 rounded-t-lg border-t-4 bg-white dark:bg-slate-900",
+                      column.borderColor
+                    )}>
+                      <Icon size={18} />
+                      <div>
+                        <h3 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">{column.title}</h3>
+                        <p className="text-[10px] sm:text-xs text-slate-500">{columnWorkOrders.length} OS</p>
                       </div>
-                      <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm">{col.title}</h3>
                     </div>
-                    <span className="bg-white dark:bg-slate-800 px-2 py-0.5 rounded-full text-xs font-bold text-slate-500 dark:text-slate-400 shadow-sm border border-slate-100 dark:border-slate-700">
-                      {columnItems.length}
-                    </span>
-                  </div>
 
-                  {/* Column Content */}
-                  <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 min-h-[100px]">
-                    {columnItems.map(os => (
-                      <div 
-                        key={os.id} 
-                        onClick={() => setSelectedOS(os)}
-                        className={cn(
-                            "bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 cursor-pointer hover:shadow-lg transition-all hover:-translate-y-1 group relative overflow-hidden",
-                            os.status === 'Aguardando Aprovação' ? "ring-1 ring-purple-500" : "",
-                            os.status === 'Aguardando Peças' ? "border-l-4 border-l-orange-500" : ""
-                        )}
-                      >
-                        {/* Status Indicator Bar */}
-                        <div className={cn("absolute top-0 left-0 w-1 h-full", `bg-${col.color}-500`)} />
-
-                        <div className="flex justify-between items-start mb-2 pl-2">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">#{os.id}</span>
-                          {os.status === 'Aguardando Peças' && (
-                             <div className="flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 dark:bg-orange-900/30 px-1.5 py-0.5 rounded">
-                               <PackageX size={10} /> Peças
-                             </div>
-                          )}
-                        </div>
-                        
-                        <div className="pl-2">
-                            <h4 className="font-bold text-slate-900 dark:text-white mb-0.5 truncate">{os.vehicle}</h4>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 line-clamp-2">{os.service}</p>
-                            
-                            <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
-                            <div className="flex items-center gap-2">
-                                <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center text-[10px] font-bold border border-slate-200 dark:border-slate-700">
-                                {os.technician.charAt(0)}
-                                </div>
-                                <span className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[80px]">{os.technician.split(' ')[0]}</span>
+                    {/* Cards Container */}
+                    <div className={cn("flex-1 overflow-y-auto space-y-2 sm:space-y-3 p-2 sm:p-3", column.bgColor)}>
+                      {columnWorkOrders.length > 0 ? (
+                        columnWorkOrders.map((os) => (
+                          <div
+                            key={os.id}
+                            onTouchStart={handleTouchStart}
+                            onTouchEnd={(e) => handleTouchEnd(e, os.id, os)}
+                            onClick={() => setSelectedOS(os)}
+                            className="bg-white dark:bg-slate-800 p-2 sm:p-3 rounded-lg border border-slate-200 dark:border-slate-700 cursor-move hover:shadow-lg transition-all select-none touch-pan-y"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm truncate">{os.vehicle}</p>
+                                <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400">#{os.id}</p>
+                                <p className="text-[10px] sm:text-xs text-slate-600 dark:text-slate-300 mt-1 line-clamp-2">{os.service}</p>
+                              </div>
+                              <div className="text-xs sm:text-sm font-bold text-blue-600 dark:text-blue-400 flex-shrink-0">
+                                R$ {os.totalValue.toFixed(0)}
+                              </div>
                             </div>
-                            {os.deadline !== 'A Definir' && (
-                                <span className={cn(
-                                    "text-[10px] font-medium px-1.5 py-0.5 rounded",
-                                    os.deadline.includes('Ontem') || os.deadline.includes('Atrasado') 
-                                        ? "text-red-600 bg-red-50 dark:bg-red-900/20" 
-                                        : "text-slate-400 bg-slate-50 dark:bg-slate-800"
-                                )}>
-                                    {os.deadline}
-                                </span>
-                            )}
+                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                              <span className="text-[9px] sm:text-[10px] text-slate-600 dark:text-slate-400">{getClientName(os.clientId)}</span>
+                              <div className="flex gap-0.5">
+                                {os.status !== 'Concluído' && (
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const statusFlow = ['Aguardando Aprovação', 'Aguardando', 'Em Andamento', 'Controle de Qualidade', 'Concluído'];
+                                      const currentIndex = statusFlow.indexOf(os.status);
+                                      if (currentIndex < statusFlow.length - 1) {
+                                        updateWorkOrder(os.id, { status: statusFlow[currentIndex + 1] as any });
+                                      }
+                                    }}
+                                    className="p-1 hover:bg-green-100 dark:hover:bg-green-900/30 rounded text-green-600 dark:text-green-400"
+                                    title="Avançar"
+                                  >
+                                    <ChevronRight size={14} />
+                                  </button>
+                                )}
+                                {os.status !== 'Aguardando Aprovação' && (
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const statusFlow = ['Aguardando Aprovação', 'Aguardando', 'Em Andamento', 'Controle de Qualidade', 'Concluído'];
+                                      const currentIndex = statusFlow.indexOf(os.status);
+                                      if (currentIndex > 0) {
+                                        updateWorkOrder(os.id, { status: statusFlow[currentIndex - 1] as any });
+                                      }
+                                    }}
+                                    className="p-1 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded text-orange-600 dark:text-orange-400"
+                                    title="Voltar"
+                                  >
+                                    <ChevronLeft size={14} />
+                                  </button>
+                                )}
+                              </div>
                             </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="flex items-center justify-center h-32 text-slate-400 text-xs text-center">
+                          Nenhuma OS nesta etapa
                         </div>
-                      </div>
-                    ))}
-                    {columnItems.length === 0 && (
-                        <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-50 min-h-[100px]">
-                            <div className="p-3 rounded-full bg-slate-100 dark:bg-slate-800/50 mb-2">
-                                <col.icon size={20} />
-                            </div>
-                            <span className="text-xs font-medium">Vazio</span>
-                        </div>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
