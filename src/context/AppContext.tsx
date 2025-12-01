@@ -345,6 +345,7 @@ const initialWorkOrders: WorkOrder[] = [
     service: 'Vitrificação 3 Anos',
     serviceId: 'srv3',
     status: 'Concluído',
+    technician: 'Mestre Miyagi',
     damages: [],
     serviceNotes: 'Cliente solicitou polimento antes da vitrificação.',
     createdAt: formatISO(subDays(today, 5)),
@@ -365,6 +366,7 @@ const initialWorkOrders: WorkOrder[] = [
     service: 'Lavagem Técnica + Polimento Comercial',
     serviceId: 'srv1',
     status: 'Aguardando Pagamento',
+    technician: 'João Detalhista',
     damages: ['Pequeno risco no pneu dianteiro esquerdo'],
     serviceNotes: 'Carro estava muito sujo. Aplicar protetor de pneus.',
     createdAt: formatISO(subDays(today, 2)),
@@ -382,6 +384,7 @@ const initialWorkOrders: WorkOrder[] = [
     service: 'Higienização Interna + Oxi-Sanitização',
     serviceId: 'srv4',
     status: 'Em Andamento',
+    technician: 'Lucas Polidor',
     damages: ['Mancha em um assento'],
     serviceNotes: 'Cliente urgente - prioridade máxima.',
     createdAt: formatISO(today),
@@ -399,6 +402,7 @@ const initialWorkOrders: WorkOrder[] = [
     service: 'Lavagem Técnica',
     serviceId: 'srv1',
     status: 'Concluído',
+    technician: 'João Detalhista',
     damages: [],
     serviceNotes: 'Rotina mensal do cliente.',
     createdAt: formatISO(subDays(today, 8)),
@@ -419,6 +423,7 @@ const initialWorkOrders: WorkOrder[] = [
     service: 'PPF (Frontal)',
     serviceId: 'srv8',
     status: 'Orçamento',
+    technician: 'Mestre Miyagi',
     damages: [],
     serviceNotes: 'Carro novo. Cliente quer proteger a frente com película.',
     createdAt: formatISO(today),
@@ -452,18 +457,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [companySettings, setCompanySettings] = useState<CompanySettings>(() => getStorage('companySettings_v12', initialCompanySettings)); 
   const [subscription, setSubscription] = useState<SubscriptionDetails>(() => getStorage('subscription_v1', initialSubscription));
   
-  const [inventory, setInventory] = useState<InventoryItem[]>(() => getStorage('inventory_v8', initialInventory)); 
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() => getStorage<WorkOrder[]>('workOrders_v7', initialWorkOrders));
-  const [clients, setClients] = useState<Client[]>(() => getStorage<Client[]>('clients_v7', initialClients));
-  const [reminders, setReminders] = useState<Reminder[]>(() => getStorage('reminders_v7', initialReminders));
+  const [inventory, setInventory] = useState<InventoryItem[]>(() => getStorage('inventory_v9', initialInventory)); 
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() => getStorage<WorkOrder[]>('workOrders_v8', initialWorkOrders));
+  const [clients, setClients] = useState<Client[]>(() => getStorage<Client[]>('clients_v8', initialClients));
+  const [reminders, setReminders] = useState<Reminder[]>(() => getStorage('reminders_v8', initialReminders));
   
   const [services, setServices] = useState<ServiceCatalogItem[]>(() => getStorage('services_v10', initialServices));
   const [priceMatrix, setPriceMatrix] = useState<PriceMatrixEntry[]>(() => getStorage('priceMatrix_v8', initialPriceMatrix));
   
-  const [employees, setEmployees] = useState<Employee[]>(() => getStorage('employees_v8', initialEmployees)); 
-  const [employeeTransactions, setEmployeeTransactions] = useState<EmployeeTransaction[]>(() => getStorage('employeeTransactions_v7', initialEmployeeTransactions));
+  const [employees, setEmployees] = useState<Employee[]>(() => getStorage('employees_v9', initialEmployees)); 
+  const [employeeTransactions, setEmployeeTransactions] = useState<EmployeeTransaction[]>(() => getStorage('employeeTransactions_v8', initialEmployeeTransactions));
   // FIXED: Updated version key to force clean state for finance
-  const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>(() => getStorage('financialTransactions_v2', initialFinancialTransactions));
+  const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>(() => getStorage('financialTransactions_v3', initialFinancialTransactions));
 
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>(() => getStorage<MarketingCampaign[]>('campaigns_v7', initialCampaigns));
   
@@ -475,14 +480,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => setStorage('companySettings_v12', companySettings), [companySettings]);
   useEffect(() => setStorage('subscription_v1', subscription), [subscription]);
   useEffect(() => setStorage('theme', theme), [theme]);
-  useEffect(() => setStorage('reminders_v7', reminders), [reminders]); 
+  useEffect(() => setStorage('reminders_v8', reminders), [reminders]); 
   useEffect(() => setStorage('services_v10', services), [services]);
   useEffect(() => setStorage('priceMatrix_v8', priceMatrix), [priceMatrix]); 
-  useEffect(() => setStorage('inventory_v8', inventory), [inventory]);
-  useEffect(() => setStorage('employees_v8', employees), [employees]); 
-  useEffect(() => setStorage('employeeTransactions_v7', employeeTransactions), [employeeTransactions]);
+  useEffect(() => setStorage('inventory_v9', inventory), [inventory]);
+  useEffect(() => setStorage('employees_v9', employees), [employees]); 
+  useEffect(() => setStorage('employeeTransactions_v8', employeeTransactions), [employeeTransactions]);
   // FIXED: Updated version key
-  useEffect(() => setStorage('financialTransactions_v2', financialTransactions), [financialTransactions]);
+  useEffect(() => setStorage('financialTransactions_v3', financialTransactions), [financialTransactions]);
 
   // RECOVERY LOGIC
   useEffect(() => {

@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AppProvider } from './context/AppContext';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Operations from './pages/Operations';
@@ -16,29 +17,31 @@ import ShopLanding from './pages/ShopLanding';
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Rota Pública da Loja (Landing Page) */}
-        <Route path="/shop" element={<ShopLanding />} />
+    <AppProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Rota Pública da Loja (Landing Page) */}
+          <Route path="/shop" element={<ShopLanding />} />
 
-        {/* Portal do Técnico (Standalone - Sem Sidebar de Admin) */}
-        <Route path="/tech-portal" element={<TechPortal />} />
+          {/* Portal do Técnico (Standalone - Sem Sidebar de Admin) */}
+          <Route path="/tech-portal" element={<TechPortal />} />
 
-        {/* Rotas do Sistema Admin (Com Layout/Sidebar) */}
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="schedule" element={<Schedule />} />
-          <Route path="operations" element={<Operations />} />
-          <Route path="clients" element={<Clients />} />
-          <Route path="marketing" element={<Marketing />} />
-          <Route path="finance" element={<Finance />} />
-          <Route path="inventory" element={<Inventory />} />
-          <Route path="team" element={<Team />} />
-          <Route path="pricing" element={<ServicesPricing />} />
-          <Route path="settings" element={<Settings />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+          {/* Rotas do Sistema Admin (Com Layout/Sidebar) */}
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Dashboard />} />
+            <Route path="schedule" element={<Schedule />} />
+            <Route path="operations" element={<Operations />} />
+            <Route path="clients" element={<Clients />} />
+            <Route path="marketing" element={<Marketing />} />
+            <Route path="finance" element={<Finance />} />
+            <Route path="inventory" element={<Inventory />} />
+            <Route path="team" element={<Team />} />
+            <Route path="pricing" element={<ServicesPricing />} />
+            <Route path="settings" element={<Settings />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AppProvider>
   );
 }
 
