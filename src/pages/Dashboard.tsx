@@ -130,25 +130,25 @@ export default function Dashboard() {
       )}
 
       {/* Header & Quick Actions */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Command Center</h2>
-          <p className="text-slate-500 dark:text-slate-400">Visão 360º da Crystal Care Auto Detail.</p>
+          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Command Center</h2>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">Visão 360º da Crystal Care Auto Detail.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 sm:gap-3">
           <button 
             onClick={() => navigate('/schedule')}
-            className="hidden md:flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm"
+            className="flex items-center justify-center gap-1 sm:gap-2 flex-1 sm:flex-none px-2 sm:px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm"
           >
-            <Calendar size={18} />
-            Agenda
+            <Calendar size={16} className="sm:w-[18px] sm:h-[18px]" />
+            <span>Agenda</span>
           </button>
           <button 
             onClick={handleNewOS}
-            className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20"
+            className="flex items-center justify-center gap-1 sm:gap-2 flex-1 sm:flex-none px-2 sm:px-5 py-2 bg-blue-600 text-white rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20"
           >
-            <Plus size={18} />
-            Nova OS
+            <Plus size={16} className="sm:w-[18px] sm:h-[18px]" />
+            <span>Nova OS</span>
           </button>
         </div>
       </div>
