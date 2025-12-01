@@ -260,6 +260,18 @@ export default function Settings() {
                       className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                     />
                   </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Saldo Inicial (R$)</label>
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      value={formData.initialBalance}
+                      onChange={e => setFormData({...formData, initialBalance: parseFloat(e.target.value) || 0})}
+                      placeholder="15000,00"
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none font-bold"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Valor base para cálculo do extrato bancário</p>
+                  </div>
                 </div>
 
                 {/* Social Media Fields */}
