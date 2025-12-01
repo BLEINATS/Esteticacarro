@@ -119,23 +119,23 @@ export default function ServicesPricing() {
       </div>
 
       {/* Search & Filter Bar (Visible on both tabs for convenience) */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex gap-4">
+      <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row gap-2 sm:gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 
             type="text" 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar serviço por nome ou categoria..." 
-            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white placeholder-slate-400 transition-colors"
+            placeholder="Buscar serviço..." 
+            className="w-full pl-10 pr-3 sm:pr-4 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base text-slate-900 dark:text-white placeholder-slate-400 transition-colors"
           />
         </div>
         {activeTab === 'catalog' && (
             <button 
                 onClick={handleNewService}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm transition-colors"
+                className="flex items-center justify-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 shadow-sm transition-colors whitespace-nowrap"
             >
-                <Plus size={18} />
+                <Plus size={16} />
                 Novo Serviço
             </button>
         )}
@@ -210,57 +210,60 @@ export default function ServicesPricing() {
           </div>
 
           {/* Pricing Matrix Table */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                <tr>
-                  <th className="px-6 py-4 font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider w-1/3">Serviço</th>
-                  {sizes.map(size => (
-                    <th key={size} className="px-6 py-4 font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-center">
-                      {VEHICLE_SIZES[size]}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredServices.map((service) => (
-                  <tr key={service.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-bold text-slate-900 dark:text-white">{service.name}</p>
-                        <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-bold border", getCategoryStyle(service.category))}>
-                            {service.category}
-                        </span>
-                      </div>
-                    </td>
-                    {sizes.map(size => {
-                      const entry = priceMatrix.find(p => p.serviceId === service.id && p.size === size);
-                      const price = entry ? entry.price : 0;
-                      return (
-                        <td key={size} className="px-6 py-4 text-center">
-                          <div className="relative inline-block">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">R$</span>
-                            <input 
-                              type="number"
-                              value={price}
-                              onChange={(e) => updatePrice(service.id, size, Number(e.target.value))}
-                              className="w-24 pl-8 pr-2 py-1.5 bg-slate-100 dark:bg-slate-800 border border-transparent hover:border-slate-300 dark:hover:border-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg text-right font-medium text-slate-900 dark:text-white transition-all"
-                            />
-                          </div>
-                        </td>
-                      );
-                    })}
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs sm:text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+                  <tr>
+                    <th className="px-2 sm:px-6 py-3 sm:py-4 font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider min-w-[140px]">Serviço</th>
+                    {sizes.map(size => (
+                      <th key={size} className="px-1 sm:px-6 py-3 sm:py-4 font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-center whitespace-nowrap min-w-[80px]">
+                        <span className="hidden sm:inline">{VEHICLE_SIZES[size]}</span>
+                        <span className="sm:hidden">{size === 'small' ? 'P' : size === 'medium' ? 'M' : size === 'large' ? 'G' : 'XG'}</span>
+                      </th>
+                    ))}
                   </tr>
-                ))}
-                {filteredServices.length === 0 && (
-                    <tr>
-                        <td colSpan={5} className="px-6 py-8 text-center text-slate-400">
-                            Nenhum serviço encontrado.
-                        </td>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredServices.map((service) => (
+                    <tr key={service.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                      <td className="px-2 sm:px-6 py-2 sm:py-4 min-w-[140px]">
+                        <div className="flex flex-col gap-1">
+                          <p className="font-bold text-slate-900 dark:text-white truncate max-w-[120px] sm:max-w-none">{service.name}</p>
+                          <span className={cn("text-[8px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold border w-fit", getCategoryStyle(service.category))}>
+                              {service.category}
+                          </span>
+                        </div>
+                      </td>
+                      {sizes.map(size => {
+                        const entry = priceMatrix.find(p => p.serviceId === service.id && p.size === size);
+                        const price = entry ? entry.price : 0;
+                        return (
+                          <td key={size} className="px-1 sm:px-6 py-2 sm:py-4 text-center">
+                            <div className="relative inline-block">
+                              <span className="absolute left-1 sm:left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] sm:text-xs">R$</span>
+                              <input 
+                                type="number"
+                                value={price}
+                                onChange={(e) => updatePrice(service.id, size, Number(e.target.value))}
+                                className="w-16 sm:w-24 pl-5 sm:pl-8 pr-1 sm:pr-2 py-1.5 bg-slate-100 dark:bg-slate-800 border border-transparent hover:border-slate-300 dark:hover:border-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg text-right font-medium text-slate-900 dark:text-white transition-all text-xs sm:text-sm"
+                              />
+                            </div>
+                          </td>
+                        );
+                      })}
                     </tr>
-                )}
-              </tbody>
-            </table>
+                  ))}
+                  {filteredServices.length === 0 && (
+                      <tr>
+                          <td colSpan={5} className="px-6 py-8 text-center text-slate-400">
+                              Nenhum serviço encontrado.
+                          </td>
+                      </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
