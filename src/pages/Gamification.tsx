@@ -166,33 +166,203 @@ export default function Gamification() {
 
             {/* Rewards Structure */}
             {isEnabled && (
-              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                  <Gift size={20} className="text-emerald-600" />
-                  Estrutura de Recompensas
-                </h3>
-                <div className="space-y-3">
-                  {levelSystem && [
-                    { level: 1, name: 'Bronze', points: '0-500', reward: '5% desconto', color: 'from-amber-500 to-amber-600' },
-                    { level: 2, name: 'Prata', points: '501-1500', reward: '10% desconto', color: 'from-slate-400 to-slate-500' },
-                    { level: 3, name: 'Ouro', points: '1501-3000', reward: '15% desconto', color: 'from-yellow-500 to-yellow-600' },
-                    { level: 4, name: 'Platina', points: '3001+', reward: '20% desconto + Brinde', color: 'from-blue-500 to-blue-600' },
-                  ].map((tier) => (
-                    <div key={tier.level} className={`bg-gradient-to-r ${tier.color} p-4 rounded-lg text-white shadow-md`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Star size={24} className="fill-current" />
+              <>
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                    <Gift size={20} className="text-emerald-600" />
+                    Estrutura de Recompensas
+                  </h3>
+                  <div className="space-y-3">
+                    {levelSystem && [
+                      { level: 1, name: 'Bronze', points: '0-500', reward: '5% desconto', color: 'from-amber-500 to-amber-600' },
+                      { level: 2, name: 'Prata', points: '501-1500', reward: '10% desconto', color: 'from-slate-400 to-slate-500' },
+                      { level: 3, name: 'Ouro', points: '1501-3000', reward: '15% desconto', color: 'from-yellow-500 to-yellow-600' },
+                      { level: 4, name: 'Platina', points: '3001+', reward: '20% desconto + Brinde', color: 'from-blue-500 to-blue-600' },
+                    ].map((tier) => (
+                      <div key={tier.level} className={`bg-gradient-to-r ${tier.color} p-4 rounded-lg text-white shadow-md`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Star size={24} className="fill-current" />
+                            <div>
+                              <p className="font-bold">{tier.name}</p>
+                              <p className="text-sm opacity-90">{tier.points} pontos</p>
+                            </div>
+                          </div>
+                          <span className="font-bold text-lg">{tier.reward}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Rewards Management */}
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <Award size={20} className="text-purple-600" />
+                      Gerenciar Recompensas
+                    </h3>
+                    <button
+                      onClick={() => setShowRewardForm(!showRewardForm)}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors"
+                    >
+                      <Plus size={18} /> Nova Recompensa
+                    </button>
+                  </div>
+
+                  {/* Add Reward Form */}
+                  {showRewardForm && (
+                    <form onSubmit={handleAddReward} className="mb-6 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Nome da Recompensa *</label>
+                          <input
+                            type="text" placeholder="ex: Desconto 10%"
+                            value={newReward.name}
+                            onChange={e => setNewReward({...newReward, name: e.target.value})}
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Tipo de Recompensa *</label>
+                          <select
+                            value={newReward.rewardType}
+                            onChange={e => setNewReward({...newReward, rewardType: e.target.value})}
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                          >
+                            <option value="discount">Desconto %</option>
+                            <option value="service">Serviço Grátis</option>
+                            <option value="gift">Brinde</option>
+                            <option value="free_service">Serviço Completo</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Descrição *</label>
+                        <textarea
+                          placeholder="ex: Desconto de 10% em todos os serviços"
+                          value={newReward.description}
+                          onChange={e => setNewReward({...newReward, description: e.target.value})}
+                          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                          rows={2}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Nível Mínimo *</label>
+                          <select
+                            value={newReward.requiredLevel}
+                            onChange={e => setNewReward({...newReward, requiredLevel: e.target.value})}
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                          >
+                            <option value="bronze">Bronze</option>
+                            <option value="silver">Prata</option>
+                            <option value="gold">Ouro</option>
+                            <option value="platinum">Platina</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Pontos Necessários</label>
+                          <input
+                            type="number" min="0"
+                            value={newReward.requiredPoints}
+                            onChange={e => setNewReward({...newReward, requiredPoints: parseInt(e.target.value)})}
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                          />
+                        </div>
+                        {newReward.rewardType === 'discount' && (
                           <div>
-                            <p className="font-bold">{tier.name}</p>
-                            <p className="text-sm opacity-90">{tier.points} pontos</p>
+                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Percentual (%)</label>
+                            <input
+                              type="number" min="0" max="100"
+                              value={newReward.percentage}
+                              onChange={e => setNewReward({...newReward, percentage: parseInt(e.target.value)})}
+                              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                            />
+                          </div>
+                        )}
+                        {(newReward.rewardType === 'gift' || newReward.rewardType === 'service' || newReward.rewardType === 'free_service') && (
+                          <div>
+                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Nome do Brinde/Serviço</label>
+                            <input
+                              type="text" placeholder="ex: Toalha Premium"
+                              value={newReward.gift}
+                              onChange={e => setNewReward({...newReward, gift: e.target.value})}
+                              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2 justify-end pt-4 border-t border-slate-200 dark:border-slate-700">
+                        <button
+                          type="button"
+                          onClick={() => setShowRewardForm(false)}
+                          className="px-4 py-2 bg-slate-300 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg font-semibold transition-colors hover:bg-slate-400 dark:hover:bg-slate-600"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold transition-colors"
+                        >
+                          Adicionar Recompensa
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* Rewards List */}
+                  <div className="space-y-3">
+                    {rewards && rewards.length > 0 ? (
+                      rewards.map(reward => (
+                        <div key={reward.id} className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-between hover:shadow-md transition-shadow">
+                          <div className="flex-1">
+                            <h4 className="font-bold text-slate-900 dark:text-white">{reward.name}</h4>
+                            <p className="text-sm text-slate-600 dark:text-slate-400">{reward.description}</p>
+                            <div className="flex gap-3 mt-2 flex-wrap">
+                              <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
+                                {reward.requiredLevel.charAt(0).toUpperCase() + reward.requiredLevel.slice(1)}
+                              </span>
+                              <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-1 rounded">
+                                {reward.requiredPoints} pontos
+                              </span>
+                              {reward.rewardType === 'discount' && (
+                                <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-1 rounded">
+                                  {reward.percentage}% desconto
+                                </span>
+                              )}
+                              {(reward.rewardType === 'gift' || reward.rewardType === 'free_service') && (
+                                <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-2 py-1 rounded">
+                                  {reward.gift}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex gap-2 ml-4">
+                            <button
+                              onClick={() => updateReward(reward.id, { active: !reward.active })}
+                              className={cn("px-3 py-1 rounded text-sm font-semibold transition-colors", reward.active ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400")}
+                            >
+                              {reward.active ? 'Ativo' : 'Inativo'}
+                            </button>
+                            <button
+                              onClick={() => deleteReward(reward.id)}
+                              className="p-2 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 rounded transition-colors"
+                            >
+                              <Trash2 size={18} />
+                            </button>
                           </div>
                         </div>
-                        <span className="font-bold text-lg">{tier.reward}</span>
-                      </div>
-                    </div>
-                  ))}
+                      ))
+                    ) : (
+                      <p className="text-center text-slate-500 dark:text-slate-400 py-4">Nenhuma recompensa cadastrada. Crie sua primeira!</p>
+                    )}
+                  </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
 
