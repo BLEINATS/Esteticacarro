@@ -96,6 +96,11 @@ interface AppContextType {
   updateReward: (id: string, updates: Partial<Reward>) => void;
   deleteReward: (id: string) => void;
   getRewardsByLevel: (level: 'bronze' | 'silver' | 'gold' | 'platinum') => Reward[];
+  
+  // Tier Management
+  updateTier: (tier: 'bronze' | 'silver' | 'gold' | 'platinum', updates: any) => void;
+  generatePKPass: (clientId: string) => string;
+  generateGoogleWallet: (clientId: string) => string;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -1087,6 +1092,71 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return rewards.filter(r => r.active && r.requiredLevel === level);
   };
 
+  // --- TIER MANAGEMENT ---
+  const updateTier = (tier: 'bronze' | 'silver' | 'gold' | 'platinum', updates: any) => {
+    updateCompanySettings({
+      ...companySettings,
+      gamification: {
+        ...companySettings.gamification,
+        tiers: (companySettings.gamification?.tiers || []).map(t => 
+          t.tier === tier ? { ...t, ...updates } : t
+        )
+      }
+    });
+  };
+
+  // --- PKPass & Google Wallet Generation ---
+  const generatePKPass = (clientId: string): string => {
+    const card = getFidelityCard(clientId);
+    const points = getClientPoints(clientId);
+    if (!card || !points) return '';
+    
+    const pkpassData = {
+      formatVersion: 1,
+      typeId: 'generic',
+      description: 'Cartão de Fidelidade Cristal Care',
+      serialNumber: card.cardNumber,
+      barcode: { format: 'QR', message: card.qrCode },
+      generic: {
+        primaryFields: [
+          { key: 'name', label: 'Cliente', value: card.cardHolder }
+        ],
+        secondaryFields: [
+          { key: 'points', label: 'Pontos', value: points.totalPoints.toString() },
+          { key: 'tier', label: 'Nível', value: points.tier.toUpperCase() }
+        ]
+      }
+    };
+    
+    return `data:text/plain;base64,${Buffer.from(JSON.stringify(pkpassData)).toString('base64')}`;
+  };
+
+  const generateGoogleWallet = (clientId: string): string => {
+    const card = getFidelityCard(clientId);
+    const points = getClientPoints(clientId);
+    if (!card || !points) return '';
+    
+    const walletData = {
+      classId: 'cristal-care-fidelidade',
+      objectId: card.cardNumber,
+      genericClass: {
+        id: 'cristal-care-fidelidade',
+        issuerName: 'Cristal Care Autodetail',
+        cardNumberLabel: 'Cartão de Fidelidade'
+      },
+      genericObject: {
+        id: card.cardNumber,
+        classId: 'cristal-care-fidelidade',
+        cardNumber: card.cardNumber,
+        heroImage: {
+          contentDescription: `Cartão ${points.tier} - ${points.totalPoints} pontos`
+        }
+      }
+    };
+    
+    return `https://pay.google.com/gp/m/walletobjects?payload=${Buffer.from(JSON.stringify(walletData)).toString('base64')}`;
+  };
+
   return (
     <AppContext.Provider value={{ 
       inventory, workOrders, clients, recipes, reminders, services, priceMatrix, theme,
@@ -1105,7 +1175,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       createCampaign, getWhatsappLink,
       connectWhatsapp, disconnectWhatsapp,
       addPointsToClient, getClientPoints, createFidelityCard, getFidelityCard,
-      addReward, updateReward, deleteReward, getRewardsByLevel
+      addReward, updateReward, deleteReward, getRewardsByLevel,
+      updateTier, generatePKPass, generateGoogleWallet
     }}>
       {children}
     </AppContext.Provider>

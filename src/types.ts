@@ -208,11 +208,20 @@ export interface Discount {
   appliedServiceId?: string;
 }
 
+export interface TierBenefit {
+  tier: 'bronze' | 'silver' | 'gold' | 'platinum';
+  minPoints: number;
+  maxPoints: number;
+  discountPercentage: number;
+  benefitDescription: string;
+}
+
 export interface GamificationConfig {
   enabled: boolean;
   levelSystem: boolean;
-  pointsMultiplier: number; // 1x, 1.5x, 2x etc
+  pointsMultiplier: number;
   rewardTier: 'bronze' | 'silver' | 'gold' | 'platinum';
+  tiers?: TierBenefit[];
 }
 
 export interface ClientPoints {
