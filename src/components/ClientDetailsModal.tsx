@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, User, Phone, Mail, MapPin, Calendar, Car, 
-  History, TrendingUp, MessageCircle, Plus, AlertCircle, Zap
+  History, TrendingUp, MessageCircle, Plus, AlertCircle, Zap, Gift, Copy, Check, Smartphone, Wallet
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Client, Vehicle, VEHICLE_SIZES, VehicleSize } from '../types';
@@ -14,10 +14,20 @@ interface ClientDetailsModalProps {
 }
 
 export default function ClientDetailsModal({ client, onClose }: ClientDetailsModalProps) {
-  const { workOrders, reminders, addVehicle, getClientPoints, getFidelityCard, companySettings } = useApp();
+  const { workOrders, reminders, addVehicle, getClientPoints, getFidelityCard, companySettings, getRewardsByLevel, getWhatsappLink, generatePKPass, generateGoogleWallet } = useApp();
   const [activeTab, setActiveTab] = useState<'overview' | 'vehicles' | 'history' | 'crm' | 'fidelidade'>('overview');
   const [showAddVehicle, setShowAddVehicle] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [shareLink, setShareLink] = useState('');
   const [newVehicle, setNewVehicle] = useState<Partial<Vehicle>>({ model: '', plate: '', color: '', year: '', size: 'medium' });
+  
+  const points = getClientPoints(client.id);
+  const card = getFidelityCard(client.id);
+  
+  useEffect(() => {
+    const baseUrl = window.location.origin;
+    setShareLink(`${baseUrl}/client-profile/${client.id}`);
+  }, [client.id]);
 
   const clientWorkOrders = workOrders.filter(os => os.clientId === client.id);
   const clientReminders = reminders.filter(r => r.clientId === client.id);
@@ -110,17 +120,122 @@ Podemos agendar para esta semana?`;
         <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-50/50 dark:bg-slate-950/50">
           
           {/* TAB: FIDELIDADE */}
-          {activeTab === 'fidelidade' && companySettings.gamification?.enabled && (
-            <div className="flex justify-center">
-              <FidelityCard
-                clientName={client.name}
-                clientPhone={client.phone}
-                totalPoints={getClientPoints(client.id)?.totalPoints || 0}
-                currentLevel={getClientPoints(client.id)?.currentLevel || 1}
-                tier={getClientPoints(client.id)?.tier || 'bronze'}
-                cardNumber={getFidelityCard(client.id)?.cardNumber || 'CC00000000'}
-                servicesCompleted={getClientPoints(client.id)?.servicesCompleted || 0}
-              />
+          {activeTab === 'fidelidade' && companySettings.gamification?.enabled && points && card && (
+            <div className="space-y-4">
+              {/* Fidelity Card */}
+              <div className="flex justify-center bg-white dark:bg-slate-900 p-4 rounded-xl">
+                <FidelityCard
+                  clientName={client.name}
+                  clientPhone={client.phone}
+                  totalPoints={points.totalPoints}
+                  currentLevel={points.currentLevel}
+                  tier={points.tier}
+                  cardNumber={card.cardNumber}
+                  servicesCompleted={points.servicesCompleted}
+                  logoUrl={companySettings.logoUrl}
+                  shopName={companySettings.name}
+                  instagram={companySettings.instagram}
+                  facebook={companySettings.facebook}
+                  website={companySettings.website}
+                />
+              </div>
+
+              {/* Wallet Actions */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    const url = generatePKPass(client.id);
+                    if (url) {
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = `cartao-${card.cardNumber}.txt`;
+                      link.click();
+                    }
+                  }}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition-colors text-sm"
+                >
+                  <Smartphone size={16} /> iOS Wallet
+                </button>
+                <button
+                  onClick={() => window.open(generateGoogleWallet(client.id), '_blank')}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold transition-colors text-sm"
+                >
+                  <Wallet size={16} /> Google Wallet
+                </button>
+              </div>
+
+              {/* Share Link */}
+              <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                <p className="text-xs font-bold text-slate-600 dark:text-slate-400 mb-2">Link de Compartilhamento</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={shareLink}
+                    readOnly
+                    className="flex-1 px-2 py-2 bg-white dark:bg-slate-900 rounded text-xs font-mono text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(shareLink);
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
+                    }}
+                    className="flex items-center gap-1 px-2 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-xs transition-colors"
+                  >
+                    {linkCopied ? <Check size={14} /> : <Copy size={14} />}
+                  </button>
+                  <button
+                    onClick={() => {
+                      const message = `Olá ${client.name}! 🎁\n\nSeu cartão de fidelidade ${companySettings.name} está pronto! Você já tem ${points.totalPoints} pontos no nível ${points.tier.toUpperCase()}.\n\nAdicione ao seu Wallet:\n${shareLink}\n\nNúmero: ${card.cardNumber}`;
+                      const link = getWhatsappLink(client.phone, message);
+                      window.open(link, '_blank');
+                    }}
+                    className="flex items-center gap-1 px-2 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-bold text-xs transition-colors"
+                  >
+                    💬 WhatsApp
+                  </button>
+                </div>
+              </div>
+
+              {/* History & Rewards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Points History */}
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <h4 className="font-bold text-blue-900 dark:text-blue-200 text-sm mb-2">📋 Pontos ({points.pointsHistory?.length || 0})</h4>
+                  <div className="space-y-1 max-h-32 overflow-y-auto text-xs">
+                    {points.pointsHistory && points.pointsHistory.length > 0 ? (
+                      points.pointsHistory.slice(-3).map(entry => (
+                        <div key={entry.id} className="flex justify-between text-blue-700 dark:text-blue-400">
+                          <span className="truncate">{entry.description}</span>
+                          <span className="font-bold flex-shrink-0">+{entry.points}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="italic text-blue-600">Nenhum ponto acumulado</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Available Rewards */}
+                {points.tier && (
+                  <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
+                    <h4 className="font-bold text-amber-900 dark:text-amber-200 text-sm mb-2 flex items-center gap-1">
+                      <Gift size={14} /> Recompensas ({getRewardsByLevel(points.tier).length})
+                    </h4>
+                    <div className="space-y-1 max-h-32 overflow-y-auto text-xs">
+                      {getRewardsByLevel(points.tier).length > 0 ? (
+                        getRewardsByLevel(points.tier).slice(0, 3).map(r => (
+                          <div key={r.id} className="text-amber-700 dark:text-amber-400">
+                            <p className="font-bold truncate">{r.name}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="italic text-amber-600">Sem recompensas disponíveis</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
           
