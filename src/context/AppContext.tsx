@@ -1138,14 +1138,16 @@ ${card.qrCode}
     return `${baseUrl}/client-profile/${clientId}`;
   };
   
-  const claimReward = (clientId: string, rewardId: string): boolean => {
+  const claimReward = (clientId: string, rewardId: string): { success: boolean; message: string } => {
     const reward = rewards.find(r => r.id === rewardId);
     const clientPoints = getClientPoints(clientId);
     
-    if (!reward || !clientPoints) return false;
-    if (clientPoints.totalPoints < reward.requiredPoints) return false;
+    if (!reward || !clientPoints) return { success: false, message: 'Recompensa ou cliente não encontrado' };
+    if (clientPoints.totalPoints < reward.requiredPoints) {
+      return { success: false, message: `Pontos insuficientes. Você tem ${clientPoints.totalPoints}, precisa de ${reward.requiredPoints}` };
+    }
     
-    // Deduzir pontos
+    // Deduzir pontos (resgate individual)
     setClientPoints(prev => prev.map(cp => 
       cp.clientId === clientId 
         ? {
@@ -1157,7 +1159,7 @@ ${card.qrCode}
                 id: `claim-${Date.now()}`,
                 workOrderId: '',
                 points: -reward.requiredPoints,
-                description: `Resgate: ${reward.name}`,
+                description: `✅ Resgate: ${reward.name}`,
                 date: new Date().toISOString()
               }
             ]
@@ -1168,7 +1170,7 @@ ${card.qrCode}
     // Atualizar contagem de resgate
     updateReward(rewardId, { redeemedCount: (reward.redeemedCount || 0) + 1 });
     
-    return true;
+    return { success: true, message: `✅ Recompensa "${reward.name}" resgatada! -${reward.requiredPoints} pontos` };
   };
 
   return (

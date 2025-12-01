@@ -3,6 +3,7 @@ import {
   X, User, Phone, Mail, MapPin, Calendar, Car, 
   History, TrendingUp, MessageCircle, Plus, AlertCircle, Zap, Gift, Copy, Check, Smartphone, Wallet
 } from 'lucide-react';
+import QRCode from 'qrcode';
 import { useApp } from '../context/AppContext';
 import { Client, Vehicle, VEHICLE_SIZES, VehicleSize } from '../types';
 import { cn, formatCurrency } from '../lib/utils';
@@ -19,6 +20,7 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
   const [showAddVehicle, setShowAddVehicle] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [shareLink, setShareLink] = useState('');
+  const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [newVehicle, setNewVehicle] = useState<Partial<Vehicle>>({ model: '', plate: '', color: '', year: '', size: 'medium' });
   
   const points = getClientPoints(client.id);
@@ -27,7 +29,14 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
   useEffect(() => {
     const baseUrl = window.location.origin;
     setShareLink(`${baseUrl}/client-profile/${client.id}`);
-  }, [client.id]);
+    
+    // Gerar QR code
+    if (card) {
+      QRCode.toDataURL(card.cardNumber, { width: 300 })
+        .then(setQrCodeUrl)
+        .catch(console.error);
+    }
+  }, [client.id, card]);
 
   const clientWorkOrders = workOrders.filter(os => os.clientId === client.id);
   const clientReminders = reminders.filter(r => r.clientId === client.id);
@@ -119,29 +128,29 @@ Podemos agendar para esta semana?`;
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-50/50 dark:bg-slate-950/50">
           
-          {/* TAB: FIDELIDADE */}
+          {/* TAB: FIDELIDADE - Simplified QR + Wallet only */}
           {activeTab === 'fidelidade' && companySettings.gamification?.enabled && points && card && (
-            <div className="space-y-4">
-              {/* Fidelity Card */}
-              <div className="flex justify-center bg-white dark:bg-slate-900 p-4 rounded-xl">
-                <FidelityCard
-                  clientName={client.name}
-                  clientPhone={client.phone}
-                  totalPoints={points.totalPoints}
-                  currentLevel={points.currentLevel}
-                  tier={points.tier}
-                  cardNumber={card.cardNumber}
-                  servicesCompleted={points.servicesCompleted}
-                  logoUrl={companySettings.logoUrl}
-                  shopName={companySettings.name}
-                  instagram={companySettings.instagram}
-                  facebook={companySettings.facebook}
-                  website={companySettings.website}
-                />
+            <div className="space-y-4 max-w-md mx-auto">
+              {/* QR Code */}
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+                <p className="text-sm font-bold text-slate-600 dark:text-slate-400 mb-3">QR Code para Validação</p>
+                {qrCodeUrl && <img src={qrCodeUrl} alt="QR Code" className="w-48 h-48 mx-auto" />}
               </div>
 
-              {/* Wallet Actions */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {/* Send via WhatsApp */}
+              <button
+                onClick={() => {
+                  const message = `Olá ${client.name}! 🎁\n\nSeu cartão de fidelidade ${companySettings.name} está pronto!\n\n📊 Dados:\n• Pontos: ${points.totalPoints}\n• Nível: ${points.tier.toUpperCase()}\n• Número: ${card.cardNumber}\n\nEscaneie o QR Code acima para validar seus pontos!\n\nAdicione ao Wallet para acompanhar em tempo real.`;
+                  const link = getWhatsappLink(client.phone, message);
+                  window.open(link, '_blank');
+                }}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold transition-colors"
+              >
+                💬 Enviar QR Code via WhatsApp
+              </button>
+
+              {/* Add to Wallet */}
+              <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => {
                     const url = generatePKPass(client.id);
@@ -154,118 +163,55 @@ Podemos agendar para esta semana?`;
                   }}
                   className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition-colors text-sm"
                 >
-                  <Smartphone size={16} /> iOS Wallet
+                  <Smartphone size={16} /> iOS
                 </button>
                 <button
                   onClick={() => window.open(generateGoogleWallet(client.id), '_blank')}
                   className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold transition-colors text-sm"
                 >
-                  <Wallet size={16} /> Google Wallet
+                  <Wallet size={16} /> Google
                 </button>
               </div>
 
-              {/* Share Link */}
-              <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
-                <p className="text-xs font-bold text-slate-600 dark:text-slate-400 mb-2">Link de Compartilhamento</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={shareLink}
-                    readOnly
-                    className="flex-1 px-2 py-2 bg-white dark:bg-slate-900 rounded text-xs font-mono text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
-                  />
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(shareLink);
-                      setLinkCopied(true);
-                      setTimeout(() => setLinkCopied(false), 2000);
-                    }}
-                    className="flex items-center gap-1 px-2 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-xs transition-colors"
-                  >
-                    {linkCopied ? <Check size={14} /> : <Copy size={14} />}
-                  </button>
-                  <button
-                    onClick={() => {
-                      const message = `Olá ${client.name}! 🎁\n\nSeu cartão de fidelidade ${companySettings.name} está pronto! Você já tem ${points.totalPoints} pontos no nível ${points.tier.toUpperCase()}.\n\nAdicione ao seu Wallet:\n${shareLink}\n\nNúmero: ${card.cardNumber}`;
-                      const link = getWhatsappLink(client.phone, message);
-                      window.open(link, '_blank');
-                    }}
-                    className="flex items-center gap-1 px-2 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-bold text-xs transition-colors"
-                  >
-                    💬 WhatsApp
-                  </button>
-                </div>
+              {/* Info Card */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800 text-center">
+                <p className="text-sm font-bold text-blue-900 dark:text-blue-200 mb-2">💳 Cartão no Wallet</p>
+                <p className="text-xs text-blue-700 dark:text-blue-400">O cliente pode acompanhar histórico e pontos direto no cartão!</p>
               </div>
 
-              {/* History & Rewards */}
-              <div className="grid grid-cols-1 gap-3">
-                {/* Points History */}
-                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <h4 className="font-bold text-blue-900 dark:text-blue-200 text-sm mb-2">📋 Histórico de Pontos ({points.pointsHistory?.length || 0})</h4>
-                  <div className="space-y-1 max-h-32 overflow-y-auto text-xs">
-                    {points.pointsHistory && points.pointsHistory.length > 0 ? (
-                      points.pointsHistory.slice(-5).map(entry => (
-                        <div key={entry.id} className="flex justify-between items-center text-blue-700 dark:text-blue-400">
-                          <span className="truncate">{entry.description}</span>
-                          <span className={`font-bold flex-shrink-0 ${entry.points > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {entry.points > 0 ? '+' : ''}{entry.points}
-                          </span>
+              {/* Rewards Section */}
+              {points?.tier && getRewardsByLevel(points.tier).length > 0 && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <h4 className="font-bold text-amber-900 dark:text-amber-200 text-sm mb-3">🎁 Recompensas para Resgatar</h4>
+                  <div className="space-y-2 max-h-56 overflow-y-auto">
+                    {getRewardsByLevel(points.tier).map(r => {
+                      const canClaim = points.totalPoints >= r.requiredPoints;
+                      return (
+                        <div key={r.id} className="bg-white dark:bg-slate-900 p-2.5 rounded border border-amber-200 dark:border-amber-800 text-xs">
+                          <div className="flex justify-between items-start gap-2 mb-1.5">
+                            <p className="font-bold text-amber-900 dark:text-amber-200">{r.name}</p>
+                            <span className="text-[10px] font-bold bg-amber-200 dark:bg-amber-800 px-2 py-0.5 rounded whitespace-nowrap">-{r.requiredPoints}</span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              const result = claimReward(client.id, r.id);
+                              alert(result.message);
+                            }}
+                            disabled={!canClaim}
+                            className={`w-full text-xs font-bold py-1 rounded transition-colors ${
+                              canClaim
+                                ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                                : 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                            }`}
+                          >
+                            {canClaim ? '🎁 Resgatar Agora' : `❌ Faltam ${r.requiredPoints - points.totalPoints}`}
+                          </button>
                         </div>
-                      ))
-                    ) : (
-                      <p className="italic text-blue-600">Nenhum ponto acumulado</p>
-                    )}
+                      );
+                    })}
                   </div>
                 </div>
-
-                {/* Available Rewards - Claimable */}
-                {points.tier && (
-                  <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
-                    <h4 className="font-bold text-amber-900 dark:text-amber-200 text-sm mb-3 flex items-center gap-1">
-                      <Gift size={14} /> Recompensas Disponíveis
-                    </h4>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {getRewardsByLevel(points.tier).length > 0 ? (
-                        getRewardsByLevel(points.tier).map(r => {
-                          const canClaim = points.totalPoints >= r.requiredPoints;
-                          return (
-                            <div key={r.id} className="bg-white dark:bg-slate-900 p-2 rounded border border-amber-200 dark:border-amber-800">
-                              <div className="flex justify-between items-start gap-2 mb-2">
-                                <div className="flex-1">
-                                  <p className="font-bold text-amber-900 dark:text-amber-200 text-xs">{r.name}</p>
-                                  <p className="text-[10px] text-amber-700 dark:text-amber-400 line-clamp-1">{r.description}</p>
-                                </div>
-                                <span className="text-[10px] font-bold bg-amber-200 dark:bg-amber-800 px-2 py-1 rounded whitespace-nowrap">
-                                  -{r.requiredPoints}
-                                </span>
-                              </div>
-                              <button
-                                onClick={() => {
-                                  if (claimReward(client.id, r.id)) {
-                                    alert(`✅ Recompensa "${r.name}" resgatada! -${r.requiredPoints} pontos`);
-                                  } else {
-                                    alert(`❌ Pontos insuficientes! Você tem ${points.totalPoints}, precisa de ${r.requiredPoints}`);
-                                  }
-                                }}
-                                disabled={!canClaim}
-                                className={`w-full text-xs font-bold py-1.5 rounded transition-colors ${
-                                  canClaim
-                                    ? 'bg-amber-500 hover:bg-amber-600 text-white cursor-pointer'
-                                    : 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed'
-                                }`}
-                              >
-                                {canClaim ? '🎁 Resgatar' : '❌ Sem Pontos'}
-                              </button>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <p className="italic text-amber-600">Sem recompensas disponíveis para este nível</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
           )}
           
