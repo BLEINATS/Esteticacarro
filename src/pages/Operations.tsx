@@ -3,8 +3,7 @@ import {
   Search, Filter, Plus, Clock, 
   MoreHorizontal, Car,
   UserPlus, AlertCircle, CheckCircle2, 
-  Hammer, ShieldCheck, PackageX,
-  ChevronRight, ChevronLeft
+  Hammer, ShieldCheck, PackageX
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useApp } from '../context/AppContext';
@@ -261,7 +260,7 @@ export default function Operations() {
       {viewMode === 'kanban' && (
         <div className="flex-1 overflow-hidden flex flex-col">
           <div className="bg-white dark:bg-slate-900 p-2 sm:p-4 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm mb-2 text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-            💡 <strong>Mobile:</strong> Deslize para direita (→) para aprovar ou avançar. Deslize esquerda (←) para voltar. <strong>Desktop:</strong> Use as setas → e ← nos cartões.
+            💡 <strong>Mobile:</strong> Deslize para direita (→) para aprovar ou avançar. Deslize esquerda (←) para voltar.
           </div>
           <div className="overflow-x-auto pb-2 flex-1">
             <div className="flex gap-2 sm:gap-4 min-w-min px-2 sm:px-4 h-full">
@@ -306,40 +305,6 @@ export default function Operations() {
                             </div>
                             <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
                               <span className="text-[9px] sm:text-[10px] text-slate-600 dark:text-slate-400">{getClientName(os.clientId)}</span>
-                              <div className="flex gap-0.5">
-                                {os.status !== 'Concluído' && (
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const statusFlow = ['Aguardando Aprovação', 'Aguardando', 'Em Andamento', 'Controle de Qualidade', 'Concluído'];
-                                      const currentIndex = statusFlow.indexOf(os.status);
-                                      if (currentIndex < statusFlow.length - 1) {
-                                        updateWorkOrder(os.id, { status: statusFlow[currentIndex + 1] as any });
-                                      }
-                                    }}
-                                    className="p-1 hover:bg-green-100 dark:hover:bg-green-900/30 rounded text-green-600 dark:text-green-400"
-                                    title="Avançar"
-                                  >
-                                    <ChevronRight size={14} />
-                                  </button>
-                                )}
-                                {os.status !== 'Aguardando Aprovação' && (
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const statusFlow = ['Aguardando Aprovação', 'Aguardando', 'Em Andamento', 'Controle de Qualidade', 'Concluído'];
-                                      const currentIndex = statusFlow.indexOf(os.status);
-                                      if (currentIndex > 0) {
-                                        updateWorkOrder(os.id, { status: statusFlow[currentIndex - 1] as any });
-                                      }
-                                    }}
-                                    className="p-1 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded text-orange-600 dark:text-orange-400"
-                                    title="Voltar"
-                                  >
-                                    <ChevronLeft size={14} />
-                                  </button>
-                                )}
-                              </div>
                             </div>
                           </div>
                         ))
