@@ -321,35 +321,36 @@ export default function Dashboard() {
                   Pátio Agora
                 </h3>
                 <div className="grid grid-cols-3 gap-2">
-                  {/* Carro 1 */}
-                  <div className="flex flex-col items-center justify-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 hover:shadow-md transition-all cursor-pointer">
-                    <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white mb-1">
-                      <Car size={20} />
+                  {activeOS.slice(0, 3).map((os, idx) => {
+                    const colors = [
+                      { bg: 'bg-blue-50 dark:bg-blue-900/20', border: 'border-blue-200 dark:border-blue-800', circle: 'bg-blue-500', text: 'text-blue-600 dark:text-blue-400' },
+                      { bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800', circle: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400' },
+                      { bg: 'bg-purple-50 dark:bg-purple-900/20', border: 'border-purple-200 dark:border-purple-800', circle: 'bg-purple-500', text: 'text-purple-600 dark:text-purple-400' }
+                    ];
+                    const color = colors[idx];
+                    return (
+                      <div 
+                        key={os.id} 
+                        onClick={() => setSelectedOS(os)}
+                        className={`flex flex-col items-center justify-center p-3 ${color.bg} rounded-lg border ${color.border} hover:shadow-md transition-all cursor-pointer`}
+                      >
+                        <div className={`w-10 h-10 rounded-full ${color.circle} flex items-center justify-center text-white mb-1`}>
+                          <Car size={20} />
+                        </div>
+                        <p className="text-[9px] font-bold text-slate-900 dark:text-white text-center line-clamp-1">{os.vehicle}</p>
+                        <p className="text-[8px] text-slate-500 dark:text-slate-400 line-clamp-1">{os.service.substring(0, 10)}</p>
+                        <p className={`text-[7px] font-bold ${color.text} mt-1`}>{os.plate || os.id}</p>
+                      </div>
+                    );
+                  })}
+                  {activeOS.length < 3 && Array.from({ length: 3 - activeOS.length }).map((_, idx) => (
+                    <div key={`empty-${idx}`} className="flex flex-col items-center justify-center p-3 bg-slate-50 dark:bg-slate-800/30 rounded-lg border border-slate-200 dark:border-slate-700 opacity-50">
+                      <div className="w-10 h-10 rounded-full bg-slate-300 dark:bg-slate-700 flex items-center justify-center text-slate-500 mb-1">
+                        <Car size={20} />
+                      </div>
+                      <p className="text-[9px] font-bold text-slate-500 dark:text-slate-400">Vazio</p>
                     </div>
-                    <p className="text-[9px] font-bold text-slate-900 dark:text-white text-center">Toyota</p>
-                    <p className="text-[8px] text-slate-500 dark:text-slate-400">Corolla</p>
-                    <p className="text-[7px] font-bold text-blue-600 dark:text-blue-400 mt-1">ABC-1234</p>
-                  </div>
-
-                  {/* Carro 2 */}
-                  <div className="flex flex-col items-center justify-center p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800 hover:shadow-md transition-all cursor-pointer">
-                    <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center text-white mb-1">
-                      <Car size={20} />
-                    </div>
-                    <p className="text-[9px] font-bold text-slate-900 dark:text-white text-center">Honda</p>
-                    <p className="text-[8px] text-slate-500 dark:text-slate-400">Civic</p>
-                    <p className="text-[7px] font-bold text-emerald-600 dark:text-emerald-400 mt-1">XYZ-5678</p>
-                  </div>
-
-                  {/* Carro 3 */}
-                  <div className="flex flex-col items-center justify-center p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800 hover:shadow-md transition-all cursor-pointer">
-                    <div className="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center text-white mb-1">
-                      <Car size={20} />
-                    </div>
-                    <p className="text-[9px] font-bold text-slate-900 dark:text-white text-center">Volkswagen</p>
-                    <p className="text-[8px] text-slate-500 dark:text-slate-400">Gol</p>
-                    <p className="text-[7px] font-bold text-purple-600 dark:text-purple-400 mt-1">LMN-9999</p>
-                  </div>
+                  ))}
                 </div>
                 <button 
                   onClick={() => navigate('/operations')}
