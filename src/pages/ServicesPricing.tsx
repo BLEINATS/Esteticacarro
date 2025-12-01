@@ -159,13 +159,13 @@ export default function ServicesPricing() {
                 </div>
               </div>
 
-              <div className="flex items-end gap-3 bg-white/5 p-4 rounded-lg border border-white/10">
-                <div>
+              <div className="flex flex-col sm:flex-row sm:items-end gap-3 bg-white/5 p-3 sm:p-4 rounded-lg border border-white/10">
+                <div className="flex-1 sm:flex-none">
                   <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Categoria Alvo</label>
                   <select 
                     value={bulkTarget}
                     onChange={(e) => setBulkTarget(e.target.value as any)}
-                    className="bg-slate-800 border border-slate-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-40 p-2.5"
+                    className="w-full sm:w-40 bg-slate-800 border border-slate-600 text-white text-xs sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 sm:p-2.5"
                   >
                     <option value="all">Todas as Categorias</option>
                     {sizes.map(s => (
@@ -173,23 +173,23 @@ export default function ServicesPricing() {
                     ))}
                   </select>
                 </div>
-                <div>
+                <div className="flex-1 sm:flex-none">
                   <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Ajuste (%)</label>
                   <div className="relative">
                     <input 
                       type="number" 
                       value={bulkPercentage}
                       onChange={(e) => setBulkPercentage(Number(e.target.value))}
-                      className="bg-slate-800 border border-slate-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-24 p-2.5 pr-8"
+                      className="w-full sm:w-24 bg-slate-800 border border-slate-600 text-white text-xs sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 sm:p-2.5 pr-8"
                     />
-                    <span className="absolute right-3 top-2.5 text-slate-400">%</span>
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
                   </div>
                 </div>
                 <button 
                   onClick={() => setShowBulkConfirm(true)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-lg transition-colors flex items-center gap-2"
+                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 sm:py-2.5 px-3 sm:px-4 rounded-lg transition-colors flex items-center justify-center gap-1 sm:gap-2 text-sm sm:text-base"
                 >
-                  <ArrowUpRight size={18} />
+                  <ArrowUpRight size={16} className="sm:w-[18px] sm:h-[18px]" />
                   Aplicar
                 </button>
               </div>
