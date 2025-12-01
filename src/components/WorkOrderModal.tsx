@@ -618,21 +618,21 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const afterPhotos = dailyLog.flatMap(log => log.photos.map(url => ({ url, desc: log.description })));
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-2 sm:p-4">
       {isClientModalOpen && <ClientModal onClose={() => setIsClientModalOpen(false)} />}
       
-      <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-5xl max-h-[95vh] flex flex-col shadow-2xl animate-in fade-in zoom-in duration-200 border border-slate-200 dark:border-slate-800">
+      <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl w-full max-w-5xl max-h-[98vh] sm:max-h-[95vh] flex flex-col shadow-2xl animate-in fade-in zoom-in duration-200 border border-slate-200 dark:border-slate-800">
         
         {/* Header */}
-        <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-start bg-slate-50/50 dark:bg-slate-900/50">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">OS #{workOrder.id}</h2>
+        <div className="p-3 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start gap-2 sm:gap-0 bg-slate-50/50 dark:bg-slate-900/50">
+          <div className="w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-3 mb-1">
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">OS #{workOrder.id}</h2>
               <select 
                 value={workOrder.status}
                 onChange={(e) => handleStatusChange(e.target.value as any)}
                 className={cn(
-                  "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border-none focus:ring-2 cursor-pointer",
+                  "px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wide border-none focus:ring-2 cursor-pointer text-xs sm:text-sm",
                   workOrder.status === 'Aguardando Aprovação' 
                     ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
                     : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
@@ -647,120 +647,122 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                 <option value="Entregue">Entregue ao Cliente</option>
               </select>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 text-sm">
+            <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm line-clamp-2">
                 {selectedVehicleObj ? selectedVehicleObj.model : 'Veículo não selecionado'} • {selectedVehiclePlate || 'Placa?'} • {selectedClient ? selectedClient.name : 'Cliente?'}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-1 sm:gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
             {workOrder.status === 'Aguardando Aprovação' ? (
-                <button onClick={handleApprove} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors shadow-lg shadow-green-900/20 animate-pulse">
-                    <Check size={16} /> Aprovar & Definir Preço
+                <button onClick={handleApprove} className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-green-600 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-green-700 transition-colors shadow-lg shadow-green-900/20 animate-pulse">
+                    <Check size={14} /> <span className="hidden sm:inline">Aprovar & Definir Preço</span><span className="sm:hidden">Aprovar</span>
                 </button>
             ) : (
-                <button onClick={handleSave} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
-                    <Save size={16} /> Salvar Tudo
+                <button onClick={handleSave} className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-blue-700 transition-colors">
+                    <Save size={14} /> <span className="hidden sm:inline">Salvar Tudo</span><span className="sm:hidden">Salvar</span>
                 </button>
             )}
-            <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg text-sm font-medium hover:bg-slate-700 transition-colors">
-                <Printer size={16} /> Imprimir
+            <button onClick={handlePrint} className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-slate-600 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-slate-700 transition-colors">
+                <Printer size={14} /> <span className="hidden sm:inline">Imprimir</span><span className="sm:hidden">Print</span>
             </button>
-            <button onClick={handleSendWhatsApp} className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors">
-                <Send size={16} /> WhatsApp
+            <button onClick={handleSendWhatsApp} className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-green-500 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-green-600 transition-colors">
+                <Send size={14} /> <span className="hidden sm:inline">WhatsApp</span><span className="sm:hidden">WA</span>
             </button>
-            <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors">
-              <X size={24} />
+            <button onClick={onClose} className="p-1.5 sm:p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors">
+              <X size={18} />
             </button>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-100 dark:border-slate-800 px-6 overflow-x-auto">
+        <div className="flex border-b border-slate-100 dark:border-slate-800 px-2 sm:px-6 overflow-x-auto">
           {[
-            { id: 'reception', label: 'Recepção & Vistoria', icon: ClipboardCheck },
-            { id: 'execution', label: 'Execução & Diário', icon: Hammer },
-            { id: 'quality', label: 'Qualidade (QA)', icon: ShieldCheck },
-            { id: 'finance', label: 'Financeiro & Peças', icon: CreditCard },
+            { id: 'reception', label: 'Recepção & Vistoria', mobileLabel: 'Recepção', icon: ClipboardCheck },
+            { id: 'execution', label: 'Execução & Diário', mobileLabel: 'Execução', icon: Hammer },
+            { id: 'quality', label: 'Qualidade (QA)', mobileLabel: 'Qualidade', icon: ShieldCheck },
+            { id: 'finance', label: 'Financeiro & Peças', mobileLabel: 'Financeiro', icon: CreditCard },
           ].map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={cn(
-                "flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap",
+                "flex items-center gap-1 sm:gap-2 px-2 sm:px-6 py-3 sm:py-4 text-[10px] sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap",
                 activeTab === tab.id 
                   ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400" 
                   : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
               )}
             >
-              <tab.icon size={18} />
-              {tab.label}
+              <tab.icon size={14} className="hidden sm:block" />
+              <tab.icon size={12} className="sm:hidden" />
+              <span className="hidden sm:inline">{tab.label}</span>
+              <span className="sm:hidden">{tab.mobileLabel}</span>
             </button>
           ))}
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/30 dark:bg-slate-950/30">
+        <div className="flex-1 overflow-y-auto p-2 sm:p-6 bg-slate-50/30 dark:bg-slate-950/30">
           
           {/* TAB: RECEPTION */}
           {activeTab === 'reception' && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-8">
               
               {/* COL 1: CLIENT & VEHICLE */}
-              <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm mb-2">
-                 <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                    <User size={20} className="text-blue-600" />
+              <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm mb-2">
+                 <h3 className="font-bold text-slate-900 dark:text-white mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
+                    <User size={18} className="text-blue-600" />
                     Dados do Cliente & Veículo
                  </h3>
                  
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
                     {/* Client Selection */}
                     <div className="relative">
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cliente</label>
-                        <div className="flex gap-2">
+                        <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1.5">Cliente</label>
+                        <div className="flex gap-1 sm:gap-2">
                             <div className="relative flex-1">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                                 <input 
                                     type="text" 
                                     value={clientSearch}
                                     onChange={(e) => { setClientSearch(e.target.value); setShowClientList(true); }}
                                     onFocus={() => setShowClientList(true)}
                                     placeholder="Buscar cliente..."
-                                    className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
+                                    className="w-full pl-8 sm:pl-10 pr-2 sm:pr-4 py-2 sm:py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm text-slate-900 dark:text-white"
                                 />
                                 {showClientList && clientSearch && (
-                                    <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
+                                    <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-50 max-h-32 sm:max-h-48 overflow-y-auto">
                                         {filteredClients.length > 0 ? filteredClients.map(c => (
                                             <button 
                                                 key={c.id}
                                                 onClick={() => handleClientSelect(c)}
-                                                className="w-full text-left px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm text-slate-700 dark:text-slate-300"
+                                                className="w-full text-left px-2 sm:px-4 py-1.5 sm:py-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-[10px] sm:text-sm text-slate-700 dark:text-slate-300"
                                             >
-                                                <span className="font-bold">{c.name}</span> <span className="text-xs text-slate-500">({c.phone})</span>
+                                                <span className="font-bold">{c.name}</span> <span className="text-[8px] sm:text-xs text-slate-500">({c.phone})</span>
                                             </button>
                                         )) : (
-                                            <div className="px-4 py-2 text-sm text-slate-500">Nenhum cliente encontrado.</div>
+                                            <div className="px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-sm text-slate-500">Nenhum cliente encontrado.</div>
                                         )}
                                     </div>
                                 )}
                             </div>
                             <button 
                                 onClick={() => setIsClientModalOpen(true)}
-                                className="px-3 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                                className="px-2 sm:px-3 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
                                 title="Novo Cliente"
                             >
-                                <UserPlus size={18} />
+                                <UserPlus size={16} />
                             </button>
                         </div>
                     </div>
 
                     {/* Vehicle Selection */}
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Veículo</label>
+                        <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1.5">Veículo</label>
                         {selectedClientId ? (
-                            <div className="flex gap-2">
+                            <div className="flex gap-1 sm:gap-2">
                                 <select 
                                     value={selectedVehiclePlate}
                                     onChange={(e) => handleVehicleChange(e.target.value)}
-                                    className="flex-1 px-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
+                                    className="flex-1 px-2 sm:px-4 py-2 sm:py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm text-slate-900 dark:text-white"
                                 >
                                     <option value="">Selecione o veículo...</option>
                                     {clientVehicles.map(v => (
@@ -769,14 +771,14 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                                 </select>
                                 <button 
                                     onClick={() => setIsAddingVehicle(!isAddingVehicle)}
-                                    className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                    className="px-2 sm:px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                                     title="Adicionar Carro"
                                 >
-                                    <Plus size={18} />
+                                    <Plus size={16} />
                                 </button>
                             </div>
                         ) : (
-                            <div className="px-4 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-400 italic">
+                            <div className="px-2 sm:px-4 py-2 sm:py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] sm:text-sm text-slate-400 italic">
                                 Selecione um cliente primeiro
                             </div>
                         )}
@@ -785,94 +787,94 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
                  {/* Quick Add Vehicle Form */}
                  {isAddingVehicle && selectedClientId && (
-                    <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800 animate-in slide-in-from-top-2">
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-3">Novo Veículo</h4>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                            <input type="text" placeholder="Modelo (ex: BMW X1)" value={newVehicle.model} onChange={e => setNewVehicle({...newVehicle, model: e.target.value})} className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm" />
-                            <input type="text" placeholder="Placa" value={newVehicle.plate} onChange={e => setNewVehicle({...newVehicle, plate: e.target.value})} className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm" />
-                            <input type="text" placeholder="Cor" value={newVehicle.color} onChange={e => setNewVehicle({...newVehicle, color: e.target.value})} className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm" />
-                            <input type="text" placeholder="Ano" value={newVehicle.year} onChange={e => setNewVehicle({...newVehicle, year: e.target.value})} className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm" />
-                            <select value={newVehicle.size} onChange={e => setNewVehicle({...newVehicle, size: e.target.value as any})} className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm">
+                    <div className="mt-2 sm:mt-4 p-2 sm:p-4 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800 animate-in slide-in-from-top-2">
+                        <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white mb-2 sm:mb-3">Novo Veículo</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-1.5 sm:gap-3">
+                            <input type="text" placeholder="Modelo" value={newVehicle.model} onChange={e => setNewVehicle({...newVehicle, model: e.target.value})} className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm" />
+                            <input type="text" placeholder="Placa" value={newVehicle.plate} onChange={e => setNewVehicle({...newVehicle, plate: e.target.value})} className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm" />
+                            <input type="text" placeholder="Cor" value={newVehicle.color} onChange={e => setNewVehicle({...newVehicle, color: e.target.value})} className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm" />
+                            <input type="text" placeholder="Ano" value={newVehicle.year} onChange={e => setNewVehicle({...newVehicle, year: e.target.value})} className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm" />
+                            <select value={newVehicle.size} onChange={e => setNewVehicle({...newVehicle, size: e.target.value as any})} className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm">
                                 {Object.entries(VEHICLE_SIZES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                             </select>
                         </div>
-                        <div className="flex justify-end gap-2 mt-3">
-                            <button onClick={() => setIsAddingVehicle(false)} className="text-xs font-bold text-slate-500 px-3 py-2">Cancelar</button>
-                            <button onClick={handleQuickAddVehicle} className="text-xs font-bold bg-blue-600 text-white px-4 py-2 rounded-lg">Salvar Veículo</button>
+                        <div className="flex justify-end gap-1 sm:gap-2 mt-2 sm:mt-3">
+                            <button onClick={() => setIsAddingVehicle(false)} className="text-[10px] sm:text-xs font-bold text-slate-500 px-2 sm:px-3 py-1 sm:py-2">Cancelar</button>
+                            <button onClick={handleQuickAddVehicle} className="text-[10px] sm:text-xs font-bold bg-blue-600 text-white px-2 sm:px-4 py-1 sm:py-2 rounded-lg">Salvar</button>
                         </div>
                     </div>
                  )}
               </div>
 
-              <div className="lg:col-span-1">
-                <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                  <Camera size={20} className="text-blue-600" />
+              <div className="lg:col-span-1 bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <h3 className="font-bold text-slate-900 dark:text-white mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
+                  <Camera size={18} className="text-blue-600" />
                   Inspeção do Veículo
                 </h3>
                 <VehicleDamageMap damages={damages} onAddDamage={handleAddDamage} />
               </div>
 
-              <div className="lg:col-span-2 space-y-6">
+              <div className="lg:col-span-2 space-y-3 sm:space-y-6">
                 {/* Seleção de Serviço e Escopo */}
-                <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                  <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                    <Wrench size={20} className="text-blue-600" />
+                <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <h3 className="font-bold text-slate-900 dark:text-white mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
+                    <Wrench size={18} className="text-blue-600" />
                     O que vamos fazer?
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
                     
                     {/* MULTI-SERVICE SELECTION */}
                     <div className="relative" ref={dropdownRef}>
-                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Serviços a Realizar</label>
+                      <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1.5">Serviços a Realizar</label>
                       <button 
                         onClick={() => setIsServiceDropdownOpen(!isServiceDropdownOpen)}
-                        className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white flex items-center justify-between"
+                        className="w-full px-2 sm:px-4 py-1.5 sm:py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm text-slate-900 dark:text-white flex items-center justify-between"
                       >
-                        <span className="truncate">
+                        <span className="truncate text-xs sm:text-sm">
                             {selectedServiceIds.length > 0 
-                                ? `${selectedServiceIds.length} serviço(s) selecionado(s)` 
+                                ? `${selectedServiceIds.length} serviço(s)` 
                                 : 'Selecione os serviços...'}
                         </span>
-                        <ChevronDown size={16} className="text-slate-400" />
+                        <ChevronDown size={14} className="text-slate-400" />
                       </button>
                       
                       {isServiceDropdownOpen && (
-                        <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto p-2 space-y-1">
+                        <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-50 max-h-40 sm:max-h-60 overflow-y-auto p-1 sm:p-2 space-y-0.5 sm:space-y-1">
                             {services.map(s => (
                                 <div 
                                     key={s.id} 
                                     onClick={() => toggleService(s.id)}
                                     className={cn(
-                                        "flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors",
+                                        "flex items-center gap-2 sm:gap-3 p-1.5 sm:p-2 rounded-lg cursor-pointer transition-colors",
                                         selectedServiceIds.includes(s.id) 
                                             ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300" 
                                             : "hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
                                     )}
                                 >
                                     <div className={cn(
-                                        "w-4 h-4 rounded border flex items-center justify-center transition-colors",
+                                        "w-4 h-4 rounded border flex items-center justify-center transition-colors flex-shrink-0",
                                         selectedServiceIds.includes(s.id)
                                             ? "bg-blue-600 border-blue-600 text-white"
                                             : "border-slate-300 dark:border-slate-600"
                                     )}>
                                         {selectedServiceIds.includes(s.id) && <Check size={12} />}
                                     </div>
-                                    <div className="flex-1">
-                                        <p className="text-sm font-medium">{s.name}</p>
-                                        <p className="text-[10px] text-slate-500 dark:text-slate-400">{s.category}</p>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-[10px] sm:text-sm font-medium truncate">{s.name}</p>
+                                        <p className="text-[8px] sm:text-[10px] text-slate-500 dark:text-slate-400">{s.category}</p>
                                     </div>
                                 </div>
                             ))}
                         </div>
                       )}
-                      <div className="mt-2 flex flex-wrap gap-1">
+                      <div className="mt-1.5 sm:mt-2 flex flex-wrap gap-1">
                         {selectedServiceIds.map(id => {
                             const s = services.find(srv => srv.id === id);
                             if (!s) return null;
                             return (
-                                <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs font-bold">
-                                    {s.name}
-                                    <button onClick={() => toggleService(id)} className="hover:text-red-500"><X size={12} /></button>
+                                <span key={id} className="inline-flex items-center gap-0.5 px-1.5 sm:px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[8px] sm:text-xs font-bold">
+                                    <span className="truncate max-w-[100px] sm:max-w-none">{s.name}</span>
+                                    <button onClick={() => toggleService(id)} className="hover:text-red-500 flex-shrink-0"><X size={10} /></button>
                                 </span>
                             );
                         })}
@@ -880,45 +882,45 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor Total (R$) {selectedVehicleObj && `- Porte ${selectedVehicleObj.size}`}</label>
+                      <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1.5">Valor Total (R$)</label>
                       <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">R$</span>
+                        <span className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs sm:text-sm">R$</span>
                         <input 
                             type="number"
                             value={servicePrice}
                             onChange={(e) => setServicePrice(Number(e.target.value))}
-                            className="w-full pl-8 pr-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                            className="w-full pl-7 sm:pl-8 pr-2 sm:pr-4 py-1.5 sm:py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                  <h3 className="font-bold text-slate-900 dark:text-white mb-4">O que ficou no carro? (Inventário)</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <h3 className="font-bold text-slate-900 dark:text-white mb-2 sm:mb-4 text-sm sm:text-base">O que ficou no carro? (Inventário)</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 sm:gap-4">
                     {Object.keys(inventory).filter(k => k !== 'pertences').map((key) => (
-                      <label key={key} className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
+                      <label key={key} className="flex items-center gap-2 sm:gap-3 p-1.5 sm:p-3 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
                         <input 
                           type="checkbox"
                           checked={(inventory as any)[key]}
                           onChange={(e) => setInventory({...inventory, [key]: e.target.checked})}
-                          className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
                         />
-                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300 capitalize">
+                        <span className="text-[10px] sm:text-sm font-medium text-slate-700 dark:text-slate-300 capitalize">
                           {key.replace(/([A-Z])/g, ' $1').trim()}
                         </span>
                       </label>
                     ))}
                   </div>
-                  <div className="mt-4">
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Outros Objetos (Óculos, Chaves...)</label>
+                  <div className="mt-2 sm:mt-4">
+                    <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1">Outros Objetos</label>
                     <input 
                       type="text"
                       value={inventory.pertences}
                       onChange={(e) => setInventory({...inventory, pertences: e.target.value})}
-                      placeholder="Ex: Óculos de sol no porta-luvas..."
-                      className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
+                      placeholder="Ex: Óculos..."
+                      className="w-full px-2 sm:px-4 py-1.5 sm:py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm text-slate-900 dark:text-white"
                     />
                   </div>
                 </div>
