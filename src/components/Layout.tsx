@@ -19,7 +19,8 @@ import {
   Calendar,
   Settings,
   AlertTriangle,
-  CheckCircle2
+  CheckCircle2,
+  Zap
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useApp } from '../context/AppContext';
@@ -79,6 +80,7 @@ export default function Layout() {
     { icon: Package, label: 'Estoque', path: '/inventory' },
     { icon: Tags, label: 'Catálogo & Preços', path: '/pricing' },
     { icon: Users, label: 'Equipe & RH', path: '/team' },
+    { icon: Zap, label: 'Gamificação & Fidelidade', path: '/gamification' },
     { icon: Settings, label: 'Configurações', path: '/settings' },
   ];
 

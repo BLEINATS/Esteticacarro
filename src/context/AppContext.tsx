@@ -3,7 +3,7 @@ import {
   Client, InventoryItem, WorkOrder, ServiceRecipe, Reminder, Vehicle, 
   ServiceCatalogItem, PriceMatrixEntry, VehicleSize, Employee, Task, 
   TimeLog, EmployeeTransaction, MarketingCampaign, ClientSegment,
-  CompanySettings, SubscriptionDetails, FinancialTransaction
+  CompanySettings, SubscriptionDetails, FinancialTransaction, ClientPoints, FidelityCard
 } from '../types';
 import { differenceInDays, addDays, subDays, formatISO, startOfWeek, addHours } from 'date-fns';
 
@@ -17,7 +17,9 @@ interface AppContextType {
   priceMatrix: PriceMatrixEntry[];
   employees: Employee[];
   employeeTransactions: EmployeeTransaction[];
-  financialTransactions: FinancialTransaction[]; // NOVO
+  financialTransactions: FinancialTransaction[];
+  clientPoints: ClientPoints[];
+  fidelityCards: FidelityCard[];
   currentUser: Employee | null;
   theme: 'light' | 'dark';
   campaigns: MarketingCampaign[];
@@ -73,7 +75,7 @@ interface AppContextType {
   updateEmployeeTransaction: (id: string, updates: Partial<EmployeeTransaction>) => void; 
   deleteEmployeeTransaction: (id: string) => void; 
 
-  // Finance Actions (NOVO)
+  // Finance Actions
   addFinancialTransaction: (trans: FinancialTransaction) => void;
   updateFinancialTransaction: (id: number, updates: Partial<FinancialTransaction>) => void;
   deleteFinancialTransaction: (id: number) => void;
@@ -81,6 +83,12 @@ interface AppContextType {
   // Marketing Actions
   createCampaign: (campaign: MarketingCampaign) => void;
   getWhatsappLink: (phone: string, message: string) => string;
+
+  // Gamification Actions
+  addPointsToClient: (clientId: string, workOrderId: string, points: number, description: string) => void;
+  getClientPoints: (clientId: string) => ClientPoints | undefined;
+  createFidelityCard: (clientId: string) => FidelityCard;
+  getFidelityCard: (clientId: string) => FidelityCard | undefined;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -147,6 +155,12 @@ const initialCompanySettings: CompanySettings = {
       osUpdates: true,
       marketing: false
     }
+  },
+  gamification: {
+    enabled: true,
+    levelSystem: true,
+    pointsMultiplier: 1,
+    rewardTier: 'bronze'
   }
 };
 
