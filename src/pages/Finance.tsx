@@ -56,31 +56,39 @@ export default function Finance() {
     installments: '1'
   });
 
-  // --- CÁLCULO DE SALDOS PARA EXTRATO ESTILO BANCO ---
+  // --- CÁLCULO DE SALDOS PARA EXTRATO ESTILO BANCO (COMO BANCO REAL) ---
   const balanceData = useMemo(() => {
-    const paid = financialTransactions.filter(t => t.status === 'paid');
+    const paid = financialTransactions.filter(t => t.status === 'paid').sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     
     let initialBalance = companySettings.initialBalance || 15000.00;
+    let displayInitialBalance = companySettings.initialBalance || 15000.00;
     let transactions = paid;
     
-    // Se há filtro de data, calcular saldo inicial
+    // Se há filtro de data, calcular saldo inicial como SALDO REAL DO DIA ANTERIOR
     if (startDate) {
       const startDate_obj = new Date(startDate);
+      // Todas as transações ANTES da data inicial
       const beforeStart = paid.filter(t => new Date(t.date) < startDate_obj);
       const beforeStartSum = beforeStart.reduce((acc, t) => acc + t.netAmount, 0);
-      initialBalance = companySettings.initialBalance + beforeStartSum;
       
+      // Saldo inicial = saldo base + todas as transações até o dia anterior
+      initialBalance = companySettings.initialBalance + beforeStartSum;
+      displayInitialBalance = initialBalance; // Mostrar o saldo real calculado
+      
+      // Transações do período filtrado
       const endStr = endDate || '2100-01-01';
       transactions = paid.filter(t => t.date >= startDate && t.date <= endStr);
     } else {
-      // Sem filtro: saldo inicial usa configuração da empresa
-      const allSum = paid.reduce((acc, t) => acc + t.netAmount, 0);
-      initialBalance = companySettings.initialBalance + allSum;
+      // Sem filtro: mostrar todas as transações com saldo inicial configurado
+      displayInitialBalance = companySettings.initialBalance;
       transactions = paid;
     }
     
+    // Movimento = soma das transações do período
     const totalMovement = transactions.reduce((acc, t) => acc + t.netAmount, 0);
-    const finalBalance = initialBalance;
+    
+    // Saldo final = saldo inicial + movimento do período
+    const finalBalance = initialBalance + totalMovement;
     
     const sorted = transactions.sort((a, b) => 
       sortOrder === 'desc' 
@@ -88,7 +96,7 @@ export default function Finance() {
         : new Date(a.date).getTime() - new Date(b.date).getTime()
     );
     
-    return { initialBalance: companySettings.initialBalance, transactions: sorted, totalMovement, finalBalance };
+    return { initialBalance: displayInitialBalance, transactions: sorted, totalMovement, finalBalance };
   }, [financialTransactions, startDate, endDate, companySettings.initialBalance, sortOrder]);
 
   // --- LÓGICA DE EXTRATO (LISTA PLANA) ---
