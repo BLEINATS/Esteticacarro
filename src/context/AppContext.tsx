@@ -173,9 +173,9 @@ const initialClients: Client[] = [
     ltv: 15500.00, lastVisit: formatISO(yesterday), visitCount: 12, status: 'active', segment: 'vip'
   },
   {
-    id: 'c2', name: 'Márcia Oliveira', phone: '11988887777', email: 'marcia.oliv@email.com', notes: 'Gerente de RH em startup tech.',
+    id: 'c2', name: 'Márcia Oliveira', phone: '11988887777', email: 'marcia.oliv@email.com', notes: 'Gerente de RH em startup tech. Cliente recorrente.',
     vehicles: [{ id: 'v3', model: 'Mercedes C180', plate: 'MER-4455', color: 'Branco Pérola', year: '2021', size: 'medium' }],
-    ltv: 8200.00, lastVisit: formatISO(subDays(today, 3)), visitCount: 8, status: 'active', segment: 'regular'
+    ltv: 8200.00, lastVisit: formatISO(subDays(today, 3)), visitCount: 8, status: 'active', segment: 'recurring'
   },
   {
     id: 'c3', name: 'Felipe Santos', phone: '11987776666', email: 'felipe@constructora.com', notes: 'Proprietário de construtora. Ama carros de luxo.',
@@ -183,17 +183,37 @@ const initialClients: Client[] = [
       { id: 'v4', model: 'Audi A6', plate: 'AUD-2233', color: 'Cinza', year: '2023', size: 'medium' },
       { id: 'v5', model: 'Land Rover Discovery', plate: 'LRD-7788', color: 'Preto', year: '2022', size: 'xl' }
     ],
-    ltv: 12400.00, lastVisit: formatISO(subDays(today, 7)), visitCount: 6, status: 'active', segment: 'premium'
+    ltv: 12400.00, lastVisit: formatISO(subDays(today, 7)), visitCount: 6, status: 'active', segment: 'vip'
   },
   {
     id: 'c4', name: 'Juliana Costa', phone: '11986665555', email: 'ju.costa@hotmail.com', notes: 'Vendedora de imóveis. Preocupada com apresentação do carro.',
     vehicles: [{ id: 'v6', model: 'Volkswagen Tiguan', plate: 'VW-1199', color: 'Prata', year: '2020', size: 'medium' }],
-    ltv: 5600.00, lastVisit: formatISO(subDays(today, 14)), visitCount: 4, status: 'active', segment: 'regular'
+    ltv: 5600.00, lastVisit: formatISO(subDays(today, 14)), visitCount: 4, status: 'active', segment: 'recurring'
   },
   {
     id: 'c5', name: 'Carlos Mendes', phone: '11985554444', email: 'carlos.m@email.com', notes: 'Advogado. Quer apenas o melhor para seu Jaguar.',
     vehicles: [{ id: 'v7', model: 'Jaguar XF', plate: 'JAG-3344', color: 'Vermelho', year: '2021', size: 'large' }],
     ltv: 18900.00, lastVisit: formatISO(subDays(today, 2)), visitCount: 10, status: 'active', segment: 'vip'
+  },
+  {
+    id: 'c6', name: 'Ana Silva', phone: '11984443333', email: 'ana.silva@email.com', notes: 'Cliente novo, primeiro contato.',
+    vehicles: [{ id: 'v8', model: 'Honda Civic', plate: 'HON-5566', color: 'Branco', year: '2023', size: 'medium' }],
+    ltv: 1200.00, lastVisit: formatISO(subDays(today, 1)), visitCount: 1, status: 'active', segment: 'new'
+  },
+  {
+    id: 'c7', name: 'Thiago Lima', phone: '11982221111', email: 'thiago.lima@email.com', notes: 'Cliente novo, potencial alto.',
+    vehicles: [{ id: 'v9', model: 'Toyota Corolla', plate: 'TOY-7788', color: 'Prata', year: '2022', size: 'medium' }],
+    ltv: 1800.00, lastVisit: formatISO(subDays(today, 2)), visitCount: 1, status: 'active', segment: 'new'
+  },
+  {
+    id: 'c8', name: 'Gustavo Ribeiro', phone: '11981110000', email: 'gustavo.r@email.com', notes: 'Sem visita há 90 dias. Risco de churn.',
+    vehicles: [{ id: 'v10', model: 'Hyundai HB20', plate: 'HYU-9999', color: 'Cinza', year: '2019', size: 'small' }],
+    ltv: 2100.00, lastVisit: formatISO(subDays(today, 92)), visitCount: 3, status: 'churn_risk', segment: 'at_risk'
+  },
+  {
+    id: 'c9', name: 'Fernanda Costa', phone: '11980008888', email: 'fernanda.c@email.com', notes: 'Outro cliente em risco.',
+    vehicles: [{ id: 'v11', model: 'Fiat Uno', plate: 'FIA-4444', color: 'Vermelho', year: '2018', size: 'small' }],
+    ltv: 1900.00, lastVisit: formatISO(subDays(today, 75)), visitCount: 2, status: 'churn_risk', segment: 'at_risk'
   }
 ];
 const initialReminders: Reminder[] = []; 
@@ -346,11 +366,13 @@ const initialWorkOrders: WorkOrder[] = [
     serviceId: 'srv3',
     status: 'Concluído',
     technician: 'Mestre Miyagi',
+    deadline: 'Concluído',
     damages: [],
     serviceNotes: 'Cliente solicitou polimento antes da vitrificação.',
     createdAt: formatISO(subDays(today, 5)),
     completedAt: formatISO(subDays(today, 4)),
     totalPrice: 2800.00,
+    totalValue: 2800.00,
     paymentStatus: 'paid',
     paymentMethod: 'Cartão Crédito',
     npsScore: 9,
@@ -367,10 +389,12 @@ const initialWorkOrders: WorkOrder[] = [
     serviceId: 'srv1',
     status: 'Aguardando Pagamento',
     technician: 'João Detalhista',
+    deadline: 'Hoje',
     damages: ['Pequeno risco no pneu dianteiro esquerdo'],
     serviceNotes: 'Carro estava muito sujo. Aplicar protetor de pneus.',
     createdAt: formatISO(subDays(today, 2)),
     totalPrice: 1150.00,
+    totalValue: 1150.00,
     paymentStatus: 'pending',
     paymentMethod: 'Boleto'
   },
@@ -385,10 +409,12 @@ const initialWorkOrders: WorkOrder[] = [
     serviceId: 'srv4',
     status: 'Em Andamento',
     technician: 'Lucas Polidor',
+    deadline: 'Hoje',
     damages: ['Mancha em um assento'],
     serviceNotes: 'Cliente urgente - prioridade máxima.',
     createdAt: formatISO(today),
     totalPrice: 890.00,
+    totalValue: 890.00,
     paymentStatus: 'pending',
     paymentMethod: 'Cartão Débito'
   },
@@ -403,11 +429,13 @@ const initialWorkOrders: WorkOrder[] = [
     serviceId: 'srv1',
     status: 'Concluído',
     technician: 'João Detalhista',
+    deadline: 'Concluído',
     damages: [],
     serviceNotes: 'Rotina mensal do cliente.',
     createdAt: formatISO(subDays(today, 8)),
     completedAt: formatISO(subDays(today, 8)),
     totalPrice: 96.00,
+    totalValue: 96.00,
     paymentStatus: 'paid',
     paymentMethod: 'PIX',
     npsScore: 8,
@@ -422,12 +450,54 @@ const initialWorkOrders: WorkOrder[] = [
     vehicle: 'Jaguar XF 2021',
     service: 'PPF (Frontal)',
     serviceId: 'srv8',
-    status: 'Orçamento',
+    status: 'Aguardando Aprovação',
     technician: 'Mestre Miyagi',
+    deadline: 'Amanhã',
     damages: [],
     serviceNotes: 'Carro novo. Cliente quer proteger a frente com película.',
     createdAt: formatISO(today),
     totalPrice: 3500.00,
+    totalValue: 3500.00,
+    paymentStatus: 'pending',
+    paymentMethod: 'A Definir'
+  },
+  {
+    id: 'os-006',
+    clientId: 'c1',
+    clientName: 'Dr. Roberto Silva',
+    phone: '11999998888',
+    plate: 'BMW-5588',
+    vehicle: 'BMW X5 2022',
+    service: 'Lavagem Técnica',
+    serviceId: 'srv1',
+    status: 'Em Andamento',
+    technician: 'Mestre Miyagi',
+    deadline: 'Hoje',
+    damages: [],
+    serviceNotes: 'Manutenção preventiva.',
+    createdAt: formatISO(today),
+    totalPrice: 110.00,
+    totalValue: 110.00,
+    paymentStatus: 'pending',
+    paymentMethod: 'A Definir'
+  },
+  {
+    id: 'os-007',
+    clientId: 'c6',
+    clientName: 'Ana Silva',
+    phone: '11984443333',
+    plate: 'HON-5566',
+    vehicle: 'Honda Civic 2023',
+    service: 'Polimento Comercial',
+    serviceId: 'srv2',
+    status: 'Controle de Qualidade',
+    technician: 'Lucas Polidor',
+    deadline: 'Hoje',
+    damages: [],
+    serviceNotes: 'Primeiro serviço do cliente novo.',
+    createdAt: formatISO(subDays(today, 1)),
+    totalPrice: 540.00,
+    totalValue: 540.00,
     paymentStatus: 'pending',
     paymentMethod: 'A Definir'
   }
