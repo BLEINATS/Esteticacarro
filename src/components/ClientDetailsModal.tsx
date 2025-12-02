@@ -15,7 +15,7 @@ interface ClientDetailsModalProps {
 }
 
 export default function ClientDetailsModal({ client, onClose }: ClientDetailsModalProps) {
-  const { workOrders, reminders, addVehicle, getClientPoints, getFidelityCard, companySettings, getRewardsByLevel, getWhatsappLink, generatePKPass, generateGoogleWallet, claimReward } = useApp();
+  const { workOrders, reminders, addVehicle, getClientPoints, getFidelityCard, companySettings, getRewardsByLevel, getWhatsappLink, generatePKPass, generateGoogleWallet, claimReward, getClientRedemptions } = useApp();
   const [activeTab, setActiveTab] = useState<'overview' | 'vehicles' | 'history' | 'crm' | 'fidelidade'>('overview');
   const [showAddVehicle, setShowAddVehicle] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -25,6 +25,7 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
   
   const points = getClientPoints(client.id);
   const card = getFidelityCard(client.id);
+  const redemptions = getClientRedemptions(client.id);
   
   useEffect(() => {
     const baseUrl = window.location.origin;
@@ -193,11 +194,25 @@ Podemos agendar para esta semana?`;
                       </button>
                     </div>
 
-                    {/* Info Card */}
-                    <div className={`${colors.info} ${colors.border} p-4 rounded-lg border text-center`}>
-                      <p className={`text-sm font-bold ${colors.text} mb-1`}>💳 Cartão no Wallet</p>
-                      <p className={`text-xs ${colors.text}`}>Acompanhe pontos e resgates em tempo real!</p>
-                    </div>
+                    {/* Vouchers Ativos */}
+                    {redemptions.filter(r => r.status === 'active').length > 0 && (
+                        <div className="bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800 p-4 rounded-lg">
+                            <h4 className="font-bold text-pink-700 dark:text-pink-300 text-sm mb-3 flex items-center gap-2">
+                                <Gift size={16} /> Vouchers Ativos
+                            </h4>
+                            <div className="space-y-2">
+                                {redemptions.filter(r => r.status === 'active').map(r => (
+                                    <div key={r.id} className="bg-white dark:bg-slate-900 p-3 rounded border border-slate-200 dark:border-slate-700">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="font-mono font-bold text-slate-900 dark:text-white">{r.code}</span>
+                                            <span className="text-[10px] bg-green-100 text-green-800 px-2 py-0.5 rounded-full">Ativo</span>
+                                        </div>
+                                        <p className="text-xs text-slate-500">{r.rewardName}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Rewards Section */}
                     {getRewardsByLevel(points.tier).length > 0 && (

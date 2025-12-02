@@ -1,22 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Zap, Settings, Gift, Trophy, Star, TrendingUp, Users, Award, Plus, Trash2, Edit2 } from 'lucide-react';
+import { Zap, Settings, Gift, Trophy, Star, TrendingUp, Users, Award, Plus, Trash2, Edit2, CheckCircle2 } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
-
-const levelColors = ['bg-slate-100', 'bg-blue-100', 'bg-purple-100', 'bg-emerald-100', 'bg-amber-100'];
-const levelNames = ['Iniciante', 'Bronze', 'Prata', 'Ouro', 'Platina'];
+import { TierConfig } from '../types';
 
 export default function Gamification() {
-  const { companySettings, updateCompanySettings, clients, rewards, addReward, deleteReward, updateReward, getRewardsByLevel, updateTier } = useApp();
+  const { companySettings, updateCompanySettings, clients, rewards, addReward, deleteReward, updateReward, updateTierConfig, redemptions } = useApp();
   const [isEnabled, setIsEnabled] = useState(companySettings.gamification?.enabled || false);
   const [multiplier, setMultiplier] = useState(companySettings.gamification?.pointsMultiplier || 1);
-  const [levelSystem, setLevelSystem] = useState(companySettings.gamification?.levelSystem || true);
+  
+  // Reward Form State
   const [showRewardForm, setShowRewardForm] = useState(false);
   const [editingRewardId, setEditingRewardId] = useState<string | null>(null);
-  const [editingTier, setEditingTier] = useState<string | null>(null);
-  const [showTierForm, setShowTierForm] = useState(false);
-  const [tierData, setTierData] = useState({ discount: 0, benefit: '' });
   const [newReward, setNewReward] = useState({ name: '', description: '', requiredPoints: 100, requiredLevel: 'bronze', rewardType: 'discount', percentage: 0, gift: '' });
+
+  // Tier Config State
+  const [tiers, setTiers] = useState<TierConfig[]>(companySettings.gamification.tiers || []);
+  const [isEditingTiers, setIsEditingTiers] = useState(false);
+
+  useEffect(() => {
+    if (companySettings.gamification.tiers) {
+        setTiers(companySettings.gamification.tiers);
+    }
+  }, [companySettings.gamification.tiers]);
 
   const handleToggle = (value: boolean) => {
     setIsEnabled(value);
@@ -40,15 +46,15 @@ export default function Gamification() {
     });
   };
 
-  const handleLevelSystem = (value: boolean) => {
-    setLevelSystem(value);
-    updateCompanySettings({
-      ...companySettings,
-      gamification: {
-        ...companySettings.gamification,
-        levelSystem: value,
-      }
-    });
+  const handleTierChange = (index: number, field: keyof TierConfig, value: any) => {
+    const newTiers = [...tiers];
+    newTiers[index] = { ...newTiers[index], [field]: value };
+    setTiers(newTiers);
+  };
+
+  const saveTiers = () => {
+    updateTierConfig(tiers);
+    setIsEditingTiers(false);
   };
 
   const handleAddReward = (e: React.FormEvent) => {
@@ -96,24 +102,6 @@ export default function Gamification() {
     setShowRewardForm(true);
   };
 
-  const handleEditTier = (tier: string, discount: number, benefit: string) => {
-    setEditingTier(tier);
-    setTierData({ discount, benefit });
-    setShowTierForm(true);
-  };
-
-  const handleSaveTier = () => {
-    if (editingTier) {
-      updateTier(editingTier as any, {
-        discountPercentage: tierData.discount,
-        benefitDescription: tierData.benefit
-      });
-      setShowTierForm(false);
-      setEditingTier(null);
-      setTierData({ discount: 0, benefit: '' });
-    }
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 p-4 sm:p-6">
       <div className="max-w-6xl mx-auto">
@@ -135,7 +123,7 @@ export default function Gamification() {
                 <div>
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <Settings size={20} className="text-blue-600" />
-                    Ativar Gamificação
+                    Configuração Geral
                   </h3>
                   <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Ative para começar a oferecer pontos e recompensas</p>
                 </div>
@@ -156,7 +144,7 @@ export default function Gamification() {
               </div>
 
               {isEnabled && (
-                <div className="mt-6 space-y-4 pt-6 border-t border-slate-200 dark:border-slate-700">
+                <div className="mt-6 space-y-6 pt-6 border-t border-slate-200 dark:border-slate-700">
                   {/* Multiplier */}
                   <div>
                     <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">
@@ -183,30 +171,47 @@ export default function Gamification() {
                     </p>
                   </div>
 
-                  {/* Level System */}
-                  <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-                    <div className="flex items-center justify-between">
-                      <div>
+                  {/* Tier Configuration */}
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
                         <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                           <Trophy size={18} className="text-purple-600" />
-                          Sistema de Níveis
+                          Configuração de Níveis
                         </h4>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Desbloqueie recompensas conforme sobe de nível</p>
-                      </div>
-                      <button
-                        onClick={() => handleLevelSystem(!levelSystem)}
-                        className={cn(
-                          "relative inline-flex h-8 w-14 items-center rounded-full transition-colors",
-                          levelSystem ? "bg-purple-500" : "bg-slate-300 dark:bg-slate-700"
+                        {!isEditingTiers ? (
+                            <button onClick={() => setIsEditingTiers(true)} className="text-xs text-blue-600 hover:underline">Editar Pontuação</button>
+                        ) : (
+                            <button onClick={saveTiers} className="text-xs text-green-600 font-bold hover:underline">Salvar Alterações</button>
                         )}
-                      >
-                        <span
-                          className={cn(
-                            "inline-block h-6 w-6 transform rounded-full bg-white transition-transform",
-                            levelSystem ? "translate-x-7" : "translate-x-1"
-                          )}
-                        />
-                      </button>
+                    </div>
+                    
+                    <div className="space-y-3">
+                        {tiers.map((tier, idx) => (
+                            <div key={tier.id} className={cn("p-4 rounded-lg border flex items-center justify-between bg-white dark:bg-slate-900", isEditingTiers ? "border-blue-500" : "border-slate-200 dark:border-slate-700")}>
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-3 h-3 rounded-full bg-gradient-to-r ${tier.color}`}></div>
+                                    <div>
+                                        <p className="font-bold text-slate-900 dark:text-white">{tier.name}</p>
+                                        {isEditingTiers ? (
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className="text-xs text-slate-500">Mínimo:</span>
+                                                <input 
+                                                    type="number" 
+                                                    value={tier.minPoints} 
+                                                    onChange={(e) => handleTierChange(idx, 'minPoints', parseInt(e.target.value))}
+                                                    className="w-20 px-2 py-1 text-xs border rounded bg-slate-50 dark:bg-slate-800 dark:border-slate-600 dark:text-white"
+                                                />
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">A partir de {tier.minPoints} pontos</p>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300">{tier.benefits[0]}</p>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                   </div>
                 </div>
@@ -217,85 +222,9 @@ export default function Gamification() {
             {isEnabled && (
               <>
                 <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                    <Gift size={20} className="text-emerald-600" />
-                    Estrutura de Recompensas
-                  </h3>
-                  <div className="space-y-3">
-                    {levelSystem && [
-                      { level: 1, tierKey: 'bronze', name: 'Bronze', points: '0-500', reward: '5% desconto', color: 'from-amber-500 to-amber-600' },
-                      { level: 2, tierKey: 'silver', name: 'Prata', points: '501-1500', reward: '10% desconto', color: 'from-slate-400 to-slate-500' },
-                      { level: 3, tierKey: 'gold', name: 'Ouro', points: '1501-3000', reward: '15% desconto', color: 'from-yellow-500 to-yellow-600' },
-                      { level: 4, tierKey: 'platinum', name: 'Platina', points: '3001+', reward: '20% desconto + Brinde', color: 'from-blue-500 to-blue-600' },
-                    ].map((tier) => (
-                      <div key={tier.level} className={`bg-gradient-to-r ${tier.color} p-4 rounded-lg text-white shadow-md hover:shadow-lg transition-shadow cursor-pointer`}
-                        onClick={() => handleEditTier(tier.tierKey, 5 * tier.level, `${tier.name} - ${tier.reward}`)}
-                        title="Clique para editar este nível"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <Star size={24} className="fill-current" />
-                            <div>
-                              <p className="font-bold">{tier.name}</p>
-                              <p className="text-sm opacity-90">{tier.points} pontos</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <span className="font-bold text-lg block">{tier.reward}</span>
-                            <span className="text-xs opacity-75">Clique para editar</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Tier Edit Form */}
-                {showTierForm && (
-                  <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 space-y-4">
-                    <h4 className="font-bold text-blue-900 dark:text-blue-200">Editar Nível: {editingTier?.toUpperCase()}</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Desconto %</label>
-                        <input
-                          type="number" min="0" max="100"
-                          value={tierData.discount}
-                          onChange={e => setTierData({...tierData, discount: parseInt(e.target.value)})}
-                          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Benefício</label>
-                        <input
-                          type="text" placeholder="ex: Frete grátis, Atendimento VIP"
-                          value={tierData.benefit}
-                          onChange={e => setTierData({...tierData, benefit: e.target.value})}
-                          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        onClick={() => { setShowTierForm(false); setEditingTier(null); }}
-                        className="px-4 py-2 bg-slate-300 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg font-semibold transition-colors"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        onClick={handleSaveTier}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold transition-colors"
-                      >
-                        Salvar Nível
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Rewards Management */}
-                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                      <Award size={20} className="text-purple-600" />
+                      <Award size={20} className="text-emerald-600" />
                       Gerenciar Recompensas
                     </h3>
                     <button
@@ -510,16 +439,30 @@ export default function Gamification() {
               </div>
             )}
 
-            {/* Info Card */}
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-900/10 rounded-xl border border-blue-200 dark:border-blue-800 p-6">
-              <h4 className="font-bold text-blue-900 dark:text-blue-200 mb-2 flex items-center gap-2">
-                <Award size={18} />
-                Dica Pro
-              </h4>
-              <p className="text-sm text-blue-800 dark:text-blue-300">
-                Ative a gamificação para aumentar a retenção de clientes em até 40% e estimular compras recorrentes.
-              </p>
-            </div>
+            {/* Vouchers Ativos */}
+            {isEnabled && (
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+                    <h4 className="font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                        <Gift size={18} className="text-pink-600" />
+                        Vouchers Ativos
+                    </h4>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {redemptions.filter(r => r.status === 'active').length > 0 ? (
+                            redemptions.filter(r => r.status === 'active').map(r => (
+                                <div key={r.id} className="bg-slate-50 dark:bg-slate-800 p-2 rounded border border-slate-100 dark:border-slate-700 text-xs">
+                                    <div className="flex justify-between font-bold mb-1">
+                                        <span>{r.code}</span>
+                                        <span className="text-green-600">Ativo</span>
+                                    </div>
+                                    <p className="text-slate-500">{r.rewardName}</p>
+                                </div>
+                            ))
+                        ) : (
+                            <p className="text-center text-slate-400 text-xs">Nenhum voucher ativo.</p>
+                        )}
+                    </div>
+                </div>
+            )}
           </div>
         </div>
       </div>

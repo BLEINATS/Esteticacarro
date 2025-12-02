@@ -3,7 +3,8 @@ import {
   Client, InventoryItem, WorkOrder, ServiceRecipe, Reminder, Vehicle, 
   ServiceCatalogItem, PriceMatrixEntry, VehicleSize, Employee, Task, 
   TimeLog, EmployeeTransaction, MarketingCampaign, ClientSegment,
-  CompanySettings, SubscriptionDetails, FinancialTransaction, ClientPoints, FidelityCard, Reward
+  CompanySettings, SubscriptionDetails, FinancialTransaction, ClientPoints, FidelityCard, Reward,
+  Redemption, TierConfig, TierLevel
 } from '../types';
 import { differenceInDays, addDays, subDays, formatISO, startOfWeek, addHours } from 'date-fns';
 
@@ -21,6 +22,7 @@ interface AppContextType {
   clientPoints: ClientPoints[];
   fidelityCards: FidelityCard[];
   rewards: Reward[];
+  redemptions: Redemption[];
   currentUser: Employee | null;
   theme: 'light' | 'dark';
   campaigns: MarketingCampaign[];
@@ -95,10 +97,17 @@ interface AppContextType {
   addReward: (reward: Omit<Reward, 'id' | 'createdAt'>) => void;
   updateReward: (id: string, updates: Partial<Reward>) => void;
   deleteReward: (id: string) => void;
-  getRewardsByLevel: (level: 'bronze' | 'silver' | 'gold' | 'platinum') => Reward[];
+  getRewardsByLevel: (level: TierLevel) => Reward[];
   
   // Tier Management
-  updateTier: (tier: 'bronze' | 'silver' | 'gold' | 'platinum', updates: any) => void;
+  updateTierConfig: (tiers: TierConfig[]) => void;
+  
+  // Redemption / Voucher
+  claimReward: (clientId: string, rewardId: string) => { success: boolean; message: string; voucherCode?: string };
+  getClientRedemptions: (clientId: string) => Redemption[];
+  useVoucher: (code: string, workOrderId: string) => boolean;
+  getVoucherDetails: (code: string) => { redemption: Redemption; reward: Reward | undefined } | null;
+
   generatePKPass: (clientId: string) => string;
   generateGoogleWallet: (clientId: string) => string;
 }
@@ -125,6 +134,13 @@ const setStorage = <T,>(key: string, value: T) => {
 };
 
 // --- MOCK DATA ---
+
+const defaultTiers: TierConfig[] = [
+  { id: 'bronze', name: 'Bronze', minPoints: 0, color: 'from-amber-500 to-amber-600', benefits: ['5% desconto em serviços'] },
+  { id: 'silver', name: 'Prata', minPoints: 500, color: 'from-slate-400 to-slate-600', benefits: ['10% desconto', 'Frete grátis'] },
+  { id: 'gold', name: 'Ouro', minPoints: 1500, color: 'from-yellow-500 to-yellow-600', benefits: ['15% desconto', 'Atendimento VIP'] },
+  { id: 'platinum', name: 'Platina', minPoints: 3000, color: 'from-blue-500 to-blue-600', benefits: ['20% desconto', 'Brinde exclusivo', 'Suporte 24h'] }
+];
 
 const initialCompanySettings: CompanySettings = {
   name: 'Cristal Care Autodetail',
@@ -172,7 +188,7 @@ const initialCompanySettings: CompanySettings = {
     enabled: true,
     levelSystem: true,
     pointsMultiplier: 1,
-    rewardTier: 'bronze'
+    tiers: defaultTiers // Novos tiers configuráveis
   }
 };
 
@@ -251,7 +267,7 @@ const initialClients: Client[] = [
 const initialReminders: Reminder[] = []; 
 const initialEmployees: Employee[] = [
   { id: 'e1', name: 'Mestre Miyagi', role: 'Funileiro', pin: '1234', salaryType: 'commission', fixedSalary: 0, commissionRate: 30, commissionBase: 'net', active: true, balance: 3450.00 },
-  { id: 'e2', name: 'João Detalhista', role: 'Detalhista', pin: '5678', salaryType: 'commission', fixedSalary: 0, commissionRate: 25, commissionBase: 'net', active: true, balance: 2890.50 },
+  { id: 'e2', name: 'João Detalhista', role: 'Detailer', pin: '5678', salaryType: 'commission', fixedSalary: 0, commissionRate: 25, commissionBase: 'net', active: true, balance: 2890.50 },
   { id: 'e3', name: 'Lucas Polidor', role: 'Polidor', pin: '2468', salaryType: 'commission', fixedSalary: 500, commissionRate: 20, commissionBase: 'net', active: true, balance: 1250.00 },
   { id: 'e4', name: 'Ana Administrativo', role: 'Recepcionista', pin: '1357', salaryType: 'fixed', fixedSalary: 2500, commissionRate: 0, commissionBase: 'gross', active: true, balance: 0 },
   { id: 'e5', name: 'Fernanda Gerente', role: 'Manager', pin: '9999', salaryType: 'fixed', fixedSalary: 3500, commissionRate: 0, commissionBase: 'gross', active: true, balance: 0 },
@@ -726,7 +742,7 @@ const initialRewards: Reward[] = [
 
 export function AppProvider({ children }: { children: ReactNode }) {
   // State Initialization
-  const [companySettings, setCompanySettings] = useState<CompanySettings>(() => getStorage('companySettings_v12', initialCompanySettings)); 
+  const [companySettings, setCompanySettings] = useState<CompanySettings>(() => getStorage('companySettings_v13', initialCompanySettings)); 
   const [subscription, setSubscription] = useState<SubscriptionDetails>(() => getStorage('subscription_v1', initialSubscription));
   
   const [inventory, setInventory] = useState<InventoryItem[]>(() => getStorage('inventory_v9', initialInventory)); 
@@ -743,6 +759,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [clientPoints, setClientPoints] = useState<ClientPoints[]>(() => getStorage('clientPoints_v1', initialClientPoints));
   const [fidelityCards, setFidelityCards] = useState<FidelityCard[]>(() => getStorage('fidelityCards_v1', initialFidelityCards));
   const [rewards, setRewards] = useState<Reward[]>(() => getStorage('rewards_v1', initialRewards));
+  const [redemptions, setRedemptions] = useState<Redemption[]>(() => getStorage('redemptions_v1', [])); // Novo estado
 
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>(() => getStorage<MarketingCampaign[]>('campaigns_v7', initialCampaigns));
   
@@ -751,7 +768,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [recipes] = useState<ServiceRecipe[]>([]);
 
   // Persistence
-  useEffect(() => setStorage('companySettings_v12', companySettings), [companySettings]);
+  useEffect(() => setStorage('companySettings_v13', companySettings), [companySettings]);
   useEffect(() => setStorage('subscription_v1', subscription), [subscription]);
   useEffect(() => setStorage('theme', theme), [theme]);
   useEffect(() => setStorage('reminders_v8', reminders), [reminders]); 
@@ -760,8 +777,55 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => setStorage('inventory_v9', inventory), [inventory]);
   useEffect(() => setStorage('employees_v9', employees), [employees]); 
   useEffect(() => setStorage('employeeTransactions_v8', employeeTransactions), [employeeTransactions]);
-  // FIXED: Updated version key
   useEffect(() => setStorage('financialTransactions_v3', financialTransactions), [financialTransactions]);
+  useEffect(() => setStorage('clientPoints_v1', clientPoints), [clientPoints]);
+  useEffect(() => setStorage('fidelityCards_v1', fidelityCards), [fidelityCards]);
+  useEffect(() => setStorage('rewards_v1', rewards), [rewards]);
+  useEffect(() => setStorage('redemptions_v1', redemptions), [redemptions]);
+
+  // Check for points expiration on load
+  useEffect(() => {
+    const checkExpiration = () => {
+      const oneYearAgo = subDays(new Date(), 365);
+      
+      setClientPoints(prev => prev.map(cp => {
+        // Calculate points earned more than a year ago
+        const oldPositivePoints = cp.pointsHistory
+          .filter(h => h.points > 0 && new Date(h.date) < oneYearAgo)
+          .reduce((acc, h) => acc + h.points, 0);
+          
+        // Calculate total points spent/deducted ever
+        const totalDeducted = cp.pointsHistory
+          .filter(h => h.points < 0)
+          .reduce((acc, h) => acc + Math.abs(h.points), 0);
+          
+        // If we have more old points than we have ever spent, the difference should expire
+        const pointsToExpire = Math.max(0, oldPositivePoints - totalDeducted);
+        
+        if (pointsToExpire > 0) {
+          // Expire them
+          return {
+            ...cp,
+            totalPoints: cp.totalPoints - pointsToExpire,
+            pointsHistory: [
+              ...cp.pointsHistory,
+              {
+                id: `exp-${Date.now()}`,
+                workOrderId: 'system',
+                points: -pointsToExpire,
+                description: 'Expiração de Pontos (> 1 ano)',
+                date: new Date().toISOString()
+              }
+            ]
+          };
+        }
+        return cp;
+      }));
+    };
+    
+    // Run check
+    checkExpiration();
+  }, []); // Empty dependency array to run only on mount
 
   // RECOVERY LOGIC
   useEffect(() => {
@@ -1027,19 +1091,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const getWhatsappLink = (phone: string, message: string) => `https://wa.me/55${phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
 
   // --- GAMIFICATION ACTIONS ---
+  
+  const updateTierConfig = (tiers: TierConfig[]) => {
+    updateCompanySettings({
+      ...companySettings,
+      gamification: {
+        ...companySettings.gamification,
+        tiers
+      }
+    });
+  };
+
   const addPointsToClient = (clientId: string, workOrderId: string, points: number, description: string) => {
     setClientPoints(prev => {
       const existing = prev.find(cp => cp.clientId === clientId);
       if (existing) {
         const newTotal = existing.totalPoints + points;
-        const levelThresholds = [500, 1500, 3000, 5000];
-        const newLevel = Math.min(4, levelThresholds.findIndex(t => newTotal <= t) + 1);
-        const tierMap: Record<number, 'bronze' | 'silver' | 'gold' | 'platinum'> = { 1: 'bronze', 2: 'silver', 3: 'gold', 4: 'platinum' };
+        
+        // Use dynamic tiers from config
+        const tiers = companySettings.gamification.tiers || defaultTiers;
+        // Sort tiers by points descending to find the highest matching tier
+        const sortedTiers = [...tiers].sort((a, b) => b.minPoints - a.minPoints);
+        const currentTierConfig = sortedTiers.find(t => newTotal >= t.minPoints) || tiers[0];
+        
+        // Map tier config to level index (1-based)
+        const currentLevel = tiers.findIndex(t => t.id === currentTierConfig.id) + 1;
+
         return prev.map(cp => cp.clientId === clientId ? {
           ...cp, 
           totalPoints: newTotal,
-          currentLevel: newLevel,
-          tier: tierMap[newLevel],
+          currentLevel: currentLevel,
+          tier: currentTierConfig.id,
           servicesCompleted: cp.servicesCompleted + 1,
           lastServiceDate: formatISO(new Date()),
           pointsHistory: [...cp.pointsHistory, { id: `p-${Date.now()}`, workOrderId, points, description, date: formatISO(new Date()) }]
@@ -1088,18 +1170,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setRewards(prev => prev.filter(r => r.id !== id));
   };
 
-  const getRewardsByLevel = (level: 'bronze' | 'silver' | 'gold' | 'platinum'): Reward[] => {
+  const getRewardsByLevel = (level: TierLevel): Reward[] => {
     return rewards.filter(r => r.active && r.requiredLevel === level);
   };
 
   // --- TIER MANAGEMENT ---
-  const updateTier = (tier: 'bronze' | 'silver' | 'gold' | 'platinum', updates: any) => {
+  const updateTier = (tier: TierLevel, updates: any) => {
     updateCompanySettings({
       ...companySettings,
       gamification: {
         ...companySettings.gamification,
         tiers: (companySettings.gamification?.tiers || []).map(t => 
-          t.tier === tier ? { ...t, ...updates } : t
+          t.id === tier ? { ...t, ...updates } : t
         )
       }
     });
@@ -1129,16 +1211,13 @@ ${card.qrCode}
   };
 
   const generateGoogleWallet = (clientId: string): string => {
-    const card = getFidelityCard(clientId);
-    const points = getClientPoints(clientId);
-    if (!card || !points) return '';
-    
     // Retorna um URL de compartilhamento direto do cartão
     const baseUrl = window.location.origin;
     return `${baseUrl}/client-profile/${clientId}`;
   };
   
-  const claimReward = (clientId: string, rewardId: string): { success: boolean; message: string } => {
+  // --- REDEMPTION SYSTEM (VOUCHERS) ---
+  const claimReward = (clientId: string, rewardId: string): { success: boolean; message: string; voucherCode?: string } => {
     const reward = rewards.find(r => r.id === rewardId);
     const clientPoints = getClientPoints(clientId);
     
@@ -1147,7 +1226,24 @@ ${card.qrCode}
       return { success: false, message: `Pontos insuficientes. Você tem ${clientPoints.totalPoints}, precisa de ${reward.requiredPoints}` };
     }
     
-    // Deduzir pontos (resgate individual)
+    // Generate Voucher Code
+    const voucherCode = `DESC-${Math.floor(Math.random() * 10000)}-${reward.name.substring(0, 3).toUpperCase()}`;
+
+    // Create Redemption Record
+    const newRedemption: Redemption = {
+      id: `red-${Date.now()}`,
+      clientId,
+      rewardId,
+      rewardName: reward.name,
+      code: voucherCode,
+      pointsCost: reward.requiredPoints,
+      status: 'active',
+      redeemedAt: new Date().toISOString()
+    };
+
+    setRedemptions(prev => [...prev, newRedemption]);
+
+    // Deduct Points
     setClientPoints(prev => prev.map(cp => 
       cp.clientId === clientId 
         ? {
@@ -1159,7 +1255,7 @@ ${card.qrCode}
                 id: `claim-${Date.now()}`,
                 workOrderId: '',
                 points: -reward.requiredPoints,
-                description: `✅ Resgate: ${reward.name}`,
+                description: `✅ Resgate: ${reward.name} (Voucher: ${voucherCode})`,
                 date: new Date().toISOString()
               }
             ]
@@ -1167,16 +1263,33 @@ ${card.qrCode}
         : cp
     ));
     
-    // Atualizar contagem de resgate
+    // Update Reward Stats
     updateReward(rewardId, { redeemedCount: (reward.redeemedCount || 0) + 1 });
     
-    return { success: true, message: `✅ Recompensa "${reward.name}" resgatada! -${reward.requiredPoints} pontos` };
+    return { success: true, message: `✅ Recompensa resgatada! Seu código é: ${voucherCode}`, voucherCode };
+  };
+
+  const getClientRedemptions = (clientId: string) => redemptions.filter(r => r.clientId === clientId);
+
+  const useVoucher = (code: string, workOrderId: string): boolean => {
+    const redemption = redemptions.find(r => r.code === code && r.status === 'active');
+    if (!redemption) return false;
+
+    setRedemptions(prev => prev.map(r => r.id === redemption.id ? { ...r, status: 'used', usedAt: new Date().toISOString(), usedInWorkOrderId: workOrderId } : r));
+    return true;
+  };
+
+  const getVoucherDetails = (code: string) => {
+    const redemption = redemptions.find(r => r.code === code);
+    if (!redemption) return null;
+    const reward = rewards.find(r => r.id === redemption.rewardId);
+    return { redemption, reward };
   };
 
   return (
     <AppContext.Provider value={{ 
       inventory, workOrders, clients, recipes, reminders, services, priceMatrix, theme,
-      employees, employeeTransactions, currentUser, campaigns, clientPoints, fidelityCards, rewards,
+      employees, employeeTransactions, currentUser, campaigns, clientPoints, fidelityCards, rewards, redemptions,
       companySettings, subscription, updateCompanySettings,
       financialTransactions,
       login, logout,
@@ -1192,7 +1305,7 @@ ${card.qrCode}
       connectWhatsapp, disconnectWhatsapp,
       addPointsToClient, getClientPoints, createFidelityCard, getFidelityCard,
       addReward, updateReward, deleteReward, getRewardsByLevel,
-      updateTier, generatePKPass, generateGoogleWallet, claimReward
+      updateTier, updateTierConfig, generatePKPass, generateGoogleWallet, claimReward, getClientRedemptions, useVoucher, getVoucherDetails
     }}>
       {children}
     </AppContext.Provider>

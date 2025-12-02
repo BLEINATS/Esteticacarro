@@ -6,7 +6,7 @@ import {
   CreditCard, UploadCloud, Lock, Share2, Plus, Trash2,
   DollarSign, Wrench, Check, Smile, Star, ListTodo,
   Image as ImageIcon, Search, Car, UserPlus, ChevronDown,
-  Printer, Send, Tag
+  Printer, Send, Tag, Ticket, Trophy, Gift, Sparkles
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { WorkOrder, DamagePoint, VehicleInventory, DailyLogEntry, AdditionalItem, QualityChecklistItem, ScopeItem, Vehicle, VehicleSize, VEHICLE_SIZES } from '../types';
@@ -23,10 +23,16 @@ interface WorkOrderModalProps {
 }
 
 export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalProps) {
-  const { addWorkOrder, updateWorkOrder, completeWorkOrder, submitNPS, clients, recipes, services, getPrice, getWhatsappLink, workOrders, addVehicle } = useApp();
+  const { 
+    addWorkOrder, updateWorkOrder, completeWorkOrder, submitNPS, 
+    clients, recipes, services, getPrice, getWhatsappLink, 
+    workOrders, addVehicle, useVoucher, getVoucherDetails,
+    getClientPoints, companySettings, getRewardsByLevel, claimReward
+  } = useApp();
   const { showConfirm, showAlert } = useDialog();
+
   const [activeTab, setActiveTab] = useState<'reception' | 'execution' | 'quality' | 'finance'>('reception');
-  
+
   // --- CLIENT & VEHICLE SELECTION STATE ---
   const [selectedClientId, setSelectedClientId] = useState<string>(workOrder.clientId || '');
   const [clientSearch, setClientSearch] = useState('');
@@ -51,7 +57,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const [qaList, setQaList] = useState<QualityChecklistItem[]>(workOrder.qaChecklist || []);
   const [additionalItems, setAdditionalItems] = useState<AdditionalItem[]>(workOrder.additionalItems || []);
   const [scopeList, setScopeList] = useState<ScopeItem[]>(workOrder.scopeChecklist || []);
-  
+
   // MULTI-SERVICE SELECTION
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
@@ -64,11 +70,15 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const [damagePhoto, setDamagePhoto] = useState<string | null>(null);
   const [isSignaturePadOpen, setIsSignaturePadOpen] = useState(false);
   const [clientSignature, setClientSignature] = useState<string | null>(workOrder.clientSignature || null);
-  
+
   // DISCOUNT STATE
   const [discountType, setDiscountType] = useState<'value' | 'percentage' | 'service'>(workOrder.discount?.type || 'percentage');
   const [discountAmount, setDiscountAmount] = useState<number>(workOrder.discount?.amount || 0);
   const [discountDescription, setDiscountDescription] = useState<string>(workOrder.discount?.description || '');
+  
+  // VOUCHER STATE
+  const [voucherCode, setVoucherCode] = useState('');
+  const [appliedVoucher, setAppliedVoucher] = useState<string | null>(null);
 
   // --- PRICE STATE (EDITABLE) ---
   // Initialize with existing total minus extras, or 0
@@ -81,6 +91,13 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const selectedClient = clients.find(c => c.id === selectedClientId);
   const clientVehicles = selectedClient ? selectedClient.vehicles : [];
   const selectedVehicleObj = clientVehicles.find(v => v.plate === selectedVehiclePlate);
+
+  // Gamification Data
+  const rawClientPoints = selectedClientId ? getClientPoints(selectedClientId) : undefined;
+  const currentPoints = rawClientPoints?.totalPoints || 0;
+  const currentTierId = rawClientPoints?.tier || 'bronze';
+  const defaultTierConfig = { id: 'bronze', name: 'Bronze', minPoints: 0, color: 'from-amber-500 to-amber-600', benefits: [] };
+  const clientTierConfig = (companySettings.gamification.tiers || []).find(t => t.id === currentTierId) || defaultTierConfig;
 
   // Filter Clients for Search
   const filteredClients = clientSearch.length > 0 
@@ -110,18 +127,8 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   // Update Price when Services or Vehicle changes
   useEffect(() => {
     if (selectedVehicleObj && selectedServiceIds.length > 0) {
-        // Only update price if it's a new order or user is changing services
-        // For existing orders, we might want to keep the stored price unless user explicitly changes services
-        // But for simplicity in this demo, we recalculate if services change.
-        // To avoid overwriting manual edits on load, we could check if it's initial load.
-        // However, since we init servicePrice from props, this effect runs on mount.
-        // We can check if the calculated price is different from current to avoid reset?
-        // Better: Only calc if we are "interacting".
-        // For now, let's just calculate.
         const total = selectedServiceIds.reduce((acc, id) => acc + getPrice(id, selectedVehicleObj.size), 0);
-        
-        // Only update if it's significantly different (e.g. user changed selection)
-        // Or if it's a new order (totalValue 0)
+        // Only update price if it hasn't been manually edited (logic simplified for now: if totalValue is 0 or services changed)
         if (workOrder.totalValue === 0 || selectedServiceIds.join(',') !== (workOrder.serviceIds || [workOrder.serviceId]).join(',')) {
              setServicePrice(total);
         }
@@ -161,17 +168,21 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         { id: 'q2', label: 'Limpeza final realizada (sem resíduos)', checked: false, required: true },
         { id: 'q3', label: 'Pertences do cliente conferidos', checked: false, required: true },
       ];
+      
       if (workOrder.service.toLowerCase().includes('funilaria') || workOrder.service.toLowerCase().includes('pintura')) {
         defaultQA.push({ id: 'q4', label: 'Tonalidade da pintura conferida na luz natural', checked: false, required: true });
         defaultQA.push({ id: 'q5', label: 'Montagem de peças alinhada (gaps)', checked: false, required: true });
       }
+
       if (workOrder.service.toLowerCase().includes('polimento') || workOrder.service.toLowerCase().includes('vitrificação')) {
         defaultQA.push({ id: 'q6', label: 'Inspeção de hologramas com luz de detalhamento', checked: false, required: true });
         defaultQA.push({ id: 'q7', label: 'Plásticos e borrachas protegidos/limpos', checked: false, required: true });
       }
+
       if (workOrder.service.toLowerCase().includes('higienização')) {
         defaultQA.push({ id: 'q8', label: 'Bancos e carpetes 100% secos', checked: false, required: true });
       }
+
       setQaList(defaultQA);
     }
   }, [workOrder.service]);
@@ -180,13 +191,12 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     setSelectedClientId(client.id);
     setClientSearch(client.name);
     setShowClientList(false);
-    // Auto-select first vehicle if exists
     if (client.vehicles.length > 0) {
         const v = client.vehicles[0];
         setSelectedVehiclePlate(v.plate);
     } else {
         setSelectedVehiclePlate('');
-        setIsAddingVehicle(true); // Prompt to add vehicle
+        setIsAddingVehicle(true);
     }
   };
 
@@ -230,13 +240,16 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         return;
     }
 
-    // Use the editable servicePrice state
+    // Se houver voucher aplicado, marcá-lo como usado agora
+    if (appliedVoucher) {
+      useVoucher(appliedVoucher, workOrder.id);
+    }
+
     const extrasTotal = additionalItems.reduce((acc, item) => acc + item.value, 0);
     const finalTotal = insurance.isInsurance 
       ? (insurance.deductibleAmount || 0) + (insurance.insuranceCoveredAmount || 0) + extrasTotal 
       : servicePrice + extrasTotal;
 
-    // Combine service names
     const selectedServicesList = services.filter(s => selectedServiceIds.includes(s.id));
     const serviceName = selectedServicesList.length > 0 
         ? selectedServicesList.map(s => s.name).join(' + ') 
@@ -255,14 +268,18 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       additionalItems,
       totalValue: finalTotal,
       service: serviceName,
-      serviceId: selectedServiceIds[0], // Primary ID
-      serviceIds: selectedServiceIds, // All IDs
+      serviceId: selectedServiceIds[0],
+      serviceIds: selectedServiceIds,
       status: workOrder.status,
-      clientSignature: clientSignature
+      clientSignature: clientSignature,
+      discount: {
+        type: discountType,
+        amount: discountAmount,
+        description: discountDescription
+      }
     };
 
     const exists = workOrders.some(o => o.id === workOrder.id);
-    
     if (exists) {
         updateWorkOrder(workOrder.id, updatedData);
     } else {
@@ -274,7 +291,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             checklist: workOrder.checklist || []
         });
     }
-    
     onClose();
     await showAlert({
         title: 'Sucesso',
@@ -292,8 +308,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         });
         return;
       }
-      
-      // Combine service names
+
       const selectedServicesList = services.filter(s => selectedServiceIds.includes(s.id));
       const serviceName = selectedServicesList.length > 0 
         ? selectedServicesList.map(s => s.name).join(' + ') 
@@ -307,7 +322,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           service: serviceName,
           serviceId: selectedServiceIds[0],
           serviceIds: selectedServiceIds,
-          totalValue: servicePrice, // Use the manual price
+          totalValue: servicePrice, 
           damages,
           vehicleInventory: inventory,
           clientSignature: clientSignature
@@ -331,6 +346,48 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         message: 'Ordem de Serviço aprovada e enviada para a fila.',
         type: 'success'
       });
+  };
+
+  const handleApplyVoucher = async () => {
+    if (!voucherCode) return;
+    const details = getVoucherDetails(voucherCode);
+    
+    if (!details) {
+      await showAlert({ title: 'Inválido', message: 'Voucher não encontrado.', type: 'warning' });
+      return;
+    }
+
+    if (details.redemption.status !== 'active') {
+      await showAlert({ title: 'Inválido', message: 'Este voucher já foi utilizado ou expirou.', type: 'warning' });
+      return;
+    }
+
+    // Check if voucher belongs to this client (optional, but good practice)
+    if (details.redemption.clientId !== selectedClientId) {
+       const confirmUse = await showConfirm({
+         title: 'Voucher de Outro Cliente',
+         message: 'Este voucher pertence a outro cliente. Deseja aplicar mesmo assim?',
+         type: 'warning',
+         confirmText: 'Sim, Aplicar'
+       });
+       if (!confirmUse) return;
+    }
+
+    if (details.reward) {
+      if (details.reward.rewardType === 'discount') {
+        setDiscountType('percentage');
+        setDiscountAmount(details.reward.percentage || 0);
+        setDiscountDescription(`Voucher: ${voucherCode} (${details.reward.name})`);
+      } else if (details.reward.rewardType === 'service' || details.reward.rewardType === 'free_service') {
+        setDiscountType('service');
+        setDiscountAmount(servicePrice); // Full discount? Or user sets amount? Let's set description.
+        setDiscountDescription(`Voucher Serviço: ${voucherCode} (${details.reward.gift || details.reward.name})`);
+        // Maybe set amount to 0 and let user decide value, or set to full service price if it matches?
+        // For now, just setting description and type is helpful.
+      }
+      setAppliedVoucher(voucherCode);
+      await showAlert({ title: 'Sucesso', message: `Voucher ${voucherCode} aplicado! O desconto foi configurado.`, type: 'success' });
+    }
   };
 
   const handleAddDamage = (area: DamagePoint['area']) => {
@@ -377,7 +434,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       });
       return;
     }
-    
+
     const exists = workOrders.some(o => o.id === workOrder.id);
     if (!exists) {
         const shouldSave = await showConfirm({
@@ -385,7 +442,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             message: 'Para mudar o status, precisamos salvar a OS primeiro. Deseja salvar agora?',
             type: 'info'
         });
-        
         if (shouldSave) {
             handleSave();
         }
@@ -423,7 +479,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       });
       return;
     }
-    
+
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -462,7 +518,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
               <div>
                 <div><strong>Oficina:</strong> Cristal Care Auto Detail</div>
                 <div><strong>Endereço:</strong> [Endereço da Oficina]</div>
-                <div><strong>Telefone:</strong> [Telefone]</div>
+                <div><strong>Telefone:</strong> [Telefone]</</div>
               </div>
               <div style="text-align: right;">
                 <div class="os-title">OS #${workOrder.id}</div>
@@ -481,7 +537,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                 ${selectedClient.address ? `<div class="info-row"><span class="info-label">Endereço:</span> ${selectedClient.address}</div>` : ''}
               ` : '<div style="color: #999;">Dados do cliente não disponíveis</div>'}
             </div>
-
             <div class="section">
               <h3>VEÍCULO</h3>
               <div class="info-row"><span class="info-label">Modelo:</span> ${workOrder.vehicle}</div>
@@ -510,7 +565,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
                 <div>Estepe: ${workOrder.vehicleInventory.estepe ? '✓ Presente' : '✗ Ausente'}</div>
                 <div>Macaco: ${workOrder.vehicleInventory.macaco ? '✓ Presente' : '✗ Ausente'}</div>
-                <div>Chave Roda: ${workOrder.vehicleInventory.chaveRoda ? '✓ Presente' : '✗ Ausente'}</div>
+                <div>Chave de Roda: ${workOrder.vehicleInventory.chaveRoda ? '✓ Presente' : '✗ Ausente'}</div>
                 <div>Tapetes: ${workOrder.vehicleInventory.tapetes ? '✓ Presente' : '✗ Ausente'}</div>
                 <div>Manual: ${workOrder.vehicleInventory.manual ? '✓ Presente' : '✗ Ausente'}</div>
                 <div>Antena: ${workOrder.vehicleInventory.antena ? '✓ Presente' : '✗ Ausente'}</div>
@@ -564,7 +619,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             <ul style="margin: 5px 0; padding-left: 20px; font-size: 11px;">
               <li>O cliente autoriza os reparos descritos nesta OS</li>
               <li>Fotos antes e depois serão tiradas para documentação</li>
-              <li>Qualquer dano adicional encontrado será informado ao cliente</li>
+              <li>Qualquer dano adicional encontrado durante o serviço será informado ao cliente</li>
               <li>Prazo estimado: ${workOrder.deadline}</li>
               <li>A oficina não se responsabiliza por pertences deixados no veículo</li>
             </ul>
@@ -593,7 +648,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       </body>
       </html>
     `;
-    
+
     printWindow.document.write(htmlContent);
     printWindow.document.close();
     setTimeout(() => {
@@ -620,17 +675,17 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     window.open(getWhatsappLink(selectedClient.phone, message), '_blank');
   };
 
-  // Calculations for Display
-  const currentExtrasTotal = additionalItems.reduce((acc, item) => acc + item.value, 0);
-  const currentTotal = servicePrice + currentExtrasTotal;
-  
-  const beforePhotos = damages.filter(d => d.photoUrl && d.photoUrl !== 'pending').map(d => ({ url: d.photoUrl!, desc: d.description }));
-  const afterPhotos = dailyLog.flatMap(log => log.photos.map(url => ({ url, desc: log.description })));
-
   const handleSignatureSave = (signature: string) => {
     setClientSignature(signature);
     setIsSignaturePadOpen(false);
   };
+
+  // Calculations for Display
+  const currentExtrasTotal = additionalItems.reduce((acc, item) => acc + item.value, 0);
+  const currentTotal = servicePrice + currentExtrasTotal;
+
+  const beforePhotos = damages.filter(d => d.photoUrl && d.photoUrl !== 'pending').map(d => ({ url: d.photoUrl!, desc: d.description }));
+  const afterPhotos = dailyLog.flatMap(log => log.photos.map(url => ({ url, desc: log.description })));
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-2 sm:p-4">
@@ -662,11 +717,23 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                 <option value="Concluído">Concluído (Pronto)</option>
                 <option value="Entregue">Entregue ao Cliente</option>
               </select>
+
+              {/* GAMIFICATION BADGE IN HEADER */}
+              {selectedClientId && companySettings.gamification?.enabled && (
+                <span className={cn(
+                  "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wide text-white",
+                  `bg-gradient-to-r ${clientTierConfig.color}`
+                )}>
+                  <Trophy size={10} />
+                  {clientTierConfig.name} • {currentPoints} pts
+                </span>
+              )}
             </div>
             <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm line-clamp-2">
                 {selectedVehicleObj ? selectedVehicleObj.model : 'Veículo não selecionado'} • {selectedVehiclePlate || 'Placa?'} • {selectedClient ? selectedClient.name : 'Cliente?'}
             </p>
           </div>
+
           <div className="flex gap-1 sm:gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
             {workOrder.status === 'Aguardando Aprovação' ? (
                 <button onClick={handleApprove} className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-green-600 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-green-700 transition-colors shadow-lg shadow-green-900/20 animate-pulse">
@@ -820,6 +887,9 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                         </div>
                     </div>
                  )}
+                 
+                 {/* GAMIFICATION DISPLAY REMOVED FROM HERE */}
+
               </div>
 
               <div className="lg:col-span-1 bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -837,11 +907,12 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     <Wrench size={18} className="text-blue-600" />
                     O que vamos fazer?
                   </h3>
+                  
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
-                    
                     {/* MULTI-SERVICE SELECTION */}
                     <div className="relative" ref={dropdownRef}>
                       <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1.5">Serviços a Realizar</label>
+                      
                       <button 
                         onClick={() => setIsServiceDropdownOpen(!isServiceDropdownOpen)}
                         className="w-full px-2 sm:px-4 py-1.5 sm:py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm text-slate-900 dark:text-white flex items-center justify-between"
@@ -853,7 +924,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                         </span>
                         <ChevronDown size={14} className="text-slate-400" />
                       </button>
-                      
+
                       {isServiceDropdownOpen && (
                         <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-50 max-h-40 sm:max-h-60 overflow-y-auto p-1 sm:p-2 space-y-0.5 sm:space-y-1">
                             {services.map(s => (
@@ -883,6 +954,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                             ))}
                         </div>
                       )}
+
                       <div className="mt-1.5 sm:mt-2 flex flex-wrap gap-1">
                         {selectedServiceIds.map(id => {
                             const s = services.find(srv => srv.id === id);
@@ -983,7 +1055,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
                         Marque os itens conforme for concluindo a execução.
                     </p>
-                    
+
                     <div className="space-y-3">
                         {scopeList.length > 0 ? scopeList.map((item, idx) => (
                             <label key={item.id} className={cn(
@@ -1021,14 +1093,13 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                         )}
                     </div>
                  </div>
-                 
+
                  {/* BEFORE / AFTER GALLERY PREVIEW */}
                  <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                     <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                         <ImageIcon size={20} className="text-purple-600" />
                         Galeria: Antes x Depois
                     </h3>
-                    
                     <div className="space-y-4">
                         <div>
                             <p className="text-xs font-bold text-slate-500 uppercase mb-2">Antes (Avarias)</p>
@@ -1237,6 +1308,38 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                   </h4>
                   
                   <div className="space-y-3">
+                    {/* VOUCHER INPUT */}
+                    <div className="flex gap-2 items-end">
+                      <div className="flex-1">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">Código Promocional (Voucher)</label>
+                        <div className="relative">
+                          <Ticket className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                          <input 
+                            type="text"
+                            value={voucherCode}
+                            onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                            placeholder="Ex: DESC-1234"
+                            className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white uppercase"
+                          />
+                        </div>
+                      </div>
+                      <button 
+                        onClick={handleApplyVoucher}
+                        disabled={!voucherCode}
+                        className="px-4 py-2 bg-purple-600 disabled:bg-slate-300 text-white rounded-lg font-bold text-sm hover:bg-purple-700 transition-colors"
+                      >
+                        Aplicar
+                      </button>
+                    </div>
+
+                    {appliedVoucher && (
+                      <div className="text-xs text-green-600 dark:text-green-400 font-bold flex items-center gap-1">
+                        <CheckCircle2 size={12} /> Voucher {appliedVoucher} aplicado com sucesso!
+                      </div>
+                    )}
+
+                    <div className="border-t border-slate-200 dark:border-slate-700 my-3"></div>
+
                     <div className="flex gap-2">
                       {(['percentage', 'value', 'service'] as const).map(type => (
                         <button
@@ -1316,7 +1419,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
                     {discountAmount > 0 && (
                       <button
-                        onClick={() => {setDiscountAmount(0); setDiscountDescription('');}}
+                        onClick={() => {setDiscountAmount(0); setDiscountDescription(''); setAppliedVoucher(null); setVoucherCode('');}}
                         className="w-full py-2 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                       >
                         Remover Desconto
@@ -1324,6 +1427,99 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     )}
                   </div>
                 </div>
+
+                {/* --- GAMIFICATION SECTION --- */}
+                {selectedClientId && companySettings.gamification?.enabled && (
+                  <div className="mt-6 p-4 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg border border-indigo-100 dark:border-indigo-800">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-2 text-sm">
+                        <Trophy size={18} className="text-indigo-600" />
+                        Programa de Fidelidade
+                      </h4>
+                      <span className="text-xs font-bold bg-white dark:bg-slate-800 px-2 py-1 rounded text-indigo-600 border border-indigo-100 dark:border-indigo-800">
+                        {currentPoints} pontos disponíveis
+                      </span>
+                    </div>
+
+                    <div className="space-y-3">
+                      {getRewardsByLevel(currentTierId).map(reward => {
+                        const canClaim = currentPoints >= reward.requiredPoints;
+                        const missing = reward.requiredPoints - currentPoints;
+                        const progress = Math.min(100, (currentPoints / reward.requiredPoints) * 100);
+
+                        // Helper to claim and apply immediately
+                        const handleClaimAndApply = async () => {
+                            const confirm = await showConfirm({
+                                title: 'Resgatar Recompensa',
+                                message: `Deseja trocar ${reward.requiredPoints} pontos por "${reward.name}" e aplicar nesta OS agora?`,
+                                confirmText: 'Sim, Resgatar e Aplicar'
+                            });
+
+                            if (confirm) {
+                                const result = claimReward(selectedClientId, reward.id);
+                                if (result.success && result.voucherCode) {
+                                    setVoucherCode(result.voucherCode);
+                                    // Apply discount logic immediately
+                                    const details = getVoucherDetails(result.voucherCode);
+                                    if (details && details.reward) {
+                                        if (details.reward.rewardType === 'discount') {
+                                            setDiscountType('percentage');
+                                            setDiscountAmount(details.reward.percentage || 0);
+                                            setDiscountDescription(`Fidelidade: ${reward.name}`);
+                                        } else if (details.reward.rewardType === 'service' || details.reward.rewardType === 'free_service') {
+                                            setDiscountType('service');
+                                            setDiscountAmount(servicePrice); 
+                                            setDiscountDescription(`Fidelidade: ${reward.gift || reward.name}`);
+                                        }
+                                        setAppliedVoucher(result.voucherCode);
+                                        await showAlert({ title: 'Sucesso', message: 'Pontos resgatados e desconto aplicado!', type: 'success' });
+                                    }
+                                } else {
+                                    await showAlert({ title: 'Erro', message: result.message, type: 'danger' });
+                                }
+                            }
+                        };
+
+                        return (
+                          <div key={reward.id} className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-indigo-100 dark:border-indigo-800 shadow-sm">
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <p className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">{reward.name}</p>
+                                <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400">{reward.description}</p>
+                              </div>
+                              {canClaim ? (
+                                 <button
+                                   onClick={handleClaimAndApply}
+                                   disabled={!!appliedVoucher} // Disable if a voucher is already applied
+                                   className="px-3 py-1.5 bg-green-600 disabled:bg-slate-300 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition-colors shadow-sm flex items-center gap-1 whitespace-nowrap"
+                                 >
+                                   <Gift size={12} /> Usar Agora
+                                 </button>
+                              ) : (
+                                 <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded whitespace-nowrap">
+                                   Faltam {missing} pts
+                                 </span>
+                              )}
+                            </div>
+                            {/* Progress Bar for locked rewards */}
+                            {!canClaim && (
+                              <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden mt-2">
+                                <div 
+                                  className="h-full bg-indigo-500 rounded-full transition-all duration-500" 
+                                  style={{ width: `${progress}%` }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {getRewardsByLevel(currentTierId).length === 0 && (
+                        <p className="text-xs text-center text-slate-500 italic">Nenhuma recompensa disponível para o nível {clientTierConfig?.name}.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* FINAL TOTALS */}
                 <div className="flex flex-col gap-3 pt-4 mt-4 border-t border-slate-200 dark:border-slate-700">
@@ -1339,65 +1535,24 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     )}
                     <div className="flex justify-between items-center py-3 px-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                       <span className="font-bold text-lg text-slate-900 dark:text-white">Total Final</span>
-                      <span className="font-bold text-2xl text-blue-600 dark:text-blue-400">
+                      <span className="font-bold text-xl text-blue-600 dark:text-blue-400">
                         {formatCurrency(
-                          discountType === 'percentage' 
-                            ? (servicePrice + currentExtrasTotal) * (1 - discountAmount / 100)
-                            : servicePrice + currentExtrasTotal - discountAmount
+                          Math.max(0, (servicePrice + currentExtrasTotal) - (
+                            discountType === 'percentage' 
+                              ? (servicePrice + currentExtrasTotal) * (discountAmount / 100) 
+                              : discountAmount
+                          ))
                         )}
                       </span>
                     </div>
                 </div>
+
               </div>
             </div>
           )}
 
         </div>
       </div>
-
-      {/* Modal de Avaria (ADMIN - REUSED LOGIC) */}
-      {isDamageModalOpen && (
-        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
-             <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-4">Registrar Avaria</h3>
-             
-             <textarea 
-                value={damageDesc} 
-                onChange={(e) => setDamageDesc(e.target.value)} 
-                placeholder="Descreva o dano..." 
-                className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl mb-4 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                autoFocus
-             />
-
-             <label className="block w-full p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors mb-4">
-                <input 
-                    type="file" 
-                    accept="image/*" 
-                    capture="environment" 
-                    className="hidden" 
-                    onChange={handlePhotoCapture}
-                />
-                {damagePhoto ? (
-                    <div className="relative">
-                        <img src={damagePhoto} alt="Preview" className="h-32 mx-auto rounded-lg object-cover shadow-sm" />
-                        <span className="text-xs text-green-600 dark:text-green-400 font-bold block mt-2">Foto OK!</span>
-                    </div>
-                ) : (
-                    <div className="flex flex-col items-center gap-2 text-slate-500 dark:text-slate-400">
-                        <Camera size={24} />
-                        <span className="font-bold text-sm">Adicionar Foto</span>
-                    </div>
-                )}
-             </label>
-
-             <div className="flex gap-3">
-                <button onClick={() => setIsDamageModalOpen(false)} className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-bold transition-colors">Cancelar</button>
-                <button onClick={handleSaveDamage} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20">Salvar</button>
-             </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }

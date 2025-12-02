@@ -208,33 +208,66 @@ export interface Discount {
   appliedServiceId?: string;
 }
 
-export interface TierBenefit {
-  tier: 'bronze' | 'silver' | 'gold' | 'platinum';
+// --- GAMIFICATION TYPES (REFACTORED) ---
+
+export type TierLevel = 'bronze' | 'silver' | 'gold' | 'platinum';
+
+export interface TierConfig {
+  id: TierLevel;
+  name: string;
   minPoints: number;
-  maxPoints: number;
-  discountPercentage: number;
-  benefitDescription: string;
+  color: string;
+  benefits: string[];
 }
 
 export interface GamificationConfig {
   enabled: boolean;
   levelSystem: boolean;
   pointsMultiplier: number;
-  rewardTier: 'bronze' | 'silver' | 'gold' | 'platinum';
-  tiers?: TierBenefit[];
+  tiers: TierConfig[]; // Agora os tiers são configuráveis
+}
+
+export interface Reward {
+  id: string;
+  name: string;
+  description: string;
+  requiredPoints: number;
+  requiredLevel: TierLevel;
+  rewardType: 'discount' | 'service' | 'gift' | 'free_service';
+  value?: number;
+  percentage?: number;
+  serviceId?: string;
+  gift?: string;
+  active: boolean;
+  createdAt: string;
+  redeemedCount?: number;
+}
+
+// Novo tipo para Vouchers/Resgates
+export interface Redemption {
+  id: string;
+  clientId: string;
+  rewardId: string;
+  rewardName: string;
+  code: string; // Código único do voucher
+  pointsCost: number;
+  status: 'active' | 'used' | 'expired';
+  redeemedAt: string;
+  usedAt?: string;
+  usedInWorkOrderId?: string;
 }
 
 export interface ClientPoints {
   clientId: string;
   totalPoints: number;
-  currentLevel: number; // 1-5 levels
-  tier: 'bronze' | 'silver' | 'gold' | 'platinum';
+  currentLevel: number; // 1-4 levels (index based on tiers array)
+  tier: TierLevel;
   lastServiceDate: string;
   servicesCompleted: number;
   pointsHistory: {
     id: string;
     workOrderId: string;
-    points: number;
+    points: number; // Pode ser negativo (resgate) ou positivo (ganho)
     description: string;
     date: string;
   }[];
@@ -248,22 +281,6 @@ export interface FidelityCard {
   qrCode: string;
   expiresAt: string;
   issueDate: string;
-}
-
-export interface Reward {
-  id: string;
-  name: string;
-  description: string;
-  requiredPoints: number;
-  requiredLevel: 'bronze' | 'silver' | 'gold' | 'platinum';
-  rewardType: 'discount' | 'service' | 'gift' | 'free_service';
-  value?: number;
-  percentage?: number;
-  serviceId?: string;
-  gift?: string;
-  active: boolean;
-  createdAt: string;
-  redeemedCount?: number;
 }
 
 export interface ScopeItem {
