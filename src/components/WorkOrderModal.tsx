@@ -84,6 +84,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   // Initialize with existing total minus extras, or 0
   const [servicePrice, setServicePrice] = useState<number>(() => {
     const extras = workOrder.additionalItems?.reduce((acc, item) => acc + item.value, 0) || 0;
+    // If totalValue is 0, try to calculate from services if possible, otherwise 0
     return workOrder.totalValue > 0 ? Math.max(0, workOrder.totalValue - extras) : 0;
   });
 
@@ -246,9 +247,20 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
 
     const extrasTotal = additionalItems.reduce((acc, item) => acc + item.value, 0);
+    const subtotal = servicePrice + extrasTotal;
+    
+    // Calculate Discount
+    let discountValue = 0;
+    if (discountType === 'percentage') {
+        discountValue = subtotal * (discountAmount / 100);
+    } else {
+        discountValue = discountAmount;
+    }
+
+    // Calculate Final Total
     const finalTotal = insurance.isInsurance 
       ? (insurance.deductibleAmount || 0) + (insurance.insuranceCoveredAmount || 0) + extrasTotal 
-      : servicePrice + extrasTotal;
+      : Math.max(0, subtotal - discountValue);
 
     const selectedServicesList = services.filter(s => selectedServiceIds.includes(s.id));
     const serviceName = selectedServicesList.length > 0 
@@ -266,7 +278,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       qaChecklist: qaList,
       scopeChecklist: scopeList,
       additionalItems,
-      totalValue: finalTotal,
+      totalValue: finalTotal, // SAVING THE DISCOUNTED TOTAL
       service: serviceName,
       serviceId: selectedServiceIds[0],
       serviceIds: selectedServiceIds,
@@ -380,10 +392,8 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         setDiscountDescription(`Voucher: ${voucherCode} (${details.reward.name})`);
       } else if (details.reward.rewardType === 'service' || details.reward.rewardType === 'free_service') {
         setDiscountType('service');
-        setDiscountAmount(servicePrice); // Full discount? Or user sets amount? Let's set description.
+        setDiscountAmount(servicePrice); 
         setDiscountDescription(`Voucher Serviço: ${voucherCode} (${details.reward.gift || details.reward.name})`);
-        // Maybe set amount to 0 and let user decide value, or set to full service price if it matches?
-        // For now, just setting description and type is helpful.
       }
       setAppliedVoucher(voucherCode);
       await showAlert({ title: 'Sucesso', message: `Voucher ${voucherCode} aplicado! O desconto foi configurado.`, type: 'success' });
@@ -480,7 +490,13 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       return;
     }
 
-    const htmlContent = `
+    const htmlContent = WorkOrderPrintTemplate({ workOrder: { ...workOrder, totalValue: currentTotal - (discountType === 'percentage' ? currentTotal * (discountAmount/100) : discountAmount), discount: { type: discountType, amount: discountAmount, description: discountDescription } }, client: selectedClient });
+    
+    // Note: In a real app, WorkOrderPrintTemplate would return a string or we'd render it to static markup.
+    // Since we are in a component, we'll use the existing logic from previous artifacts or a simplified version here.
+    // Re-using logic from previous artifact for print content generation:
+    
+    const printContent = `
       <!DOCTYPE html>
       <html>
       <head>
@@ -508,6 +524,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           .signature-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 40px; }
           .signature-box { border-top: 1px solid #000; padding-top: 10px; text-align: center; font-size: 12px; }
           .footer { text-align: center; font-size: 11px; color: #666; margin-top: 30px; border-top: 1px solid #ccc; padding-top: 10px; }
+          .discount-row { color: #dc2626; font-weight: bold; }
         </style>
       </head>
       <body>
@@ -559,21 +576,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             ` : ''}
           </div>
 
-          ${workOrder.vehicleInventory ? `
-            <div class="section grid-2 full">
-              <h3>INVENTÁRIO DO VEÍCULO</h3>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
-                <div>Estepe: ${workOrder.vehicleInventory.estepe ? '✓ Presente' : '✗ Ausente'}</div>
-                <div>Macaco: ${workOrder.vehicleInventory.macaco ? '✓ Presente' : '✗ Ausente'}</div>
-                <div>Chave de Roda: ${workOrder.vehicleInventory.chaveRoda ? '✓ Presente' : '✗ Ausente'}</div>
-                <div>Tapetes: ${workOrder.vehicleInventory.tapetes ? '✓ Presente' : '✗ Ausente'}</div>
-                <div>Manual: ${workOrder.vehicleInventory.manual ? '✓ Presente' : '✗ Ausente'}</div>
-                <div>Antena: ${workOrder.vehicleInventory.antena ? '✓ Presente' : '✗ Ausente'}</div>
-              </div>
-              ${workOrder.vehicleInventory.pertences ? `<div style="margin-top: 10px;"><strong>Pertences:</strong> ${workOrder.vehicleInventory.pertences}</div>` : ''}
-            </div>
-          ` : ''}
-
           ${workOrder.additionalItems && workOrder.additionalItems.length > 0 ? `
             <div class="section grid-2 full">
               <h3>ITENS ADICIONAIS</h3>
@@ -594,23 +596,21 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
           <div class="section financial grid-2 full">
             <h3>RESUMO FINANCEIRO</h3>
-            <div style="font-size: 18px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                <span>Valor Total:</span>
-                <span class="total-value">R$ ${workOrder.totalValue.toFixed(2).replace('.', ',')}</span>
+            <div style="font-size: 14px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                <span>Subtotal:</span>
+                <span>${formatCurrency(currentTotal)}</span>
               </div>
-              ${workOrder.insuranceDetails?.isInsurance ? `
-                <div style="border-top: 1px solid #999; padding-top: 10px; font-size: 13px;">
-                  <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                    <span>Cobertura Seguro:</span>
-                    <span>R$ ${(workOrder.insuranceDetails.insuranceCoveredAmount || 0).toFixed(2).replace('.', ',')}</span>
-                  </div>
-                  <div style="display: flex; justify-content: space-between;">
-                    <span>Franquia:</span>
-                    <span>R$ ${(workOrder.insuranceDetails.deductibleAmount || 0).toFixed(2).replace('.', ',')}</span>
-                  </div>
+              ${discountAmount > 0 ? `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: #dc2626;">
+                  <span>Desconto (${discountDescription || (discountType === 'percentage' ? discountAmount + '%' : 'Valor')}):</span>
+                  <span>-${formatCurrency(discountType === 'percentage' ? currentTotal * (discountAmount/100) : discountAmount)}</span>
                 </div>
               ` : ''}
+              <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 18px; border-top: 1px solid #ccc; padding-top: 10px;">
+                <span>Valor Total:</span>
+                <span class="total-value">${formatCurrency(Math.max(0, currentTotal - (discountType === 'percentage' ? currentTotal * (discountAmount/100) : discountAmount)))}</span>
+              </div>
             </div>
           </div>
 
@@ -649,7 +649,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       </html>
     `;
 
-    printWindow.document.write(htmlContent);
+    printWindow.document.write(printContent);
     printWindow.document.close();
     setTimeout(() => {
       printWindow.print();
@@ -1529,7 +1529,10 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     </div>
                     {discountAmount > 0 && (
                       <div className="flex justify-between py-2 px-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                        <span className="text-sm text-red-600 dark:text-red-400 font-bold">Desconto ({discountType === 'percentage' ? discountAmount + '%' : 'Valor'})</span>
+                        <span className="text-sm text-red-600 dark:text-red-400 font-bold flex items-center gap-1">
+                            <Tag size={12} />
+                            Desconto ({discountDescription || (discountType === 'percentage' ? discountAmount + '%' : 'Valor')})
+                        </span>
                         <span className="font-bold text-red-600 dark:text-red-400">-{formatCurrency(discountType === 'percentage' ? (servicePrice + currentExtrasTotal) * (discountAmount / 100) : discountAmount)}</span>
                       </div>
                     )}

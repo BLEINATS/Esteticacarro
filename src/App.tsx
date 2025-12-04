@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
+import { DialogProvider } from './context/DialogContext';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Operations from './pages/Operations';
@@ -16,35 +17,46 @@ import Settings from './pages/Settings';
 import ShopLanding from './pages/ShopLanding';
 import Gamification from './pages/Gamification';
 import ClientProfile from './pages/ClientProfile';
+import OwnerLogin from './pages/OwnerLogin';
+import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
     <AppProvider>
-      <BrowserRouter>
-        <Routes>
-          {/* Rota Pública da Loja (Landing Page) */}
-          <Route path="/shop" element={<ShopLanding />} />
+      <DialogProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Rota Pública da Loja (Landing Page) */}
+            <Route path="/shop" element={<ShopLanding />} />
 
-          {/* Portal do Técnico (Standalone - Sem Sidebar de Admin) */}
-          <Route path="/tech-portal" element={<TechPortal />} />
+            {/* Portal do Técnico (Standalone - Sem Sidebar de Admin) */}
+            <Route path="/tech-portal" element={<TechPortal />} />
+            
+            {/* Login do Dono */}
+            <Route path="/login" element={<OwnerLogin />} />
 
-          {/* Rotas do Sistema Admin (Com Layout/Sidebar) */}
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="schedule" element={<Schedule />} />
-            <Route path="operations" element={<Operations />} />
-            <Route path="clients" element={<Clients />} />
-            <Route path="marketing" element={<Marketing />} />
-            <Route path="finance" element={<Finance />} />
-            <Route path="inventory" element={<Inventory />} />
-            <Route path="team" element={<Team />} />
-            <Route path="pricing" element={<ServicesPricing />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="gamification" element={<Gamification />} />
-            <Route path="client-profile/:clientId" element={<ClientProfile />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+            {/* Rotas do Sistema Admin (Protegidas) */}
+            <Route path="/" element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }>
+              <Route index element={<Dashboard />} />
+              <Route path="schedule" element={<Schedule />} />
+              <Route path="operations" element={<Operations />} />
+              <Route path="clients" element={<Clients />} />
+              <Route path="marketing" element={<Marketing />} />
+              <Route path="finance" element={<Finance />} />
+              <Route path="inventory" element={<Inventory />} />
+              <Route path="team" element={<Team />} />
+              <Route path="pricing" element={<ServicesPricing />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="gamification" element={<Gamification />} />
+              <Route path="client-profile/:clientId" element={<ClientProfile />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </DialogProvider>
     </AppProvider>
   );
 }

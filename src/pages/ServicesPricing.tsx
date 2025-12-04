@@ -2,16 +2,17 @@ import React, { useState } from 'react';
 import { 
   Tags, Filter, Plus, ArrowUpRight, Calculator, Info,
   CheckCircle2, Clock, RotateCcw, ToggleLeft, ToggleRight, Image as ImageIcon, Upload,
-  Search, Trash2
+  Search, Trash2, Beaker, DollarSign
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatCurrency, cn } from '../lib/utils';
 import { VehicleSize, VEHICLE_SIZES, ServiceCatalogItem } from '../types';
 import ServiceModal from '../components/ServiceModal';
+import ServiceConsumptionModal from '../components/ServiceConsumptionModal';
 import { useDialog } from '../context/DialogContext';
 
 export default function ServicesPricing() {
-  const { services, priceMatrix, updatePrice, bulkUpdatePrices, updateServiceInterval, deleteService } = useApp();
+  const { services, priceMatrix, updatePrice, bulkUpdatePrices, updateServiceInterval, deleteService, calculateServiceCost } = useApp();
   const { showConfirm, showAlert } = useDialog();
   const [activeTab, setActiveTab] = useState<'matrix' | 'catalog'>('matrix');
   const [bulkPercentage, setBulkPercentage] = useState<number>(10);
@@ -21,6 +22,7 @@ export default function ServicesPricing() {
 
   // Modal States
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
+  const [isConsumptionModalOpen, setIsConsumptionModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<ServiceCatalogItem | null>(null);
 
   const sizes: VehicleSize[] = ['small', 'medium', 'large', 'xl'];
@@ -43,6 +45,11 @@ export default function ServicesPricing() {
   const handleEditService = (service: ServiceCatalogItem) => {
     setSelectedService(service);
     setIsServiceModalOpen(true);
+  };
+
+  const handleConsumption = (service: ServiceCatalogItem) => {
+    setSelectedService(service);
+    setIsConsumptionModalOpen(true);
   };
 
   const handleDeleteService = async (id: string) => {
@@ -82,6 +89,13 @@ export default function ServicesPricing() {
         <ServiceModal 
             service={selectedService} 
             onClose={() => setIsServiceModalOpen(false)} 
+        />
+      )}
+
+      {isConsumptionModalOpen && selectedService && (
+        <ServiceConsumptionModal 
+            service={selectedService} 
+            onClose={() => setIsConsumptionModalOpen(false)} 
         />
       )}
 
@@ -315,6 +329,7 @@ export default function ServicesPricing() {
                const prices = priceMatrix.filter(p => p.serviceId === service.id).map(p => p.price);
                const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
                const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
+               const serviceCost = calculateServiceCost(service.id);
                
                return (
                <div key={service.id} className="relative bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:shadow-blue-500/10 transition-all duration-300 group overflow-hidden hover:-translate-y-1">
@@ -340,14 +355,24 @@ export default function ServicesPricing() {
                  
                  {/* Price Display */}
                  <div className="mb-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800 group-hover:border-blue-200 dark:group-hover:border-blue-900/50 transition-colors relative z-10">
-                    <p className="text-xs text-slate-400 uppercase font-bold mb-1">Investimento</p>
-                    <p className="text-lg font-bold text-slate-900 dark:text-white">
-                        {minPrice === 0 ? 'Sob Consulta' : (
-                            minPrice === maxPrice 
-                                ? formatCurrency(minPrice)
-                                : `${formatCurrency(minPrice)} - ${formatCurrency(maxPrice)}`
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <p className="text-xs text-slate-400 uppercase font-bold mb-1">Investimento</p>
+                            <p className="text-lg font-bold text-slate-900 dark:text-white">
+                                {minPrice === 0 ? 'Sob Consulta' : (
+                                    minPrice === maxPrice 
+                                        ? formatCurrency(minPrice)
+                                        : `${formatCurrency(minPrice)} - ${formatCurrency(maxPrice)}`
+                                )}
+                            </p>
+                        </div>
+                        {serviceCost > 0 && (
+                            <div className="text-right">
+                                <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Custo (CMV)</p>
+                                <p className="text-sm font-bold text-green-600 dark:text-green-400">{formatCurrency(serviceCost)}</p>
+                            </div>
                         )}
-                    </p>
+                    </div>
                  </div>
 
                  {/* Configuração de Recorrência */}
@@ -367,7 +392,14 @@ export default function ServicesPricing() {
                     </p>
                  </div>
 
-                 <div className="flex items-center justify-end pt-4 border-t border-slate-100 dark:border-slate-800 relative z-10">
+                 <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800 relative z-10">
+                   <button 
+                     onClick={() => handleConsumption(service)}
+                     className="text-xs font-bold text-purple-600 dark:text-purple-400 flex items-center gap-1 hover:underline"
+                   >
+                     <Beaker size={14} /> Ficha Técnica
+                   </button>
+
                    <div className="flex gap-2">
                         <button 
                             onClick={() => handleEditService(service)}

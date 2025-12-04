@@ -4,7 +4,7 @@ import {
   ServiceCatalogItem, PriceMatrixEntry, VehicleSize, Employee, Task, 
   TimeLog, EmployeeTransaction, MarketingCampaign, ClientSegment,
   CompanySettings, SubscriptionDetails, FinancialTransaction, ClientPoints, FidelityCard, Reward,
-  Redemption, TierConfig, TierLevel
+  Redemption, TierConfig, TierLevel, ShopOwner, Notification, ServiceConsumption
 } from '../types';
 import { differenceInDays, addDays, subDays, formatISO, startOfWeek, addHours } from 'date-fns';
 
@@ -23,9 +23,17 @@ interface AppContextType {
   fidelityCards: FidelityCard[];
   rewards: Reward[];
   redemptions: Redemption[];
-  currentUser: Employee | null;
+  serviceConsumptions: ServiceConsumption[];
+  
+  currentUser: Employee | null; // Tech Portal User
+  ownerUser: ShopOwner | null; // Admin/Shop Owner User
+  
   theme: 'light' | 'dark';
   campaigns: MarketingCampaign[];
+  
+  // Notifications
+  notifications: Notification[];
+  markNotificationAsRead: (id: string) => void;
   
   // SaaS & Config
   companySettings: CompanySettings;
@@ -37,9 +45,13 @@ interface AppContextType {
   disconnectWhatsapp: () => void;
   
   // Actions
-  login: (pin: string) => boolean;
-  logout: () => void;
+  login: (pin: string) => boolean; // Tech Login
+  logout: () => void; // Tech Logout
   
+  loginOwner: (email: string, password: string) => boolean;
+  registerOwner: (name: string, email: string, shopName: string) => void;
+  logoutOwner: () => void;
+
   addWorkOrder: (os: WorkOrder) => void;
   updateWorkOrder: (id: string, updates: Partial<WorkOrder>) => void;
   completeWorkOrder: (id: string) => void;
@@ -53,7 +65,7 @@ interface AppContextType {
   addInventoryItem: (item: Omit<InventoryItem, 'id' | 'status'>) => void;
   updateInventoryItem: (id: number, updates: Partial<InventoryItem>) => void;
   deleteInventoryItem: (id: number) => void;
-  deductStock: (serviceName: string) => void;
+  deductStock: (serviceId: string) => void;
   
   toggleTheme: () => void;
   generateReminders: (os: WorkOrder) => void;
@@ -66,6 +78,11 @@ interface AppContextType {
   updateServiceInterval: (serviceId: string, days: number) => void;
   bulkUpdatePrices: (targetSize: VehicleSize | 'all', percentage: number) => void;
   getPrice: (serviceId: string, size: VehicleSize) => number;
+  
+  // Consumption/Recipe Actions
+  updateServiceConsumption: (consumption: ServiceConsumption) => void;
+  getServiceConsumption: (serviceId: string) => ServiceConsumption | undefined;
+  calculateServiceCost: (serviceId: string) => number;
 
   // HR Actions
   addEmployee: (employee: Omit<Employee, 'id' | 'balance'>) => void;
@@ -133,8 +150,7 @@ const setStorage = <T,>(key: string, value: T) => {
   }
 };
 
-// --- MOCK DATA ---
-
+// ... (Existing Mock Data)
 const defaultTiers: TierConfig[] = [
   { id: 'bronze', name: 'Bronze', minPoints: 0, color: 'from-amber-500 to-amber-600', benefits: ['5% desconto em serviços'] },
   { id: 'silver', name: 'Prata', minPoints: 500, color: 'from-slate-400 to-slate-600', benefits: ['10% desconto', 'Frete grátis'] },
@@ -188,7 +204,7 @@ const initialCompanySettings: CompanySettings = {
     enabled: true,
     levelSystem: true,
     pointsMultiplier: 1,
-    tiers: defaultTiers // Novos tiers configuráveis
+    tiers: defaultTiers
   }
 };
 
@@ -215,61 +231,10 @@ const initialClients: Client[] = [
     ],
     ltv: 15500.00, lastVisit: formatISO(yesterday), visitCount: 12, status: 'active', segment: 'vip'
   },
-  {
-    id: 'c2', name: 'Márcia Oliveira', phone: '11988887777', email: 'marcia.oliv@email.com', notes: 'Gerente de RH em startup tech. Cliente recorrente.',
-    vehicles: [{ id: 'v3', model: 'Mercedes C180', plate: 'MER-4455', color: 'Branco Pérola', year: '2021', size: 'medium' }],
-    ltv: 8200.00, lastVisit: formatISO(subDays(today, 3)), visitCount: 8, status: 'active', segment: 'recurring'
-  },
-  {
-    id: 'c3', name: 'Felipe Santos', phone: '11987776666', email: 'felipe@constructora.com', notes: 'Proprietário de construtora. Ama carros de luxo.',
-    vehicles: [
-      { id: 'v4', model: 'Audi A6', plate: 'AUD-2233', color: 'Cinza', year: '2023', size: 'medium' },
-      { id: 'v5', model: 'Land Rover Discovery', plate: 'LRD-7788', color: 'Preto', year: '2022', size: 'xl' }
-    ],
-    ltv: 12400.00, lastVisit: formatISO(subDays(today, 7)), visitCount: 6, status: 'active', segment: 'vip'
-  },
-  {
-    id: 'c4', name: 'Juliana Costa', phone: '11986665555', email: 'ju.costa@hotmail.com', notes: 'Vendedora de imóveis. Preocupada com apresentação do carro.',
-    vehicles: [{ id: 'v6', model: 'Volkswagen Tiguan', plate: 'VW-1199', color: 'Prata', year: '2020', size: 'medium' }],
-    ltv: 5600.00, lastVisit: formatISO(subDays(today, 14)), visitCount: 4, status: 'active', segment: 'recurring'
-  },
-  {
-    id: 'c5', name: 'Carlos Mendes', phone: '11985554444', email: 'carlos.m@email.com', notes: 'Advogado. Quer apenas o melhor para seu Jaguar.',
-    vehicles: [{ id: 'v7', model: 'Jaguar XF', plate: 'JAG-3344', color: 'Vermelho', year: '2021', size: 'large' }],
-    ltv: 18900.00, lastVisit: formatISO(subDays(today, 2)), visitCount: 10, status: 'active', segment: 'vip'
-  },
-  {
-    id: 'c6', name: 'Ana Silva', phone: '11984443333', email: 'ana.silva@email.com', notes: 'Cliente novo, primeiro contato.',
-    vehicles: [{ id: 'v8', model: 'Honda Civic', plate: 'HON-5566', color: 'Branco', year: '2023', size: 'medium' }],
-    ltv: 1200.00, lastVisit: formatISO(subDays(today, 1)), visitCount: 1, status: 'active', segment: 'new'
-  },
-  {
-    id: 'c7', name: 'Thiago Lima', phone: '11982221111', email: 'thiago.lima@email.com', notes: 'Cliente novo, potencial alto.',
-    vehicles: [{ id: 'v9', model: 'Toyota Corolla', plate: 'TOY-7788', color: 'Prata', year: '2022', size: 'medium' }],
-    ltv: 1800.00, lastVisit: formatISO(subDays(today, 2)), visitCount: 1, status: 'active', segment: 'new'
-  },
-  {
-    id: 'c8', name: 'Gustavo Ribeiro', phone: '11981110000', email: 'gustavo.r@email.com', notes: 'Sem visita há 90 dias. Risco de churn. Estratégia: Campanha de retenção via email.',
-    vehicles: [{ id: 'v10', model: 'Hyundai HB20', plate: 'HYU-9999', color: 'Cinza', year: '2019', size: 'small' }],
-    ltv: 2100.00, lastVisit: formatISO(subDays(today, 92)), visitCount: 3, status: 'churn_risk', segment: 'at_risk'
-  },
-  {
-    id: 'c9', name: 'Fernanda Costa', phone: '11980008888', email: 'fernanda.c@email.com', notes: 'Risco de churn. Última compra de baixo valor. Candidata a programa de indicação.',
-    vehicles: [{ id: 'v11', model: 'Fiat Uno', plate: 'FIA-4444', color: 'Vermelho', year: '2018', size: 'small' }],
-    ltv: 1900.00, lastVisit: formatISO(subDays(today, 75)), visitCount: 2, status: 'churn_risk', segment: 'at_risk'
-  },
-  {
-    id: 'c10', name: 'Patricia Gomes', phone: '11979998765', email: 'patricia.g@email.com', notes: 'Cliente recorrente com alto potencial. Adepta de pacotes mensais.',
-    vehicles: [{ id: 'v12', model: 'Chevrolet Tracker', plate: 'CHE-3344', color: 'Branco', year: '2021', size: 'medium' }],
-    ltv: 9800.00, lastVisit: formatISO(subDays(today, 5)), visitCount: 15, status: 'active', segment: 'recurring'
-  }
 ];
 const initialReminders: Reminder[] = []; 
 const initialEmployees: Employee[] = [
   { id: 'e1', name: 'Mestre Miyagi', role: 'Funileiro', pin: '1234', salaryType: 'commission', fixedSalary: 0, commissionRate: 30, commissionBase: 'net', active: true, balance: 3450.00 },
-  { id: 'e2', name: 'João Detalhista', role: 'Detailer', pin: '5678', salaryType: 'commission', fixedSalary: 0, commissionRate: 25, commissionBase: 'net', active: true, balance: 2890.50 },
-  { id: 'e3', name: 'Lucas Polidor', role: 'Polidor', pin: '2468', salaryType: 'commission', fixedSalary: 500, commissionRate: 20, commissionBase: 'net', active: true, balance: 1250.00 },
-  { id: 'e4', name: 'Ana Administrativo', role: 'Recepcionista', pin: '1357', salaryType: 'fixed', fixedSalary: 2500, commissionRate: 0, commissionBase: 'gross', active: true, balance: 0 },
   { id: 'e5', name: 'Fernanda Gerente', role: 'Manager', pin: '9999', salaryType: 'fixed', fixedSalary: 3500, commissionRate: 0, commissionBase: 'gross', active: true, balance: 0 },
 ];
 
@@ -284,474 +249,37 @@ const initialServices: ServiceCatalogItem[] = [
       returnIntervalDays: 30, 
       imageUrl: 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=800&q=80' 
     },
-    { 
-      id: 'srv2', 
-      name: 'Polimento Comercial', 
-      description: 'Revitalização do brilho e remoção de riscos superficiais e marcas de lavagem (swirls).', 
-      category: 'Polimento', 
-      active: true, 
-      standardTimeMinutes: 240, 
-      returnIntervalDays: 180, 
-      imageUrl: 'https://images.unsplash.com/photo-1507136566006-cfc505b114fc?auto=format&fit=crop&w=800&q=80' 
-    },
-    { 
-      id: 'srv3', 
-      name: 'Vitrificação 3 Anos', 
-      description: 'Proteção cerâmica de alta dureza (9H) que repele água e sujeira, facilitando a limpeza.', 
-      category: 'Proteção', 
-      active: true, 
-      standardTimeMinutes: 480, 
-      returnIntervalDays: 365, 
-      imageUrl: 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=800&q=80' 
-    },
-    { 
-      id: 'srv4', 
-      name: 'Higienização Interna', 
-      description: 'Limpeza profunda de bancos, carpetes e teto com extração de sujeira e eliminação de ácaros.', 
-      category: 'Interior', 
-      active: true, 
-      standardTimeMinutes: 300, 
-      returnIntervalDays: 180, 
-      imageUrl: 'https://images.unsplash.com/photo-1552930294-6b595f4c2974?auto=format&fit=crop&w=800&q=80' 
-    },
-    { 
-      id: 'srv5', 
-      name: 'Martelinho de Ouro', 
-      description: 'Técnica artesanal para desamassar a lataria sem danificar a pintura original.', 
-      category: 'Funilaria', 
-      active: true, 
-      standardTimeMinutes: 120, 
-      returnIntervalDays: 0, 
-      imageUrl: 'https://images.unsplash.com/photo-1625047509168-a7026f36de04?auto=format&fit=crop&w=800&q=80' 
-    },
-    { 
-      id: 'srv6', 
-      name: 'Cristalização de Vidros', 
-      description: 'Tratamento repelente de chuva que melhora a visibilidade em dias chuvosos.', 
-      category: 'Proteção', 
-      active: true, 
-      standardTimeMinutes: 60, 
-      returnIntervalDays: 90, 
-      imageUrl: 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=800&q=80' 
-    },
-    { 
-      id: 'srv7', 
-      name: 'Oxi-Sanitização', 
-      description: 'Esterilização do ar condicionado e interior com ozônio, eliminando odores e bactérias.', 
-      category: 'Interior', 
-      active: true, 
-      standardTimeMinutes: 45, 
-      returnIntervalDays: 90, 
-      imageUrl: 'https://images.unsplash.com/photo-1600661653561-629509216228?auto=format&fit=crop&w=800&q=80' 
-    },
-    { 
-      id: 'srv8', 
-      name: 'PPF (Frontal)', 
-      description: 'Película de proteção de pintura contra pedras e riscos profundos em estradas.', 
-      category: 'Proteção', 
-      active: true, 
-      standardTimeMinutes: 600, 
-      returnIntervalDays: 0, 
-      imageUrl: 'https://images.unsplash.com/photo-1553440569-bcc63803a83d?auto=format&fit=crop&w=800&q=80' 
-    },
-    { 
-      id: 'srv9', 
-      name: 'Detalhamento de Motor', 
-      description: 'Limpeza técnica do cofre do motor com proteção de plásticos e borrachas.', 
-      category: 'Lavagem', 
-      active: true, 
-      standardTimeMinutes: 120, 
-      returnIntervalDays: 180, 
-      imageUrl: 'https://images.unsplash.com/photo-1504215680853-026ed2a45def?auto=format&fit=crop&w=800&q=80' 
-    }
 ];
 
-const initialPriceMatrix: PriceMatrixEntry[] = initialServices.flatMap(service => {
-  return (['small', 'medium', 'large', 'xl'] as VehicleSize[]).map(size => {
-    let basePrice = 100;
-    if (service.category === 'Lavagem') basePrice = 80;
-    if (service.category === 'Polimento') basePrice = 450;
-    if (service.category === 'Proteção') basePrice = 900;
-    if (service.category === 'Interior') basePrice = 300;
-    if (service.category === 'Funilaria') basePrice = 600;
-    
-    const multipliers: Record<string, number> = { small: 1, medium: 1.2, large: 1.4, xl: 1.7 };
-    
-    return {
-      serviceId: service.id,
-      size: size,
-      price: Math.ceil(basePrice * multipliers[size])
-    };
-  });
-});
+const initialPriceMatrix: PriceMatrixEntry[] = []; 
 
 const initialInventory: InventoryItem[] = [
     { id: 1, name: 'Shampoo Neutro', category: 'Lavagem', stock: 50, unit: 'L', minStock: 20, status: 'ok', costPrice: 15.00 },
-    { id: 2, name: 'Desengraxante', category: 'Lavagem', stock: 15, unit: 'L', minStock: 10, status: 'ok', costPrice: 22.50 },
-    { id: 3, name: 'Cera de Carnaúba', category: 'Acabamento', stock: 5, unit: 'un', minStock: 8, status: 'warning', costPrice: 89.90 },
-    { id: 4, name: 'Composto Polidor Corte', category: 'Polimento', stock: 2, unit: 'un', minStock: 5, status: 'critical', costPrice: 120.00 },
-    { id: 5, name: 'Composto Polidor Refino', category: 'Polimento', stock: 4, unit: 'un', minStock: 5, status: 'warning', costPrice: 120.00 },
-    { id: 6, name: 'Verniz Alto Sólidos', category: 'Funilaria', stock: 3, unit: 'L', minStock: 10, status: 'critical', costPrice: 250.00 },
-    { id: 7, name: 'Lixa d\'água 1200', category: 'Funilaria', stock: 100, unit: 'un', minStock: 50, status: 'ok', costPrice: 2.50 },
-    { id: 8, name: 'APC Flotador', category: 'Interior', stock: 20, unit: 'L', minStock: 15, status: 'ok', costPrice: 18.00 },
-    { id: 9, name: 'Vitrificador 9H', category: 'Proteção', stock: 8, unit: 'un', minStock: 3, status: 'ok', costPrice: 350.00 },
-    { id: 10, name: 'Pincel Detalhamento', category: 'Acessórios', stock: 12, unit: 'un', minStock: 10, status: 'ok', costPrice: 15.00 },
-    { id: 11, name: 'Spray Protetor de Pneu', category: 'Acabamento', stock: 25, unit: 'un', minStock: 15, status: 'ok', costPrice: 12.50 },
-    { id: 12, name: 'Toalha Microfibra Premium', category: 'Acessórios', stock: 35, unit: 'un', minStock: 20, status: 'ok', costPrice: 8.00 },
-    { id: 13, name: 'Spray Secante', category: 'Lavagem', stock: 18, unit: 'un', minStock: 10, status: 'ok', costPrice: 25.00 },
-    { id: 14, name: 'Ozônio Sanitizador', category: 'Interior', stock: 6, unit: 'un', minStock: 5, status: 'warning', costPrice: 85.00 }
 ];
 
-const initialWorkOrders: WorkOrder[] = [
-  {
-    id: 'os-001',
-    clientId: 'c1',
-    clientName: 'Dr. Roberto Silva',
-    phone: '11999998888',
-    plate: 'POR-9111',
-    vehicle: 'Porsche Macan 2023',
-    service: 'Vitrificação 3 Anos',
-    serviceId: 'srv3',
-    status: 'Concluído',
-    technician: 'Mestre Miyagi',
-    deadline: 'Concluído',
-    damages: [],
-    serviceNotes: 'Cliente solicitou polimento antes da vitrificação.',
-    createdAt: formatISO(subDays(today, 5)),
-    completedAt: formatISO(subDays(today, 4)),
-    totalPrice: 2800.00,
-    totalValue: 2800.00,
-    paymentStatus: 'paid',
-    paymentMethod: 'Cartão Crédito',
-    npsScore: 9,
-    npsComment: 'Excelente trabalho! Brilho perfeito.'
-  },
-  {
-    id: 'os-002',
-    clientId: 'c2',
-    clientName: 'Márcia Oliveira',
-    phone: '11988887777',
-    plate: 'MER-4455',
-    vehicle: 'Mercedes C180 2021',
-    service: 'Lavagem Técnica + Polimento Comercial',
-    serviceId: 'srv1',
-    status: 'Aguardando Pagamento',
-    technician: 'João Detalhista',
-    deadline: 'Hoje',
-    damages: ['Pequeno risco no pneu dianteiro esquerdo'],
-    serviceNotes: 'Carro estava muito sujo. Aplicar protetor de pneus.',
-    createdAt: formatISO(subDays(today, 2)),
-    totalPrice: 1150.00,
-    totalValue: 1150.00,
-    paymentStatus: 'pending',
-    paymentMethod: 'Boleto'
-  },
-  {
-    id: 'os-003',
-    clientId: 'c3',
-    clientName: 'Felipe Santos',
-    phone: '11987776666',
-    plate: 'AUD-2233',
-    vehicle: 'Audi A6 2023',
-    service: 'Higienização Interna + Oxi-Sanitização',
-    serviceId: 'srv4',
-    status: 'Em Andamento',
-    technician: 'Lucas Polidor',
-    deadline: 'Hoje',
-    damages: ['Mancha em um assento'],
-    serviceNotes: 'Cliente urgente - prioridade máxima.',
-    createdAt: formatISO(today),
-    totalPrice: 890.00,
-    totalValue: 890.00,
-    paymentStatus: 'pending',
-    paymentMethod: 'Cartão Débito'
-  },
-  {
-    id: 'os-004',
-    clientId: 'c4',
-    clientName: 'Juliana Costa',
-    phone: '11986665555',
-    plate: 'VW-1199',
-    vehicle: 'Volkswagen Tiguan 2020',
-    service: 'Lavagem Técnica',
-    serviceId: 'srv1',
-    status: 'Concluído',
-    technician: 'João Detalhista',
-    deadline: 'Concluído',
-    damages: [],
-    serviceNotes: 'Rotina mensal do cliente.',
-    createdAt: formatISO(subDays(today, 8)),
-    completedAt: formatISO(subDays(today, 8)),
-    totalPrice: 96.00,
-    totalValue: 96.00,
-    paymentStatus: 'paid',
-    paymentMethod: 'PIX',
-    npsScore: 8,
-    npsComment: 'Muito satisfeito com o resultado.'
-  },
-  {
-    id: 'os-005',
-    clientId: 'c5',
-    clientName: 'Carlos Mendes',
-    phone: '11985554444',
-    plate: 'JAG-3344',
-    vehicle: 'Jaguar XF 2021',
-    service: 'PPF (Frontal)',
-    serviceId: 'srv8',
-    status: 'Aguardando Aprovação',
-    technician: 'Mestre Miyagi',
-    deadline: 'Amanhã',
-    damages: [],
-    serviceNotes: 'Carro novo. Cliente quer proteger a frente com película.',
-    createdAt: formatISO(today),
-    totalPrice: 3500.00,
-    totalValue: 3500.00,
-    paymentStatus: 'pending',
-    paymentMethod: 'A Definir'
-  },
-  {
-    id: 'os-006',
-    clientId: 'c1',
-    clientName: 'Dr. Roberto Silva',
-    phone: '11999998888',
-    plate: 'BMW-5588',
-    vehicle: 'BMW X5 2022',
-    service: 'Lavagem Técnica',
-    serviceId: 'srv1',
-    status: 'Em Andamento',
-    technician: 'Mestre Miyagi',
-    deadline: 'Hoje',
-    damages: [],
-    serviceNotes: 'Manutenção preventiva.',
-    createdAt: formatISO(today),
-    totalPrice: 110.00,
-    totalValue: 110.00,
-    paymentStatus: 'pending',
-    paymentMethod: 'A Definir'
-  },
-  {
-    id: 'os-007',
-    clientId: 'c6',
-    clientName: 'Ana Silva',
-    phone: '11984443333',
-    plate: 'HON-5566',
-    vehicle: 'Honda Civic 2023',
-    service: 'Polimento Comercial',
-    serviceId: 'srv2',
-    status: 'Controle de Qualidade',
-    technician: 'Lucas Polidor',
-    deadline: 'Hoje',
-    damages: [],
-    serviceNotes: 'Primeiro serviço do cliente novo.',
-    createdAt: formatISO(subDays(today, 1)),
-    totalPrice: 540.00,
-    totalValue: 540.00,
-    paymentStatus: 'pending',
-    paymentMethod: 'A Definir'
-  },
-  {
-    id: 'os-008',
-    clientId: 'c8',
-    clientName: 'Gustavo Ribeiro',
-    phone: '11981110000',
-    plate: 'HYU-9999',
-    vehicle: 'Hyundai HB20 2019',
-    service: 'Lavagem Técnica',
-    serviceId: 'srv1',
-    status: 'Aguardando',
-    technician: 'João Detalhista',
-    deadline: 'Próxima semana',
-    damages: [],
-    serviceNotes: 'Cliente em risco - Fila de espera. Campanha de retenção ativa.',
-    createdAt: formatISO(today),
-    totalPrice: 85.00,
-    totalValue: 85.00,
-    paymentStatus: 'pending',
-    paymentMethod: 'A Definir'
-  },
-  {
-    id: 'os-009',
-    clientId: 'c10',
-    clientName: 'Patricia Gomes',
-    phone: '11979998765',
-    plate: 'CHE-3344',
-    vehicle: 'Chevrolet Tracker 2021',
-    service: 'Pacote Mensal - Lavagem + Proteção',
-    serviceId: 'srv1',
-    status: 'Em Andamento',
-    technician: 'Mestre Miyagi',
-    deadline: 'Hoje',
-    damages: [],
-    serviceNotes: 'Cliente recorrente - Manutenção preventiva mensal.',
-    createdAt: formatISO(today),
-    totalPrice: 650.00,
-    totalValue: 650.00,
-    paymentStatus: 'pending',
-    paymentMethod: 'A Definir'
-  }
-];
-const initialEmployeeTransactions: EmployeeTransaction[] = [
-  { id: 'et-001', employeeId: 'e1', type: 'commission', amount: 450.00, description: 'Comissão OS-001 - Vitrificação', date: formatISO(subDays(today, 4)), referenceId: 'os-001' },
-  { id: 'et-002', employeeId: 'e2', type: 'commission', amount: 280.00, description: 'Comissão OS-004 - Lavagem', date: formatISO(subDays(today, 8)), referenceId: 'os-004' },
-  { id: 'et-003', employeeId: 'e1', type: 'advance', amount: -500.00, description: 'Adiantamento solicitado', date: formatISO(subDays(today, 3)) },
-  { id: 'et-004', employeeId: 'e3', type: 'commission', amount: 320.00, description: 'Comissão OS-007 - Polimento', date: formatISO(subDays(today, 1)), referenceId: 'os-007' },
-  { id: 'et-005', employeeId: 'e2', type: 'salary', amount: 1200.00, description: 'Adiantamento de salário', date: formatISO(subDays(today, 5)) },
-  { id: 'et-006', employeeId: 'e1', type: 'commission', amount: 150.00, description: 'Comissão OS-006 - Lavagem BMW', date: formatISO(today), referenceId: 'os-006' },
-];
-const initialCampaigns: MarketingCampaign[] = [
-  { 
-    id: 'camp-001', 
-    name: 'Promoção Vitrificação - Março', 
-    targetSegment: 'recurring',
-    date: formatISO(subDays(today, 5)),
-    status: 'sent',
-    messageTemplate: 'Olá {cliente}, conheça nossa promoção de vitrificação em março com proteção estendida!',
-    sentCount: 45,
-    conversionCount: 8,
-    revenueGenerated: 3200.00
-  },
-  { 
-    id: 'camp-002', 
-    name: 'Black Friday Antecipada', 
-    targetSegment: 'vip',
-    date: formatISO(subDays(today, 2)),
-    status: 'sent',
-    messageTemplate: 'Olá {cliente}, Black Friday 2025 chegou antecipada com descontos de até 30%!',
-    sentCount: 32,
-    conversionCount: 5,
-    revenueGenerated: 1850.00
-  },
-  { 
-    id: 'camp-003', 
-    name: 'Campanha WhatsApp - VIP', 
-    targetSegment: 'vip',
-    date: formatISO(subDays(today, 10)),
-    status: 'sent',
-    messageTemplate: 'Olá VIP {cliente}, seus benefícios exclusivos estão ativos. Agende seu serviço agora!',
-    sentCount: 28,
-    conversionCount: 6,
-    revenueGenerated: 2150.00
-  },
-  { 
-    id: 'camp-004', 
-    name: 'Email Marketing - Retenção', 
-    targetSegment: 'inactive',
-    date: formatISO(subDays(today, 15)),
-    status: 'sent',
-    messageTemplate: 'Sentimos sua falta! Volte para receber um desconto especial em seu próximo serviço.',
-    sentCount: 62,
-    conversionCount: 7,
-    revenueGenerated: 1950.00
-  },
-  { 
-    id: 'camp-005', 
-    name: 'Anúncio Google Ads', 
-    targetSegment: 'new',
-    date: formatISO(subDays(today, 20)),
-    status: 'sent',
-    messageTemplate: 'Qualidade premium em detailing automotivo. Primeira lavagem com 20% de desconto!',
-    sentCount: 156,
-    conversionCount: 12,
-    revenueGenerated: 2800.00
-  },
-  { 
-    id: 'camp-006', 
-    name: 'Programa de Indicação', 
-    targetSegment: 'all',
-    date: formatISO(subDays(today, 30)),
-    status: 'sent',
-    messageTemplate: 'Indique um amigo e ganhe R$ 50 de crédito em serviços. Quanto mais indica, mais ganha!',
-    sentCount: 85,
-    conversionCount: 14,
-    revenueGenerated: 3450.00
-  },
-];
-
-const initialFinancialTransactions: FinancialTransaction[] = [
-  { id: 1, desc: 'Saldo Inicial - 1º de Dezembro', category: 'Sistema', amount: 15000.00, netAmount: 15000.00, fee: 0, type: 'income', date: formatISO(subDays(today, 1)), dueDate: formatISO(subDays(today, 1)), method: 'Saldo Anterior', installments: 1, status: 'paid' },
-  { id: 2, desc: 'Pagamento OS #001 - Porsche Macan (Vitrificação)', category: 'Serviços', amount: 2800.00, netAmount: 2660.00, fee: 140.00, type: 'income', date: formatISO(subDays(today, 5)), dueDate: formatISO(subDays(today, 5)), method: 'Cartão Crédito', installments: 1, status: 'paid' },
-  { id: 3, desc: 'Compra de Insumos - Polimentos Premium', category: 'Estoque', amount: -450.00, netAmount: -450.00, fee: 0, type: 'expense', date: formatISO(subDays(today, 5)), dueDate: formatISO(subDays(today, 5)), method: 'PIX', installments: 1, status: 'paid' },
-  { id: 4, desc: 'Aluguel do Galpão - Dezembro', category: 'Aluguel/Fixo', amount: -5000.00, netAmount: -5000.00, fee: 0, type: 'expense', date: formatISO(subDays(today, 3)), dueDate: formatISO(subDays(today, 3)), method: 'Transferência', installments: 1, status: 'paid' },
-  { id: 5, desc: 'Fatura Fornecedor Tintas e Ceras', category: 'Estoque', amount: -1200.00, netAmount: -1200.00, fee: 0, type: 'expense', date: formatISO(subDays(today, 8)), dueDate: formatISO(subDays(today, 8)), method: 'Boleto', installments: 1, status: 'paid' },
-  { id: 6, desc: 'Pagamento OS #004 - VW Tiguan (Lavagem)', category: 'Serviços', amount: 96.00, netAmount: 91.20, fee: 4.80, type: 'income', date: formatISO(subDays(today, 8)), dueDate: formatISO(subDays(today, 8)), method: 'PIX', installments: 1, status: 'paid' },
-  { id: 7, desc: 'Manutenção Compressores - Preventiva', category: 'Manutenção', amount: -890.00, netAmount: -890.00, fee: 0, type: 'expense', date: formatISO(subDays(today, 6)), dueDate: formatISO(subDays(today, 6)), method: 'Cartão Débito', installments: 1, status: 'paid' },
-  { id: 8, desc: 'Comissões Funcionários - Dezembro (1ª semana)', category: 'Salários', amount: -1230.00, netAmount: -1230.00, fee: 0, type: 'expense', date: formatISO(subDays(today, 4)), dueDate: formatISO(subDays(today, 4)), method: 'Transferência', installments: 1, status: 'paid' },
-  { id: 9, desc: 'Pagamento OS #002 - Mercedes C180 (Polimento)', category: 'Serviços', amount: 1150.00, netAmount: 1092.50, fee: 57.50, type: 'income', date: formatISO(subDays(today, 2)), dueDate: formatISO(subDays(today, 2)), method: 'Boleto', installments: 1, status: 'paid' },
-  { id: 10, desc: 'Recarga de Ozônio Sanitizador', category: 'Estoque', amount: -320.00, netAmount: -320.00, fee: 0, type: 'expense', date: formatISO(today), dueDate: formatISO(today), method: 'PIX', installments: 1, status: 'paid' },
-  { id: 11, desc: 'Pagamento OS #006 - BMW X5 (Lavagem)', category: 'Serviços', amount: 110.00, netAmount: 104.50, fee: 5.50, type: 'income', date: formatISO(today), dueDate: formatISO(today), method: 'PIX', installments: 1, status: 'paid' },
-  { id: 12, desc: 'Agua e Eletricidade - Novembro', category: 'Utilidades', amount: -680.00, netAmount: -680.00, fee: 0, type: 'expense', date: formatISO(subDays(today, 1)), dueDate: formatISO(subDays(today, 1)), method: 'Boleto', installments: 1, status: 'paid' },
-];
-
-const initialClientPoints: ClientPoints[] = [
-  { clientId: 'c1', totalPoints: 2850, currentLevel: 3, tier: 'gold', lastServiceDate: formatISO(subDays(today, 2)), servicesCompleted: 12, pointsHistory: [
-    { id: 'p1', workOrderId: 'os-001', points: 280, description: 'Vitrificação - Porsche Macan', date: formatISO(subDays(today, 2)) }
-  ]},
-  { clientId: 'c2', totalPoints: 820, currentLevel: 2, tier: 'silver', lastServiceDate: formatISO(subDays(today, 3)), servicesCompleted: 8, pointsHistory: [] },
-  { clientId: 'c3', totalPoints: 1240, currentLevel: 2, tier: 'silver', lastServiceDate: formatISO(subDays(today, 7)), servicesCompleted: 6, pointsHistory: [] },
-  { clientId: 'c4', totalPoints: 560, currentLevel: 1, tier: 'bronze', lastServiceDate: formatISO(subDays(today, 14)), servicesCompleted: 4, pointsHistory: [] },
-  { clientId: 'c5', totalPoints: 1890, currentLevel: 3, tier: 'gold', lastServiceDate: formatISO(subDays(today, 2)), servicesCompleted: 10, pointsHistory: [] },
-  { clientId: 'c6', totalPoints: 120, currentLevel: 1, tier: 'bronze', lastServiceDate: formatISO(subDays(today, 1)), servicesCompleted: 1, pointsHistory: [] },
-];
-
-const initialFidelityCards: FidelityCard[] = initialClientPoints.map(cp => ({
-  clientId: cp.clientId,
-  cardNumber: `CC${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
-  cardHolder: initialClients.find(c => c.id === cp.clientId)?.name || '',
-  cardColor: cp.tier === 'gold' ? 'amber' : cp.tier === 'silver' ? 'emerald' : 'blue',
-  qrCode: `https://qrcode.example.com/${cp.clientId}`,
-  issueDate: formatISO(subDays(today, 30)),
-  expiresAt: formatISO(addDays(today, 365))
-}));
-
-const initialRewards: Reward[] = [
-  // DESCONTOS - BRONZE
-  { id: 'r1', name: 'Desconto 5%', description: 'Desconto de 5% em todos os serviços', requiredPoints: 0, requiredLevel: 'bronze', rewardType: 'discount', percentage: 5, active: true, createdAt: formatISO(today) },
-  { id: 'r-b2', name: 'Desconto 7%', description: 'Desconto de 7% em polimento e detalhes', requiredPoints: 150, requiredLevel: 'bronze', rewardType: 'discount', percentage: 7, active: true, createdAt: formatISO(today) },
-  
-  // DESCONTOS - PRATA
-  { id: 'r2', name: 'Desconto 10% + Frete Grátis', description: 'Desconto de 10% em todos os serviços + frete grátis', requiredPoints: 500, requiredLevel: 'silver', rewardType: 'discount', percentage: 10, active: true, createdAt: formatISO(today) },
-  { id: 'r-s2', name: 'Desconto 12%', description: 'Desconto de 12% em vitrificação', requiredPoints: 600, requiredLevel: 'silver', rewardType: 'discount', percentage: 12, active: true, createdAt: formatISO(today) },
-  
-  // SERVIÇOS GRÁTIS - PRATA
-  { id: 'r3', name: 'Lavagem Grátis', description: 'Serviço de lavagem simples gratuito', requiredPoints: 800, requiredLevel: 'silver', rewardType: 'free_service', gift: 'Lavagem Simples', active: true, createdAt: formatISO(today) },
-  { id: 'r-s3', name: 'Descontaminação Grátis', description: 'Serviço de descontaminação de roda gratuito', requiredPoints: 750, requiredLevel: 'silver', rewardType: 'free_service', gift: 'Descontaminação de Roda', active: true, createdAt: formatISO(today) },
-  
-  // DESCONTOS - OURO
-  { id: 'r4', name: 'Desconto 15% + Atendimento VIP', description: 'Desconto de 15% em todos os serviços + atendimento prioritário', requiredPoints: 1500, requiredLevel: 'gold', rewardType: 'discount', percentage: 15, active: true, createdAt: formatISO(today) },
-  { id: 'r-g2', name: 'Desconto 18%', description: 'Desconto de 18% em serviços premium', requiredPoints: 1700, requiredLevel: 'gold', rewardType: 'discount', percentage: 18, active: true, createdAt: formatISO(today) },
-  
-  // SERVIÇOS GRÁTIS - OURO
-  { id: 'r5', name: 'Polimento Premium Grátis', description: 'Serviço de polimento premium gratuito', requiredPoints: 1800, requiredLevel: 'gold', rewardType: 'free_service', gift: 'Polimento Premium', active: true, createdAt: formatISO(today) },
-  { id: 'r-g3', name: 'Cristalização Grátis', description: 'Serviço de cristalização de pintura gratuito', requiredPoints: 1900, requiredLevel: 'gold', rewardType: 'free_service', gift: 'Cristalização de Pintura', active: true, createdAt: formatISO(today) },
-  
-  // BRINDES - OURO
-  { id: 'r-g4', name: 'Kit Premium', description: 'Kit premium com produtos de limpeza especializados', requiredPoints: 2000, requiredLevel: 'gold', rewardType: 'gift', gift: 'Kit Premium de Limpeza', active: true, createdAt: formatISO(today) },
-  
-  // DESCONTOS - PLATINA
-  { id: 'r6', name: 'Desconto 20% + Brinde Exclusivo', description: 'Desconto de 20% em todos os serviços + brinde exclusivo', requiredPoints: 3000, requiredLevel: 'platinum', rewardType: 'discount', percentage: 20, active: true, createdAt: formatISO(today) },
-  { id: 'r-p2', name: 'Desconto 25%', description: 'Desconto de 25% em todos os serviços - máximo desconto', requiredPoints: 3500, requiredLevel: 'platinum', rewardType: 'discount', percentage: 25, active: true, createdAt: formatISO(today) },
-  
-  // SERVIÇOS COMPLETOS - PLATINA
-  { id: 'r-p3', name: 'Detailing Completo Grátis', description: 'Serviço de detailing completo (lavagem + polimento + cristalização) gratuito', requiredPoints: 3200, requiredLevel: 'platinum', rewardType: 'free_service', gift: 'Detailing Completo', active: true, createdAt: formatISO(today) },
-  { id: 'r-p4', name: 'Proteção Interior Grátis', description: 'Higienização e proteção completa do interior do veículo', requiredPoints: 3300, requiredLevel: 'platinum', rewardType: 'free_service', gift: 'Proteção Interior Completa', active: true, createdAt: formatISO(today) },
-  
-  // BRINDES - PLATINA
-  { id: 'r-p5', name: 'Toalha Premium + Produtos', description: 'Brinde exclusivo: toalha premium + kit de produtos profissionais', requiredPoints: 3400, requiredLevel: 'platinum', rewardType: 'gift', gift: 'Toalha Premium + Kit Profissional', active: true, createdAt: formatISO(today) },
-  { id: 'r-p6', name: 'Tratamento Interior Grátis', description: 'Tratamento profissional do interior com produtos premium', requiredPoints: 3600, requiredLevel: 'platinum', rewardType: 'gift', gift: 'Tratamento Interior Premium', active: true, createdAt: formatISO(today) },
-];
+const initialWorkOrders: WorkOrder[] = [];
+const initialEmployeeTransactions: EmployeeTransaction[] = [];
+const initialCampaigns: MarketingCampaign[] = [];
+const initialFinancialTransactions: FinancialTransaction[] = [];
+const initialClientPoints: ClientPoints[] = [];
+const initialFidelityCards: FidelityCard[] = [];
+const initialRewards: Reward[] = [];
+const initialRedemptions: Redemption[] = [];
+const initialServiceConsumptions: ServiceConsumption[] = [];
 
 export function AppProvider({ children }: { children: ReactNode }) {
   // State Initialization
   const [companySettings, setCompanySettings] = useState<CompanySettings>(() => getStorage('companySettings_v13', initialCompanySettings)); 
   const [subscription, setSubscription] = useState<SubscriptionDetails>(() => getStorage('subscription_v1', initialSubscription));
   
-  const [inventory, setInventory] = useState<InventoryItem[]>(() => getStorage('inventory_v9', initialInventory)); 
+  const [inventory, setInventory] = useState<InventoryItem[]>(() => getStorage('inventory_v10', initialInventory)); 
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() => getStorage<WorkOrder[]>('workOrders_v8', initialWorkOrders));
   const [clients, setClients] = useState<Client[]>(() => getStorage<Client[]>('clients_v8', initialClients));
   const [reminders, setReminders] = useState<Reminder[]>(() => getStorage('reminders_v8', initialReminders));
   
   const [services, setServices] = useState<ServiceCatalogItem[]>(() => getStorage('services_v10', initialServices));
   const [priceMatrix, setPriceMatrix] = useState<PriceMatrixEntry[]>(() => getStorage('priceMatrix_v8', initialPriceMatrix));
+  const [serviceConsumptions, setServiceConsumptions] = useState<ServiceConsumption[]>(() => getStorage('serviceConsumptions_v1', initialServiceConsumptions));
   
   const [employees, setEmployees] = useState<Employee[]>(() => getStorage('employees_v9', initialEmployees)); 
   const [employeeTransactions, setEmployeeTransactions] = useState<EmployeeTransaction[]>(() => getStorage('employeeTransactions_v8', initialEmployeeTransactions));
@@ -759,11 +287,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [clientPoints, setClientPoints] = useState<ClientPoints[]>(() => getStorage('clientPoints_v1', initialClientPoints));
   const [fidelityCards, setFidelityCards] = useState<FidelityCard[]>(() => getStorage('fidelityCards_v1', initialFidelityCards));
   const [rewards, setRewards] = useState<Reward[]>(() => getStorage('rewards_v1', initialRewards));
-  const [redemptions, setRedemptions] = useState<Redemption[]>(() => getStorage('redemptions_v1', [])); // Novo estado
+  const [redemptions, setRedemptions] = useState<Redemption[]>(() => getStorage('redemptions_v1', initialRedemptions)); 
 
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>(() => getStorage<MarketingCampaign[]>('campaigns_v7', initialCampaigns));
   
   const [currentUser, setCurrentUser] = useState<Employee | null>(null);
+  const [ownerUser, setOwnerUser] = useState<ShopOwner | null>(() => getStorage('ownerUser', null)); 
+
+  const [notifications, setNotifications] = useState<Notification[]>([
+    { 
+      id: 'welcome-msg', 
+      title: 'Bem-vindo', 
+      message: 'Sistema iniciado com sucesso.', 
+      read: false, 
+      createdAt: new Date().toISOString(), 
+      type: 'info' 
+    }
+  ]);
+
+  const markNotificationAsRead = (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  };
+
   const [theme, setTheme] = useState<'light' | 'dark'>(() => getStorage('theme', 'dark'));
   const [recipes] = useState<ServiceRecipe[]>([]);
 
@@ -774,7 +319,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => setStorage('reminders_v8', reminders), [reminders]); 
   useEffect(() => setStorage('services_v10', services), [services]);
   useEffect(() => setStorage('priceMatrix_v8', priceMatrix), [priceMatrix]); 
-  useEffect(() => setStorage('inventory_v9', inventory), [inventory]);
+  useEffect(() => setStorage('inventory_v10', inventory), [inventory]);
   useEffect(() => setStorage('employees_v9', employees), [employees]); 
   useEffect(() => setStorage('employeeTransactions_v8', employeeTransactions), [employeeTransactions]);
   useEffect(() => setStorage('financialTransactions_v3', financialTransactions), [financialTransactions]);
@@ -782,6 +327,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => setStorage('fidelityCards_v1', fidelityCards), [fidelityCards]);
   useEffect(() => setStorage('rewards_v1', rewards), [rewards]);
   useEffect(() => setStorage('redemptions_v1', redemptions), [redemptions]);
+  useEffect(() => setStorage('ownerUser', ownerUser), [ownerUser]); 
+  useEffect(() => setStorage('serviceConsumptions_v1', serviceConsumptions), [serviceConsumptions]);
 
   // Check for points expiration on load
   useEffect(() => {
@@ -789,21 +336,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const oneYearAgo = subDays(new Date(), 365);
       
       setClientPoints(prev => prev.map(cp => {
-        // Calculate points earned more than a year ago
         const oldPositivePoints = cp.pointsHistory
           .filter(h => h.points > 0 && new Date(h.date) < oneYearAgo)
           .reduce((acc, h) => acc + h.points, 0);
           
-        // Calculate total points spent/deducted ever
         const totalDeducted = cp.pointsHistory
           .filter(h => h.points < 0)
           .reduce((acc, h) => acc + Math.abs(h.points), 0);
           
-        // If we have more old points than we have ever spent, the difference should expire
         const pointsToExpire = Math.max(0, oldPositivePoints - totalDeducted);
         
         if (pointsToExpire > 0) {
-          // Expire them
           return {
             ...cp,
             totalPoints: cp.totalPoints - pointsToExpire,
@@ -823,9 +366,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }));
     };
     
-    // Run check
     checkExpiration();
-  }, []); // Empty dependency array to run only on mount
+  }, []); 
 
   // RECOVERY LOGIC
   useEffect(() => {
@@ -855,12 +397,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  
+  // --- TECH PORTAL AUTH ---
   const login = (pin: string) => {
     const user = employees.find(e => e.pin === pin);
     if (user) { setCurrentUser(user); return true; }
     return false;
   };
   const logout = () => setCurrentUser(null);
+
+  // --- OWNER AUTH ---
+  const loginOwner = (email: string, password: string) => {
+    if (email && password) {
+      const fakeOwner: ShopOwner = {
+        id: 'owner-1',
+        name: 'Admin Demo',
+        email: email,
+        shopName: companySettings.name
+      };
+      setOwnerUser(fakeOwner);
+      return true;
+    }
+    return false;
+  };
+
+  const registerOwner = (name: string, email: string, shopName: string) => {
+    const newOwner: ShopOwner = {
+        id: `owner-${Date.now()}`,
+        name,
+        email,
+        shopName
+    };
+    setOwnerUser(newOwner);
+    
+    setCompanySettings({
+        ...initialCompanySettings,
+        name: shopName,
+        responsibleName: name,
+        email: email
+    });
+  };
+
+  const logoutOwner = () => {
+    setOwnerUser(null);
+  };
 
   const updateCompanySettings = (settings: Partial<CompanySettings>) => {
     setCompanySettings(prev => ({ ...prev, ...settings }));
@@ -966,8 +546,78 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setInventory(prev => prev.filter(item => item.id !== id));
   };
 
-  const deductStock = (serviceName: string) => {
-    console.log(`Deducting stock for service: ${serviceName}`);
+  // --- CONSUMPTION & STOCK DEDUCTION LOGIC ---
+  
+  const updateServiceConsumption = (consumption: ServiceConsumption) => {
+    setServiceConsumptions(prev => {
+      const existing = prev.findIndex(c => c.serviceId === consumption.serviceId);
+      if (existing >= 0) {
+        const updated = [...prev];
+        updated[existing] = consumption;
+        return updated;
+      }
+      return [...prev, consumption];
+    });
+  };
+
+  const getServiceConsumption = (serviceId: string) => serviceConsumptions.find(c => c.serviceId === serviceId);
+
+  const calculateServiceCost = (serviceId: string): number => {
+    const consumption = getServiceConsumption(serviceId);
+    if (!consumption) return 0;
+
+    return consumption.items.reduce((total, item) => {
+      const invItem = inventory.find(i => i.id === item.inventoryId);
+      if (!invItem) return total;
+
+      // Basic unit conversion logic
+      let multiplier = 1;
+      
+      // If stock is in Liters and usage is in ml
+      if (invItem.unit.toLowerCase() === 'l' && item.usageUnit === 'ml') {
+        multiplier = 0.001;
+      } 
+      // If stock is in kg and usage is in g
+      else if (invItem.unit.toLowerCase() === 'kg' && item.usageUnit === 'g') {
+        multiplier = 0.001;
+      }
+      // If units match (e.g., un -> un, L -> L)
+      else if (invItem.unit.toLowerCase() === item.usageUnit.toLowerCase()) {
+        multiplier = 1;
+      }
+      // Fallback for mismatched units without clear conversion (treat as 1:1)
+      
+      return total + (invItem.costPrice * item.quantity * multiplier);
+    }, 0);
+  };
+
+  const deductStock = (serviceId: string) => {
+    const consumption = getServiceConsumption(serviceId);
+    if (!consumption) return;
+
+    setInventory(prev => prev.map(invItem => {
+      const consumptionItem = consumption.items.find(i => i.inventoryId === invItem.id);
+      
+      if (consumptionItem) {
+        let deductionAmount = consumptionItem.quantity;
+        
+        // Apply conversion
+        if (invItem.unit.toLowerCase() === 'l' && consumptionItem.usageUnit === 'ml') {
+          deductionAmount = consumptionItem.quantity / 1000;
+        } else if (invItem.unit.toLowerCase() === 'kg' && consumptionItem.usageUnit === 'g') {
+          deductionAmount = consumptionItem.quantity / 1000;
+        }
+
+        const newStock = Math.max(0, invItem.stock - deductionAmount);
+        
+        return {
+          ...invItem,
+          stock: parseFloat(newStock.toFixed(3)), // Avoid float precision issues
+          status: calculateStatus(newStock, invItem.minStock)
+        };
+      }
+      return invItem;
+    }));
   };
   
   // --- SERVICE ACTIONS ---
@@ -980,6 +630,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteService = (id: string) => {
     setServices(prev => prev.filter(s => s.id !== id));
     setPriceMatrix(prev => prev.filter(p => p.serviceId !== id));
+    setServiceConsumptions(prev => prev.filter(c => c.serviceId !== id));
   };
 
   const updatePrice = (serviceId: string, size: VehicleSize, newPrice: number) => setPriceMatrix(prev => { const exists = prev.find(p => p.serviceId === serviceId && p.size === size); return exists ? prev.map(p => p.serviceId === serviceId && p.size === size ? { ...p, price: newPrice } : p) : [...prev, { serviceId, size, price: newPrice }]; });
@@ -1010,16 +661,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
   
   const completeWorkOrder = (id: string) => {
       const os = workOrders.find(o => o.id === id);
-      if (os && companySettings.gamification?.enabled) {
-        const points = Math.round(os.totalValue * (companySettings.gamification.pointsMultiplier || 1));
-        addPointsToClient(os.clientId, id, points, `Serviço concluído: ${os.service}`);
+      if (os) {
+        // 1. Gamification Points
+        if (companySettings.gamification?.enabled) {
+            const points = Math.round(os.totalValue * (companySettings.gamification.pointsMultiplier || 1));
+            addPointsToClient(os.clientId, id, points, `Serviço concluído: ${os.service}`);
+        }
+        
+        // 2. Update Status
         updateWorkOrder(id, { status: 'Concluído' });
+        
+        // 3. Generate Reminders
         generateReminders(os); 
-        deductStock(os.service); 
-      } else if (os) {
-        updateWorkOrder(id, { status: 'Concluído' });
-        generateReminders(os); 
-        deductStock(os.service);
+        
+        // 4. Deduct Stock based on service recipe
+        if (os.serviceId) {
+            deductStock(os.serviceId);
+        } else if (os.serviceIds && os.serviceIds.length > 0) {
+            // Handle multi-service deduction
+            os.serviceIds.forEach(sId => deductStock(sId));
+        }
       }
   };
   
@@ -1289,10 +950,11 @@ ${card.qrCode}
   return (
     <AppContext.Provider value={{ 
       inventory, workOrders, clients, recipes, reminders, services, priceMatrix, theme,
-      employees, employeeTransactions, currentUser, campaigns, clientPoints, fidelityCards, rewards, redemptions,
+      employees, employeeTransactions, currentUser, ownerUser, campaigns, clientPoints, fidelityCards, rewards, redemptions,
       companySettings, subscription, updateCompanySettings,
       financialTransactions,
       login, logout,
+      loginOwner, registerOwner, logoutOwner,
       addWorkOrder, updateWorkOrder, completeWorkOrder, submitNPS,
       addClient, updateClient, addVehicle,
       addInventoryItem, updateInventoryItem, deleteInventoryItem, deductStock,
@@ -1305,7 +967,9 @@ ${card.qrCode}
       connectWhatsapp, disconnectWhatsapp,
       addPointsToClient, getClientPoints, createFidelityCard, getFidelityCard,
       addReward, updateReward, deleteReward, getRewardsByLevel,
-      updateTier, updateTierConfig, generatePKPass, generateGoogleWallet, claimReward, getClientRedemptions, useVoucher, getVoucherDetails
+      updateTier, updateTierConfig, generatePKPass, generateGoogleWallet, claimReward, getClientRedemptions, useVoucher, getVoucherDetails,
+      notifications, markNotificationAsRead,
+      updateServiceConsumption, getServiceConsumption, calculateServiceCost, serviceConsumptions
     }}>
       {children}
     </AppContext.Provider>

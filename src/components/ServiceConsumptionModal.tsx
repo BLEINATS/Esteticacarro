@@ -1,0 +1,241 @@
+import React, { useState, useEffect } from 'react';
+import { X, Save, Plus, Trash2, Beaker, AlertCircle } from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import { ServiceCatalogItem, ServiceConsumptionItem } from '../types';
+import { formatCurrency, cn } from '../lib/utils';
+
+interface ServiceConsumptionModalProps {
+  service: ServiceCatalogItem;
+  onClose: () => void;
+}
+
+export default function ServiceConsumptionModal({ service, onClose }: ServiceConsumptionModalProps) {
+  const { inventory, updateServiceConsumption, getServiceConsumption, calculateServiceCost } = useApp();
+  
+  const [items, setItems] = useState<ServiceConsumptionItem[]>([]);
+  const [selectedInventoryId, setSelectedInventoryId] = useState<number | ''>('');
+  const [quantity, setQuantity] = useState('');
+  const [unit, setUnit] = useState<'ml' | 'g' | 'un' | 'L' | 'kg'>('ml');
+
+  // Load existing consumption on mount
+  useEffect(() => {
+    const existing = getServiceConsumption(service.id);
+    if (existing) {
+      setItems(existing.items);
+    }
+  }, [service.id, getServiceConsumption]);
+
+  const handleAddItem = () => {
+    if (!selectedInventoryId || !quantity) return;
+    
+    const newItem: ServiceConsumptionItem = {
+      inventoryId: Number(selectedInventoryId),
+      quantity: parseFloat(quantity),
+      usageUnit: unit
+    };
+
+    // Check if item already exists, if so, update it
+    const existingIndex = items.findIndex(i => i.inventoryId === newItem.inventoryId);
+    if (existingIndex >= 0) {
+      const updatedItems = [...items];
+      updatedItems[existingIndex] = newItem;
+      setItems(updatedItems);
+    } else {
+      setItems([...items, newItem]);
+    }
+
+    // Reset form
+    setSelectedInventoryId('');
+    setQuantity('');
+  };
+
+  const handleRemoveItem = (index: number) => {
+    setItems(items.filter((_, i) => i !== index));
+  };
+
+  const handleSave = () => {
+    updateServiceConsumption({
+      serviceId: service.id,
+      items: items
+    });
+    onClose();
+  };
+
+  // Helper to get inventory item details
+  const getInventoryItem = (id: number) => inventory.find(i => i.id === id);
+
+  // Calculate estimated cost for current items
+  const currentCost = items.reduce((total, item) => {
+    const invItem = getInventoryItem(item.inventoryId);
+    if (!invItem) return total;
+    
+    let multiplier = 1;
+    if (invItem.unit.toLowerCase() === 'l' && item.usageUnit === 'ml') multiplier = 0.001;
+    else if (invItem.unit.toLowerCase() === 'kg' && item.usageUnit === 'g') multiplier = 0.001;
+    
+    return total + (invItem.costPrice * item.quantity * multiplier);
+  }, 0);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800 max-h-[90vh]">
+        
+        {/* Header */}
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Beaker className="text-blue-600" size={24} />
+              Ficha Técnica
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Defina o consumo de produtos para: <span className="font-bold text-slate-700 dark:text-slate-300">{service.name}</span>
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto space-y-6">
+          
+          {/* Add Item Form */}
+          <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase mb-2">Adicionar Insumo</h4>
+            
+            <div>
+              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Produto do Estoque</label>
+              <select 
+                value={selectedInventoryId}
+                onChange={(e) => {
+                    setSelectedInventoryId(Number(e.target.value));
+                    // Auto-set unit based on inventory unit
+                    const item = inventory.find(i => i.id === Number(e.target.value));
+                    if (item) {
+                        if (item.unit.toLowerCase() === 'l') setUnit('ml');
+                        else if (item.unit.toLowerCase() === 'kg') setUnit('g');
+                        else setUnit('un');
+                    }
+                }}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white"
+              >
+                <option value="">Selecione um produto...</option>
+                {inventory.map(item => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} ({item.stock} {item.unit} disp.)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Quantidade</label>
+                <input 
+                  type="number" 
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Unidade de Uso</label>
+                <select 
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value as any)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white"
+                >
+                  <option value="ml">Mililitros (ml)</option>
+                  <option value="g">Gramas (g)</option>
+                  <option value="un">Unidade (un)</option>
+                  <option value="L">Litros (L)</option>
+                  <option value="kg">Quilos (kg)</option>
+                </select>
+              </div>
+            </div>
+
+            <button 
+              onClick={handleAddItem}
+              disabled={!selectedInventoryId || !quantity}
+              className="w-full py-2 bg-blue-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <Plus size={16} /> Adicionar à Receita
+            </button>
+          </div>
+
+          {/* List of Items */}
+          <div>
+            <div className="flex justify-between items-center mb-2">
+                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase">Insumos Configurados</h4>
+                <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded font-bold">
+                    {items.length} itens
+                </span>
+            </div>
+            
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {items.length > 0 ? (
+                items.map((item, index) => {
+                  const invItem = getInventoryItem(item.inventoryId);
+                  return (
+                    <div key={index} className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
+                      <div>
+                        <p className="text-sm font-bold text-slate-900 dark:text-white">{invItem?.name || 'Item removido'}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Consumo: {item.quantity} {item.usageUnit}
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => handleRemoveItem(index)}
+                        className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-6 text-slate-400 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-lg">
+                  <p className="text-sm">Nenhum insumo configurado.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Cost Summary */}
+          <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-xl border border-green-200 dark:border-green-800 flex justify-between items-center">
+            <div>
+                <p className="text-xs font-bold text-green-800 dark:text-green-300 uppercase">Custo Estimado (CMV)</p>
+                <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">Baseado no preço de custo do estoque</p>
+            </div>
+            <p className="text-2xl font-bold text-green-700 dark:text-green-400">{formatCurrency(currentCost)}</p>
+          </div>
+
+          <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-amber-700 dark:text-amber-400 text-xs">
+            <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+            <p>Estes itens serão descontados automaticamente do estoque sempre que uma Ordem de Serviço com este serviço for concluída.</p>
+          </div>
+
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex gap-3 bg-slate-50/50 dark:bg-slate-900/50">
+          <button 
+            onClick={onClose}
+            className="flex-1 py-3 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button 
+            onClick={handleSave}
+            className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 transition-all flex items-center justify-center gap-2"
+          >
+            <Save size={20} />
+            Salvar Ficha Técnica
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}

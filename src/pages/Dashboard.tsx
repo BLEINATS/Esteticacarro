@@ -214,43 +214,44 @@ export default function Dashboard() {
                 <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-500">Este Mês</span>
               </div>
               
-              <div className="flex-1 h-[200px] relative">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={financialData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={70}
-                  outerRadius={100}
-                  paddingAngle={5}
-                  dataKey="value"
-                  stroke="none"
-                >
-                  {financialData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  formatter={(value: number) => formatCurrency(value)}
-                  contentStyle={{ 
-                    backgroundColor: isDark ? '#1e293b' : '#fff',
-                    borderColor: isDark ? '#334155' : '#e2e8f0',
-                    borderRadius: '12px',
-                    color: isDark ? '#fff' : '#0f172a'
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            
-            {/* Center Label */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Saldo</p>
-              <p className={cn("text-xl font-bold", netProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600")}>
-                {formatCurrency(netProfit)}
-              </p>
-            </div>
-          </div>
+              {/* FIX: Use min-h instead of fixed h, remove flex-1 to avoid collapse, use w-full */}
+              <div className="w-full min-h-[250px] h-[250px] relative">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={financialData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius="65%" // Use percentage for responsiveness
+                      outerRadius="90%" // Use percentage for responsiveness
+                      paddingAngle={5}
+                      dataKey="value"
+                      stroke="none"
+                    >
+                      {financialData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value: number) => formatCurrency(value)}
+                      contentStyle={{ 
+                        backgroundColor: isDark ? '#1e293b' : '#fff',
+                        borderColor: isDark ? '#334155' : '#e2e8f0',
+                        borderRadius: '12px',
+                        color: isDark ? '#fff' : '#0f172a'
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                
+                {/* Center Label */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Saldo</p>
+                  <p className={cn("text-xl font-bold", netProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600")}>
+                    {formatCurrency(netProfit)}
+                  </p>
+                </div>
+              </div>
 
               {/* Legenda Financeira Detalhada */}
               <div className="grid grid-cols-2 gap-2 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">
@@ -276,35 +277,36 @@ export default function Dashboard() {
                 <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-500">Total: {clients.length}</span>
               </div>
               
-              <div className="flex-1 h-[200px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={clientSegmentsData} layout="vertical" margin={{ left: 10, right: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={isDark ? "#334155" : "#e2e8f0"} />
-                <XAxis type="number" hide />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  width={80} 
-                  tick={{fontSize: 11, fill: isDark ? '#94a3b8' : '#64748b'}} 
-                  interval={0} 
-                />
-                <Tooltip 
-                  cursor={{fill: 'transparent'}}
-                  contentStyle={{ 
-                    borderRadius: '8px', 
-                    border: 'none', 
-                    backgroundColor: isDark ? '#1e293b' : '#fff',
-                    color: isDark ? '#fff' : '#000'
-                  }}
-                />
-                <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={24}>
-                  {clientSegmentsData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+              {/* FIX: Use min-h instead of fixed h */}
+              <div className="w-full min-h-[250px] h-[250px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={clientSegmentsData} layout="vertical" margin={{ left: 10, right: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={isDark ? "#334155" : "#e2e8f0"} />
+                    <XAxis type="number" hide />
+                    <YAxis 
+                      dataKey="name" 
+                      type="category" 
+                      width={80} 
+                      tick={{fontSize: 11, fill: isDark ? '#94a3b8' : '#64748b'}} 
+                      interval={0} 
+                    />
+                    <Tooltip 
+                      cursor={{fill: 'transparent'}}
+                      contentStyle={{ 
+                        borderRadius: '8px', 
+                        border: 'none', 
+                        backgroundColor: isDark ? '#1e293b' : '#fff',
+                        color: isDark ? '#fff' : '#000'
+                      }}
+                    />
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={24}>
+                      {clientSegmentsData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
 
               {/* Legenda de Clientes Detalhada */}
               <div className="grid grid-cols-2 gap-1.5 mt-2 border-t border-slate-100 dark:border-slate-800 pt-2">

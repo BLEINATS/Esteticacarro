@@ -7,6 +7,14 @@ export const VEHICLE_SIZES: Record<VehicleSize, string> = {
   xl: 'Extra G. (Pickup)'
 };
 
+// NEW: Owner Type
+export interface ShopOwner {
+  id: string;
+  name: string;
+  email: string;
+  shopName: string;
+}
+
 export interface Vehicle {
   id: string;
   model: string;
@@ -81,7 +89,19 @@ export interface InventoryItem {
   unit: string;
   status: 'ok' | 'warning' | 'critical';
   minStock: number;
-  costPrice: number;
+  costPrice: number; // Preço de custo por unidade de estoque (ex: preço do Litro)
+}
+
+// --- NEW: SERVICE CONSUMPTION (RECIPE) ---
+export interface ServiceConsumptionItem {
+  inventoryId: number;
+  quantity: number; // Quantidade usada
+  usageUnit: 'ml' | 'g' | 'un' | 'L' | 'kg'; // Unidade usada na aplicação
+}
+
+export interface ServiceConsumption {
+  serviceId: string;
+  items: ServiceConsumptionItem[];
 }
 
 export interface ServiceRecipe {
@@ -409,4 +429,14 @@ export interface SubscriptionDetails {
     status: 'paid' | 'pending' | 'failed';
     pdfUrl: string;
   }[];
+}
+
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
+  type: 'info' | 'warning' | 'success' | 'error';
+  link?: string;
 }

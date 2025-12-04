@@ -19,6 +19,32 @@ export default function WorkOrderPrintTemplate({ workOrder, client, service }: W
     });
   };
 
+  // Calculate financials for display
+  const discount = workOrder.discount;
+  const hasDiscount = discount && discount.amount > 0;
+  
+  // Assuming workOrder.totalValue is the FINAL value (after discount).
+  // We need to reverse calculate subtotal if we want to show it, 
+  // OR we assume workOrder.totalValue is the final value and we just need to show how we got there if we have the discount info.
+  
+  let discountValue = 0;
+  let subtotal = workOrder.totalValue;
+
+  if (hasDiscount) {
+      if (discount.type === 'percentage') {
+          // If total = subtotal * (1 - rate), then subtotal = total / (1 - rate)
+          const rate = discount.amount / 100;
+          if (rate < 1) {
+             subtotal = workOrder.totalValue / (1 - rate);
+             discountValue = subtotal * rate;
+          }
+      } else {
+          // Value or Service (fixed amount)
+          discountValue = discount.amount;
+          subtotal = workOrder.totalValue + discountValue;
+      }
+  }
+
   return (
     <div className="w-full max-w-4xl mx-auto p-8 bg-white text-black">
       {/* Header */}
@@ -129,13 +155,31 @@ export default function WorkOrderPrintTemplate({ workOrder, client, service }: W
       <div className="mb-8 border-2 border-gray-300 p-4 rounded bg-gray-50">
         <h3 className="font-bold text-lg mb-4 border-b pb-2">RESUMO FINANCEIRO</h3>
         <div className="space-y-2 text-lg">
-          <div className="flex justify-between">
-            <span>Valor Total:</span>
-            <span className="font-bold text-xl text-blue-600">{formatCurrency(workOrder.totalValue)}</span>
-          </div>
+          {hasDiscount ? (
+             <>
+                <div className="flex justify-between text-base">
+                    <span>Subtotal:</span>
+                    <span>{formatCurrency(subtotal)}</span>
+                </div>
+                <div className="flex justify-between text-base text-red-600 font-bold">
+                    <span>Desconto ({discount?.description || (discount?.type === 'percentage' ? discount?.amount + '%' : 'Valor')}):</span>
+                    <span>-{formatCurrency(discountValue)}</span>
+                </div>
+                <div className="flex justify-between border-t border-gray-300 pt-2 mt-2">
+                    <span>Valor Total:</span>
+                    <span className="font-bold text-xl text-blue-600">{formatCurrency(workOrder.totalValue)}</span>
+                </div>
+             </>
+          ) : (
+            <div className="flex justify-between">
+                <span>Valor Total:</span>
+                <span className="font-bold text-xl text-blue-600">{formatCurrency(workOrder.totalValue)}</span>
+            </div>
+          )}
+
           {workOrder.insuranceDetails?.isInsurance && (
             <>
-              <div className="flex justify-between text-sm border-t pt-2">
+              <div className="flex justify-between text-sm border-t pt-2 mt-2">
                 <span>Cobertura Seguro:</span>
                 <span>{formatCurrency(workOrder.insuranceDetails.insuranceCoveredAmount || 0)}</span>
               </div>
