@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, User, Phone, Mail, MapPin, Calendar, Car, 
-  History, TrendingUp, MessageCircle, Plus, AlertCircle, Zap, Gift, Copy, Check, Smartphone, Wallet
+  History, TrendingUp, MessageCircle, Plus, Zap, Gift, Copy, DollarSign, Save, Loader2,
+  Edit2, Trash2, StickyNote, Calculator, Bot
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useApp } from '../context/AppContext';
-import { Client, Vehicle, VEHICLE_SIZES, VehicleSize } from '../types';
+import { Client, Vehicle, VEHICLE_SIZES, VehicleSize, ClientPoints } from '../types';
 import { cn, formatCurrency } from '../lib/utils';
 import FidelityCard from './FidelityCard';
+import { useDialog } from '../context/DialogContext';
 
 interface ClientDetailsModalProps {
   client: Client;
@@ -15,41 +17,135 @@ interface ClientDetailsModalProps {
 }
 
 export default function ClientDetailsModal({ client, onClose }: ClientDetailsModalProps) {
-  const { workOrders, reminders, addVehicle, getClientPoints, getFidelityCard, companySettings, getRewardsByLevel, getWhatsappLink, generatePKPass, generateGoogleWallet, claimReward, getClientRedemptions } = useApp();
+  const { 
+    workOrders, reminders, addVehicle, updateVehicle, removeVehicle, updateClient, 
+    getClientPoints, getFidelityCard, createFidelityCard, companySettings, 
+    getRewardsByLevel, getWhatsappLink, claimReward, getClientRedemptions, 
+    addPointsToClient, subscription, consumeTokens 
+  } = useApp();
+  
+  const { showConfirm, showAlert } = useDialog();
   const [activeTab, setActiveTab] = useState<'overview' | 'vehicles' | 'history' | 'crm' | 'fidelidade'>('overview');
   const [showAddVehicle, setShowAddVehicle] = useState(false);
-  const [linkCopied, setLinkCopied] = useState(false);
   const [shareLink, setShareLink] = useState('');
-  const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [newVehicle, setNewVehicle] = useState<Partial<Vehicle>>({ model: '', plate: '', color: '', year: '', size: 'medium' });
   
-  const points = getClientPoints(client.id);
+  // Editing State for Overview
+  const [isEditing, setIsEditing] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    name: client.name,
+    phone: client.phone,
+    email: client.email,
+    cep: client.cep || '',
+    street: client.street || '',
+    number: client.number || '',
+    neighborhood: client.neighborhood || '',
+    city: client.city || '',
+    state: client.state || '',
+    notes: client.notes || ''
+  });
+  const [isLoadingCep, setIsLoadingCep] = useState(false);
+
+  // Editing State for Vehicles
+  const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
+  const [editVehicleData, setEditVehicleData] = useState<Partial<Vehicle>>({});
+
+  // Manual Points State
+  const [manualSpend, setManualSpend] = useState('');
+  const [manualDesc, setManualDesc] = useState('');
+
+  // WhatsApp Status
+  const isWhatsAppConnected = companySettings.whatsapp.session.status === 'connected';
+
+  // Get Points or Default
+  const rawPoints = getClientPoints(client.id);
+  const points: ClientPoints = rawPoints || {
+    clientId: client.id,
+    totalPoints: 0,
+    currentLevel: 1,
+    tier: 'bronze',
+    servicesCompleted: 0,
+    lastServiceDate: new Date().toISOString(),
+    pointsHistory: []
+  };
+
   const card = getFidelityCard(client.id);
   const redemptions = getClientRedemptions(client.id);
   
   useEffect(() => {
+    if (!card && companySettings.gamification?.enabled) {
+      createFidelityCard(client.id);
+    }
+  }, [card, client.id, companySettings.gamification?.enabled, createFidelityCard]);
+
+  useEffect(() => {
     const baseUrl = window.location.origin;
     setShareLink(`${baseUrl}/client-profile/${client.id}`);
-    
-    // Gerar QR code com dados completos do cartão
-    if (card) {
-      const qrData = {
-        clientId: client.id,
-        cardNumber: card.cardNumber,
-        clientName: client.name,
-        totalPoints: points?.totalPoints || 0,
-        tier: points?.tier || 'bronze',
-        timestamp: new Date().toISOString()
-      };
-      QRCode.toDataURL(JSON.stringify(qrData), { width: 300 })
-        .then(setQrCodeUrl)
-        .catch(console.error);
-    }
-  }, [client.id, card, points]);
+  }, [client.id]);
+
+  // Sync edit form data when client prop updates
+  useEffect(() => {
+    setEditFormData({
+        name: client.name,
+        phone: client.phone,
+        email: client.email,
+        cep: client.cep || '',
+        street: client.street || '',
+        number: client.number || '',
+        neighborhood: client.neighborhood || '',
+        city: client.city || '',
+        state: client.state || '',
+        notes: client.notes || ''
+    });
+  }, [client]);
 
   const clientWorkOrders = workOrders.filter(os => os.clientId === client.id);
   const clientReminders = reminders.filter(r => r.clientId === client.id);
 
+  // --- CLIENT EDITING LOGIC ---
+  const fetchAddress = async (cep: string) => {
+    const cleanCep = cep.replace(/\D/g, '');
+    if (cleanCep.length !== 8) return;
+
+    setIsLoadingCep(true);
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+      const data = await response.json();
+      if (!data.erro) {
+        setEditFormData(prev => ({
+          ...prev,
+          street: data.logradouro,
+          neighborhood: data.bairro,
+          city: data.localidade,
+          state: data.uf
+        }));
+      }
+    } catch (error) {
+      console.error("Error fetching CEP", error);
+    } finally {
+      setIsLoadingCep(false);
+    }
+  };
+
+  const handleCepChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setEditFormData(prev => ({ ...prev, cep: value }));
+    if (value.replace(/\D/g, '').length === 8) {
+        fetchAddress(value);
+    }
+  };
+
+  const handleSaveClient = () => {
+    const fullAddress = `${editFormData.street}, ${editFormData.number} - ${editFormData.neighborhood}, ${editFormData.city} - ${editFormData.state}, ${editFormData.cep}`;
+    updateClient(client.id, {
+        ...editFormData,
+        address: fullAddress
+    });
+    setIsEditing(false);
+    showAlert({ title: 'Sucesso', message: 'Dados do cliente atualizados.', type: 'success' });
+  };
+
+  // --- VEHICLE LOGIC ---
   const handleAddVehicle = (e: React.FormEvent) => {
     e.preventDefault();
     if (newVehicle.model && newVehicle.plate) {
@@ -66,12 +162,129 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
     }
   };
 
+  const startEditVehicle = (vehicle: Vehicle) => {
+    setEditingVehicleId(vehicle.id);
+    setEditVehicleData(vehicle);
+  };
+
+  const saveEditVehicle = () => {
+    if (editingVehicleId && editVehicleData.model && editVehicleData.plate) {
+        updateVehicle(client.id, editVehicleData as Vehicle);
+        setEditingVehicleId(null);
+        setEditVehicleData({});
+    }
+  };
+
+  const handleDeleteVehicle = async (vehicleId: string) => {
+    const confirmed = await showConfirm({
+        title: 'Excluir Veículo',
+        message: 'Tem certeza que deseja remover este veículo?',
+        type: 'danger',
+        confirmText: 'Sim, Excluir'
+    });
+
+    if (confirmed) {
+        removeVehicle(client.id, vehicleId);
+    }
+  };
+
+  const handleManualPoints = (e: React.FormEvent) => {
+    e.preventDefault();
+    const value = parseFloat(manualSpend);
+    if (!isNaN(value) && value > 0) {
+        const multiplier = companySettings.gamification?.pointsMultiplier || 1;
+        const pointsToAdd = Math.floor(value * multiplier);
+        const description = manualDesc || 'Compra em Loja / Avulso';
+        
+        addPointsToClient(client.id, 'manual', pointsToAdd, description);
+        
+        updateClient(client.id, {
+            ltv: (client.ltv || 0) + value,
+            visitCount: (client.visitCount || 0) + 1,
+            lastVisit: new Date().toISOString()
+        });
+
+        setManualSpend('');
+        setManualDesc('');
+        showAlert({ title: 'Sucesso', message: `${pointsToAdd} pontos adicionados e LTV atualizado!`, type: 'success' });
+    }
+  };
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(shareLink);
+    showAlert({ title: 'Copiado', message: 'Link do cartão copiado!', type: 'success' });
+  };
+
   const generateReminderMessage = (reminder: any) => {
     const vehicle = client.vehicles.find(v => v.id === reminder.vehicleId)?.model || 'seu veículo';
-    return `Olá ${client.name}! Aqui é da Crystal Care. 
+    return `Olá ${client.name}! Aqui é da Cristal Care. 
 Passando para lembrar que a ${reminder.serviceType} do ${vehicle} vence em ${new Date(reminder.dueDate).toLocaleDateString('pt-BR')}.
 Manter essa manutenção em dia é essencial para garantir a proteção e o brilho.
 Podemos agendar para esta semana?`;
+  };
+
+  const handleSendFidelityCard = async () => {
+    if (!card) return;
+    
+    const message = `Olá ${client.name}! 🎁\n\nSeu cartão de fidelidade ${companySettings.name} está pronto!\n\n📊 Status:\n• Pontos: ${points.totalPoints}\n• Nível: ${points.tier.toUpperCase()}\n• Número: ${card.cardNumber}\n\nAdicione ao Wallet para acompanhar em tempo real:\n${shareLink}`;
+    
+    if (isWhatsAppConnected) {
+        // Bot Flow
+        if ((subscription.tokenBalance || 0) < 1) {
+            await showAlert({ title: 'Saldo Insuficiente', message: 'Você precisa de 1 token para enviar via Robô.', type: 'warning' });
+            return;
+        }
+        
+        const confirm = await showConfirm({
+            title: 'Enviar Cartão via Robô',
+            message: 'Deseja usar 1 Token para enviar o cartão automaticamente?',
+            confirmText: 'Enviar (1 Token)',
+            type: 'info'
+        });
+
+        if (confirm) {
+            if (consumeTokens(1, `Envio Cartão Fidelidade: ${client.name}`)) {
+                await showAlert({ title: 'Enviado', message: 'Cartão enviado para a fila de disparo.', type: 'success' });
+            } else {
+                await showAlert({ title: 'Erro', message: 'Falha ao processar tokens.', type: 'error' });
+            }
+        }
+    } else {
+        // Manual Flow
+        const link = getWhatsappLink(client.phone, message);
+        window.open(link, '_blank');
+    }
+  };
+
+  const handleSendReminder = async (reminder: any) => {
+    const message = generateReminderMessage(reminder);
+    
+    if (isWhatsAppConnected) {
+        // Bot Flow
+        if ((subscription.tokenBalance || 0) < 1) {
+            await showAlert({ title: 'Saldo Insuficiente', message: 'Você precisa de 1 token para enviar via Robô.', type: 'warning' });
+            return;
+        }
+        
+        const confirm = await showConfirm({
+            title: 'Enviar Lembrete via Robô',
+            message: 'Deseja usar 1 Token para enviar este lembrete automaticamente?',
+            confirmText: 'Enviar (1 Token)',
+            type: 'info'
+        });
+
+        if (confirm) {
+            if (consumeTokens(1, `Lembrete Manutenção: ${client.name}`)) {
+                await showAlert({ title: 'Enviado', message: 'Lembrete enviado para a fila de disparo.', type: 'success' });
+            } else {
+                await showAlert({ title: 'Erro', message: 'Falha ao processar tokens.', type: 'error' });
+            }
+        }
+    } else {
+        // Manual Flow
+        const link = getWhatsappLink(client.phone, message);
+        window.open(link, '_blank');
+    }
   };
 
   return (
@@ -137,168 +350,183 @@ Podemos agendar para esta semana?`;
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-50/50 dark:bg-slate-950/50">
           
-          {/* TAB: FIDELIDADE - Simplified QR + Wallet only */}
-          {activeTab === 'fidelidade' && companySettings.gamification?.enabled && points && card && (
-            <div className="space-y-4 max-w-md mx-auto">
-              {/* Tier Color Mapping */}
-              {(() => {
-                const tierColorMap = {
-                  bronze: { bg: 'from-amber-500 to-amber-600', info: 'bg-amber-50 dark:bg-amber-900/20', border: 'border-amber-200 dark:border-amber-800', text: 'text-amber-900 dark:text-amber-200' },
-                  silver: { bg: 'from-slate-400 to-slate-600', info: 'bg-slate-50 dark:bg-slate-900/20', border: 'border-slate-200 dark:border-slate-800', text: 'text-slate-900 dark:text-slate-200' },
-                  gold: { bg: 'from-yellow-500 to-yellow-600', info: 'bg-yellow-50 dark:bg-yellow-900/20', border: 'border-yellow-200 dark:border-yellow-800', text: 'text-yellow-900 dark:text-yellow-200' },
-                  platinum: { bg: 'from-blue-500 to-blue-600', info: 'bg-blue-50 dark:bg-blue-900/20', border: 'border-blue-200 dark:border-blue-800', text: 'text-blue-900 dark:text-blue-200' }
-                };
-                const colors = tierColorMap[points.tier] || tierColorMap.bronze;
-                
-                return (
-                  <>
-                    {/* QR Code */}
-                    <div className={`${colors.info} ${colors.border} p-6 rounded-xl border text-center`}>
-                      <p className={`text-sm font-bold ${colors.text} mb-3`}>QR Code para Validação</p>
-                      {qrCodeUrl && <img src={qrCodeUrl} alt="QR Code" className="w-48 h-48 mx-auto" />}
-                    </div>
-
-                    {/* Send via WhatsApp */}
-                    <button
-                      onClick={() => {
-                        const message = `Olá ${client.name}! 🎁\n\nSeu cartão de fidelidade ${companySettings.name} está pronto!\n\n📊 Status:\n• Pontos: ${points.totalPoints}\n• Nível: ${points.tier.toUpperCase()}\n• Número: ${card.cardNumber}\n\nEscaneie o QR Code para validar seus pontos!\n\nAdicione ao Wallet para acompanhar em tempo real.`;
-                        const link = getWhatsappLink(client.phone, message);
-                        window.open(link, '_blank');
-                      }}
-                      className={`w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r ${colors.bg} text-white rounded-lg font-bold hover:shadow-lg transition-all`}
-                    >
-                      💬 Enviar via WhatsApp
-                    </button>
-
-                    {/* Add to Wallet */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        onClick={() => {
-                          const url = generatePKPass(client.id);
-                          if (url) {
-                            const link = document.createElement('a');
-                            link.href = url;
-                            link.download = `cartao-${card.cardNumber}.txt`;
-                            link.click();
-                          }
-                        }}
-                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-700 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-lg font-semibold transition-colors text-sm"
-                      >
-                        <Smartphone size={16} /> iOS
-                      </button>
-                      <button
-                        onClick={() => window.open(generateGoogleWallet(client.id), '_blank')}
-                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-700 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-lg font-semibold transition-colors text-sm"
-                      >
-                        <Wallet size={16} /> Google
-                      </button>
-                    </div>
-
-                    {/* Vouchers Ativos */}
-                    {redemptions.filter(r => r.status === 'active').length > 0 && (
-                        <div className="bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800 p-4 rounded-lg">
-                            <h4 className="font-bold text-pink-700 dark:text-pink-300 text-sm mb-3 flex items-center gap-2">
-                                <Gift size={16} /> Vouchers Ativos
-                            </h4>
-                            <div className="space-y-2">
-                                {redemptions.filter(r => r.status === 'active').map(r => (
-                                    <div key={r.id} className="bg-white dark:bg-slate-900 p-3 rounded border border-slate-200 dark:border-slate-700">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <span className="font-mono font-bold text-slate-900 dark:text-white">{r.code}</span>
-                                            <span className="text-[10px] bg-green-100 text-green-800 px-2 py-0.5 rounded-full">Ativo</span>
-                                        </div>
-                                        <p className="text-xs text-slate-500">{r.rewardName}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Rewards Section */}
-                    {getRewardsByLevel(points.tier).length > 0 && (
-                      <div className={`${colors.info} ${colors.border} p-4 rounded-lg border`}>
-                        <h4 className={`font-bold ${colors.text} text-sm mb-3`}>🎁 Recompensas Disponíveis</h4>
-                        <div className="space-y-2 max-h-56 overflow-y-auto">
-                          {getRewardsByLevel(points.tier).map(r => {
-                            const canClaim = points.totalPoints >= r.requiredPoints;
-                            return (
-                              <div key={r.id} className="bg-white dark:bg-slate-900 p-2.5 rounded border border-slate-200 dark:border-slate-700 text-xs">
-                                <div className="flex justify-between items-start gap-2 mb-1.5">
-                                  <p className="font-bold text-slate-900 dark:text-white">{r.name}</p>
-                                  <span className="text-[10px] font-bold bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded whitespace-nowrap">-{r.requiredPoints}</span>
-                                </div>
-                                <button
-                                  onClick={() => {
-                                    const result = claimReward(client.id, r.id);
-                                    alert(result.message);
-                                  }}
-                                  disabled={!canClaim}
-                                  className={`w-full text-xs font-bold py-1 rounded transition-colors ${
-                                    canClaim
-                                      ? 'bg-gradient-to-r ' + colors.bg + ' text-white hover:shadow-md'
-                                      : 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed'
-                                  }`}
-                                >
-                                  {canClaim ? '🎁 Resgatar' : `Faltam ${r.requiredPoints - points.totalPoints}`}
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          )}
-          
-          {/* TAB: OVERVIEW */}
+          {/* TAB: OVERVIEW (EDITABLE) */}
           {activeTab === 'overview' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
-              <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 sm:space-y-4">
-                <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base mb-3 sm:mb-4">Dados de Contato</h3>
-                <div className="flex items-start gap-2 sm:gap-3">
-                  <Phone size={16} className="text-slate-400 flex-shrink-0 mt-0.5" />
-                  <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 break-all">{client.phone}</span>
+              <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 sm:space-y-4 relative">
+                <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Dados de Contato</h3>
+                    {!isEditing ? (
+                        <button onClick={() => setIsEditing(true)} className="text-blue-600 text-xs font-bold flex items-center gap-1 hover:underline">
+                            <Edit2 size={14} /> Editar
+                        </button>
+                    ) : (
+                        <div className="flex gap-2">
+                            <button onClick={() => setIsEditing(false)} className="text-slate-500 text-xs font-bold hover:underline">Cancelar</button>
+                            <button onClick={handleSaveClient} className="text-green-600 text-xs font-bold flex items-center gap-1 hover:underline">
+                                <Save size={14} /> Salvar
+                            </button>
+                        </div>
+                    )}
                 </div>
-                <div className="flex items-start gap-2 sm:gap-3">
-                  <Mail size={16} className="text-slate-400 flex-shrink-0 mt-0.5" />
-                  <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 break-all">{client.email}</span>
-                </div>
-                <div className="flex items-start gap-2 sm:gap-3">
-                  <MapPin size={16} className="text-slate-400 flex-shrink-0 mt-0.5" />
-                  <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">{client.address || 'Endereço não cadastrado'}</span>
-                </div>
+
+                {isEditing ? (
+                    <div className="space-y-3 animate-in fade-in">
+                        <input 
+                            type="text" 
+                            value={editFormData.name} 
+                            onChange={e => setEditFormData({...editFormData, name: e.target.value})}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400"
+                            placeholder="Nome"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                            <input 
+                                type="text" 
+                                value={editFormData.phone} 
+                                onChange={e => setEditFormData({...editFormData, phone: e.target.value})}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400"
+                                placeholder="Telefone"
+                            />
+                            <input 
+                                type="email" 
+                                value={editFormData.email} 
+                                onChange={e => setEditFormData({...editFormData, email: e.target.value})}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400"
+                                placeholder="Email"
+                            />
+                        </div>
+                        
+                        <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                            <p className="text-xs font-bold text-slate-500 uppercase mb-2">Endereço</p>
+                            <div className="grid grid-cols-3 gap-2 mb-2">
+                                <div className="relative col-span-1">
+                                    <input 
+                                        type="text" 
+                                        value={editFormData.cep} 
+                                        onChange={handleCepChange}
+                                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400"
+                                        placeholder="CEP"
+                                        maxLength={9}
+                                    />
+                                    {isLoadingCep && <Loader2 className="absolute right-2 top-2.5 animate-spin text-blue-500" size={14} />}
+                                </div>
+                                <div className="col-span-2">
+                                    <input 
+                                        type="text" 
+                                        value={editFormData.street} 
+                                        onChange={e => setEditFormData({...editFormData, street: e.target.value})}
+                                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400"
+                                        placeholder="Rua"
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 mb-2">
+                                <input 
+                                    type="text" 
+                                    value={editFormData.number} 
+                                    onChange={e => setEditFormData({...editFormData, number: e.target.value})}
+                                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400"
+                                    placeholder="Nº"
+                                />
+                                <div className="col-span-2">
+                                    <input 
+                                        type="text" 
+                                        value={editFormData.neighborhood} 
+                                        onChange={e => setEditFormData({...editFormData, neighborhood: e.target.value})}
+                                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400"
+                                        placeholder="Bairro"
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                                <div className="col-span-2">
+                                    <input 
+                                        type="text" 
+                                        value={editFormData.city} 
+                                        onChange={e => setEditFormData({...editFormData, city: e.target.value})}
+                                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400"
+                                        placeholder="Cidade"
+                                    />
+                                </div>
+                                <input 
+                                    type="text" 
+                                    value={editFormData.state} 
+                                    onChange={e => setEditFormData({...editFormData, state: e.target.value})}
+                                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400 uppercase"
+                                    placeholder="UF"
+                                    maxLength={2}
+                                />
+                            </div>
+                        </div>
+
+                        <textarea 
+                            value={editFormData.notes} 
+                            onChange={e => setEditFormData({...editFormData, notes: e.target.value})}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400"
+                            placeholder="Observações"
+                            rows={2}
+                        />
+                    </div>
+                ) : (
+                    <>
+                        <div className="flex items-start gap-2 sm:gap-3">
+                        <Phone size={16} className="text-slate-400 flex-shrink-0 mt-0.5" />
+                        <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 break-all">{client.phone}</span>
+                        </div>
+                        <div className="flex items-start gap-2 sm:gap-3">
+                        <Mail size={16} className="text-slate-400 flex-shrink-0 mt-0.5" />
+                        <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 break-all">{client.email}</span>
+                        </div>
+                        <div className="flex items-start gap-2 sm:gap-3">
+                        <MapPin size={16} className="text-slate-400 flex-shrink-0 mt-0.5" />
+                        <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">{client.address || 'Endereço não cadastrado'}</span>
+                        </div>
+                    </>
+                )}
               </div>
 
               <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base mb-3 sm:mb-4">Métricas de Valor (LTV)</h3>
-                <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-3 sm:mb-4">
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base mb-3 sm:mb-4 flex items-center gap-2">
+                    <Calculator size={18} className="text-blue-600" />
+                    Métricas de Valor (LTV)
+                </h3>
+                <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-3 sm:mb-4">
                   <div className="p-2 sm:p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                     <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Total Gasto</p>
-                    <p className="text-base sm:text-2xl font-bold text-blue-700 dark:text-blue-400 break-all">{formatCurrency(client.ltv)}</p>
+                    <p className="text-base sm:text-2xl font-bold text-blue-700 dark:text-blue-400 break-all">{formatCurrency(client.ltv || 0)}</p>
+                  </div>
+                  <div className="p-2 sm:p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                    <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Visitas</p>
+                    <p className="text-base sm:text-2xl font-bold text-green-700 dark:text-green-400">{client.visitCount || 0}</p>
                   </div>
                   <div className="p-2 sm:p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
                     <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Ticket Médio</p>
                     <p className="text-base sm:text-2xl font-bold text-purple-700 dark:text-purple-400 break-all">
-                      {clientWorkOrders.length > 0 
-                        ? formatCurrency(client.ltv / clientWorkOrders.length) 
+                      {client.visitCount > 0 
+                        ? formatCurrency((client.ltv || 0) / client.visitCount) 
                         : 'R$ 0,00'}
                     </p>
                   </div>
                 </div>
-                <div>
-                  <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 uppercase font-bold mb-2">Notas Internas</p>
-                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 p-2 sm:p-3 rounded-lg line-clamp-3">
-                    {client.notes || 'Nenhuma observação.'}
-                  </p>
-                </div>
+                {!isEditing && (
+                    <div>
+                    <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 uppercase font-bold mb-2 flex items-center gap-1">
+                        <StickyNote size={12} /> Notas Internas
+                    </p>
+                    <div className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 p-2 sm:p-3 rounded-lg min-h-[60px] whitespace-pre-wrap">
+                        {client.notes || 'Nenhuma observação registrada.'}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1 text-right">
+                        * Para alterar as notas, clique em "Editar" acima.
+                    </p>
+                    </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* TAB: VEHICLES */}
+          {/* ... (Rest of the file remains the same) ... */}
+          {/* TAB: VEHICLES (EDITABLE) */}
           {activeTab === 'vehicles' && (
             <div className="space-y-3 sm:space-y-4">
               <div className="flex justify-between items-center gap-2">
@@ -317,27 +545,27 @@ Podemos agendar para esta semana?`;
                     <input 
                       type="text" placeholder="Modelo" required
                       value={newVehicle.model} onChange={e => setNewVehicle({...newVehicle, model: e.target.value})}
-                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs sm:text-sm"
+                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm"
                     />
                     <input 
                       type="text" placeholder="Placa" required
                       value={newVehicle.plate} onChange={e => setNewVehicle({...newVehicle, plate: e.target.value})}
-                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs sm:text-sm"
+                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm"
                     />
                     <input 
                       type="text" placeholder="Cor"
                       value={newVehicle.color} onChange={e => setNewVehicle({...newVehicle, color: e.target.value})}
-                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs sm:text-sm"
+                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm"
                     />
                     <input 
                       type="text" placeholder="Ano"
                       value={newVehicle.year} onChange={e => setNewVehicle({...newVehicle, year: e.target.value})}
-                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs sm:text-sm"
+                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm"
                     />
                     <select
                       value={newVehicle.size}
                       onChange={e => setNewVehicle({...newVehicle, size: e.target.value as VehicleSize})}
-                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-xs sm:text-sm col-span-2 sm:col-span-1"
+                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm col-span-2 sm:col-span-1"
                     >
                       {Object.entries(VEHICLE_SIZES).map(([key, label]) => (
                         <option key={key} value={key}>{label}</option>
@@ -353,17 +581,52 @@ Podemos agendar para esta semana?`;
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                 {client.vehicles.length > 0 ? client.vehicles.map((vehicle) => (
-                  <div key={vehicle.id} className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3 sm:gap-4">
+                  <div key={vehicle.id} className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3 sm:gap-4 relative group">
                     <div className="p-2 sm:p-3 bg-slate-100 dark:bg-slate-800 rounded-lg flex-shrink-0">
                       <Car size={18} className="text-slate-500 dark:text-slate-400" />
                     </div>
-                    <div className="min-w-0">
-                      <h4 className="font-bold text-slate-900 dark:text-white text-sm truncate">{vehicle.model}</h4>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{vehicle.plate} • {vehicle.color}</p>
-                      <span className="text-xs font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded mt-1 inline-block">
-                        {VEHICLE_SIZES[vehicle.size]}
-                      </span>
-                    </div>
+                    
+                    {editingVehicleId === vehicle.id ? (
+                        <div className="flex-1 grid grid-cols-2 gap-2">
+                            <input 
+                                type="text" 
+                                value={editVehicleData.model} 
+                                onChange={e => setEditVehicleData({...editVehicleData, model: e.target.value})}
+                                className="px-2 py-1 text-xs border rounded bg-slate-50 dark:bg-slate-950 dark:border-slate-700 text-slate-900 dark:text-white"
+                                placeholder="Modelo"
+                            />
+                            <input 
+                                type="text" 
+                                value={editVehicleData.plate} 
+                                onChange={e => setEditVehicleData({...editVehicleData, plate: e.target.value})}
+                                className="px-2 py-1 text-xs border rounded bg-slate-50 dark:bg-slate-950 dark:border-slate-700 text-slate-900 dark:text-white"
+                                placeholder="Placa"
+                            />
+                            <div className="col-span-2 flex justify-end gap-2 mt-1">
+                                <button onClick={() => setEditingVehicleId(null)} className="text-xs text-slate-500">Cancelar</button>
+                                <button onClick={saveEditVehicle} className="text-xs text-green-600 font-bold">Salvar</button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="min-w-0 flex-1">
+                            <h4 className="font-bold text-slate-900 dark:text-white text-sm truncate">{vehicle.model}</h4>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{vehicle.plate} • {vehicle.color}</p>
+                            <span className="text-xs font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded mt-1 inline-block">
+                                {VEHICLE_SIZES[vehicle.size]}
+                            </span>
+                        </div>
+                    )}
+
+                    {!editingVehicleId && (
+                        <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => startEditVehicle(vehicle)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded">
+                                <Edit2 size={14} />
+                            </button>
+                            <button onClick={() => handleDeleteVehicle(vehicle.id)} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">
+                                <Trash2 size={14} />
+                            </button>
+                        </div>
+                    )}
                   </div>
                 )) : (
                   <div className="col-span-full text-center py-6 sm:py-8 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 rounded-lg sm:rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-xs sm:text-sm">
@@ -439,7 +702,7 @@ Podemos agendar para esta semana?`;
                     </div>
                   </div>
                 )) : (
-                  <div className="text-center py-6 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 text-xs">Nenhum serviço encontrado.</div>
+                  <div className="text-center py-6 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 rounded-lg border border-dashed border-slate-200 dark:border-slate-700 text-xs">Nenhum serviço encontrado.</div>
                 )}
               </div>
             </div>
@@ -457,7 +720,7 @@ Podemos agendar para esta semana?`;
 
               <div>
                 <h3 className="font-bold text-slate-900 dark:text-white mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
-                  <AlertCircle size={18} className="text-amber-500 flex-shrink-0" />
+                  <TrendingUp size={18} className="text-amber-500 flex-shrink-0" />
                   Lembretes Ativos
                 </h3>
                 
@@ -476,15 +739,16 @@ Podemos agendar para esta semana?`;
                         </p>
                       </div>
                       
-                      <a 
-                        href={`https://wa.me/55${client.phone.replace(/\D/g,'')}?text=${encodeURIComponent(generateReminderMessage(reminder))}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold px-3 sm:px-4 py-2 rounded-lg transition-colors text-xs sm:text-sm w-full"
+                      <button 
+                        onClick={() => handleSendReminder(reminder)}
+                        className={cn(
+                            "flex items-center justify-center gap-2 text-white font-bold px-3 sm:px-4 py-2 rounded-lg transition-colors text-xs sm:text-sm w-full",
+                            isWhatsAppConnected ? "bg-purple-600 hover:bg-purple-700" : "bg-green-500 hover:bg-green-600"
+                        )}
                       >
-                        <MessageCircle size={16} />
-                        WhatsApp
-                      </a>
+                        {isWhatsAppConnected ? <Bot size={16} /> : <MessageCircle size={16} />}
+                        {isWhatsAppConnected ? 'Enviar via Robô (1 Token)' : 'Enviar WhatsApp (Manual)'}
+                      </button>
                     </div>
                   )) : (
                     <div className="text-center py-6 sm:py-8 text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-200 dark:border-slate-700 text-xs sm:text-sm">
@@ -493,6 +757,158 @@ Podemos agendar para esta semana?`;
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* TAB: FIDELIDADE */}
+          {activeTab === 'fidelidade' && companySettings.gamification?.enabled && (
+            <div className="space-y-6 max-w-4xl mx-auto">
+              {card ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Left Column: Card & Actions */}
+                  <div className="space-y-4">
+                      <FidelityCard 
+                          clientName={client.name}
+                          clientPhone={client.phone}
+                          totalPoints={points.totalPoints}
+                          currentLevel={points.currentLevel}
+                          tier={points.tier}
+                          cardNumber={card.cardNumber}
+                          servicesCompleted={points.servicesCompleted}
+                          shopName={companySettings.name}
+                      />
+
+                      <div className="grid grid-cols-2 gap-3">
+                          <button
+                              onClick={handleSendFidelityCard}
+                              className={cn(
+                                "flex items-center justify-center gap-2 px-4 py-3 text-white rounded-lg font-bold text-sm transition-all",
+                                isWhatsAppConnected ? "bg-purple-600 hover:bg-purple-700" : "bg-green-600 hover:bg-green-700"
+                              )}
+                          >
+                              {isWhatsAppConnected ? <Bot size={18} /> : <MessageCircle size={18} />}
+                              {isWhatsAppConnected ? 'Enviar (Robô)' : 'Enviar no Zap'}
+                          </button>
+                          <button
+                              onClick={handleCopyLink}
+                              className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-bold text-sm transition-all"
+                          >
+                              <Copy size={18} /> Copiar Link
+                          </button>
+                      </div>
+                      <p className="text-xs text-center text-slate-500">
+                          Este link é público. O cliente não precisa de senha para acessar.
+                      </p>
+                  </div>
+
+                  {/* Right Column: Manual Entry & Rewards */}
+                  <div className="space-y-6">
+                      
+                      {/* Manual Points Entry */}
+                      <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                          <h4 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                              <Zap size={18} className="text-amber-500" />
+                              Lançar Pontos Manualmente
+                          </h4>
+                          <form onSubmit={handleManualPoints} className="space-y-3">
+                              <div>
+                                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Valor Gasto (R$)</label>
+                                  <div className="relative">
+                                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                      <input 
+                                          type="number" 
+                                          step="0.01"
+                                          value={manualSpend}
+                                          onChange={(e) => setManualSpend(e.target.value)}
+                                          placeholder="0,00"
+                                          className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white"
+                                          required
+                                      />
+                                  </div>
+                                  {manualSpend && (
+                                      <p className="text-xs text-green-600 dark:text-green-400 mt-1 font-medium">
+                                          + {Math.floor(parseFloat(manualSpend) * (companySettings.gamification?.pointsMultiplier || 1))} pontos
+                                      </p>
+                                  )}
+                              </div>
+                              <div>
+                                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Descrição (Opcional)</label>
+                                  <input 
+                                      type="text" 
+                                      value={manualDesc}
+                                      onChange={(e) => setManualDesc(e.target.value)}
+                                      placeholder="Ex: Compra de produtos"
+                                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
+                                  />
+                              </div>
+                              <button type="submit" className="w-full py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+                                  <Save size={16} /> Lançar Pontos & Atualizar LTV
+                              </button>
+                          </form>
+                      </div>
+
+                      {/* Vouchers Ativos */}
+                      {redemptions.filter(r => r.status === 'active').length > 0 && (
+                          <div className="bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800 p-4 rounded-lg">
+                              <h4 className="font-bold text-pink-700 dark:text-pink-300 text-sm mb-3 flex items-center gap-2">
+                                  <Gift size={16} /> Vouchers Ativos
+                              </h4>
+                              <div className="space-y-2">
+                                  {redemptions.filter(r => r.status === 'active').map(r => (
+                                      <div key={r.id} className="bg-white dark:bg-slate-900 p-3 rounded border border-slate-200 dark:border-slate-700">
+                                          <div className="flex justify-between items-center mb-1">
+                                              <span className="font-mono font-bold text-slate-900 dark:text-white">{r.code}</span>
+                                              <span className="text-[10px] bg-green-100 text-green-800 px-2 py-0.5 rounded-full">Ativo</span>
+                                          </div>
+                                          <p className="text-xs text-slate-500">{r.rewardName}</p>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+                      )}
+
+                      {/* Rewards List */}
+                      <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg">
+                          <h4 className="font-bold text-slate-700 dark:text-slate-300 text-sm mb-3">Recompensas Disponíveis</h4>
+                          <div className="space-y-2 max-h-56 overflow-y-auto">
+                          {getRewardsByLevel(points.tier).map(r => {
+                              const canClaim = points.totalPoints >= r.requiredPoints;
+                              return (
+                              <div key={r.id} className="bg-white dark:bg-slate-900 p-2.5 rounded border border-slate-200 dark:border-slate-700 text-xs">
+                                  <div className="flex justify-between items-start gap-2 mb-1.5">
+                                  <p className="font-bold text-slate-900 dark:text-white">{r.name}</p>
+                                  <span className="text-[10px] font-bold bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded whitespace-nowrap">-{r.requiredPoints} pts</span>
+                                  </div>
+                                  <button
+                                  onClick={() => {
+                                      const result = claimReward(client.id, r.id);
+                                      alert(result.message);
+                                  }}
+                                  disabled={!canClaim}
+                                  className={`w-full text-xs font-bold py-1 rounded transition-colors ${
+                                      canClaim
+                                      ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                      : 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                                  }`}
+                                  >
+                                  {canClaim ? 'Resgatar' : `Faltam ${r.requiredPoints - points.totalPoints}`}
+                                  </button>
+                              </div>
+                              );
+                          })}
+                          {getRewardsByLevel(points.tier).length === 0 && (
+                              <p className="text-xs text-slate-500 italic text-center">Nenhuma recompensa para este nível.</p>
+                          )}
+                          </div>
+                      </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                  <Loader2 size={32} className="animate-spin mb-2" />
+                  <p className="text-sm">Gerando cartão de fidelidade...</p>
+                </div>
+              )}
             </div>
           )}
 

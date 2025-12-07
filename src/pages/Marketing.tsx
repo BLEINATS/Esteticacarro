@@ -5,7 +5,7 @@ import {
   CalendarClock, Wrench, BarChart3, ArrowRight,
   Instagram, Wand2, Image as ImageIcon, Share2, Copy,
   Smartphone, Video, BellRing, Loader2, Plus, X, Download, Layers,
-  FileText, Eye, MousePointerClick, DollarSign
+  FileText, Eye, MousePointerClick, DollarSign, MessageSquare, Bot, Info
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -14,6 +14,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { ClientSegment, MarketingCampaign, WorkOrder } from '../types';
 import { cn, formatCurrency } from '../lib/utils';
+import { useDialog } from '../context/DialogContext';
 
 const CAMPAIGN_TEMPLATES = [
   {
@@ -48,20 +49,48 @@ const CAMPAIGN_TEMPLATES = [
   }
 ];
 
+// Custos em Tokens
+const COSTS = {
+    SOCIAL_AI: 5,
+    WHATSAPP_MSG: 1
+};
+
 // --- COMPONENTE MODAL DE DETALHES ---
 const CampaignDetailsModal = ({ campaign, onClose }: { campaign: MarketingCampaign, onClose: () => void }) => {
+  const { updateCampaign } = useApp();
+  const { showConfirm, showAlert } = useDialog();
+  const [manualValue, setManualValue] = useState('');
+
   // Simulação de dados de conversão baseados na campanha
   const mockConversions = [
     { client: 'Dr. Roberto Silva', vehicle: 'Porsche Macan', service: 'Polimento Técnico', value: 1200, date: 'Há 2 dias' },
     { client: 'Ana Paula', vehicle: 'BMW X1', service: 'Lavagem Detalhada', value: 350, date: 'Ontem' },
     { client: 'Construtora Mendes', vehicle: 'Hilux CD', service: 'Higienização', value: 650, date: 'Hoje' },
-  ].slice(0, Math.min(3, campaign.conversionCount || 3));
+  ].slice(0, Math.min(3, campaign.conversionCount || 0));
 
-  // Se não houver conversões, usa dados de exemplo
-  const conversionsWithDefaults = mockConversions.length > 0 ? mockConversions : [
-    { client: 'Cliente Exemplo 1', vehicle: 'Toyota Corolla', service: 'Polimento', value: 850, date: 'Há 1 dia' },
-    { client: 'Cliente Exemplo 2', vehicle: 'Honda Civic', service: 'Lavagem', value: 280, date: 'Há 3 dias' },
-  ];
+  const handleAddConversion = async () => {
+    const value = parseFloat(manualValue);
+    if (isNaN(value) || value <= 0) return;
+
+    const confirmed = await showConfirm({
+        title: 'Registrar Conversão',
+        message: `Confirmar que esta campanha gerou uma venda de ${formatCurrency(value)}?`,
+        type: 'success',
+        confirmText: 'Sim, Registrar'
+    });
+
+    if (confirmed) {
+        updateCampaign(campaign.id, {
+            conversionCount: (campaign.conversionCount || 0) + 1,
+            revenueGenerated: (campaign.revenueGenerated || 0) + value
+        });
+        setManualValue('');
+        showAlert({ title: 'Sucesso', message: 'Conversão registrada e receita atualizada!', type: 'success' });
+    }
+  };
+
+  // Cálculo de Abertura Estimada (92% padrão para WhatsApp)
+  const estimatedOpenRate = 92; 
 
   return (
     <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
@@ -80,6 +109,14 @@ const CampaignDetailsModal = ({ campaign, onClose }: { campaign: MarketingCampai
               <span>{new Date(campaign.date).toLocaleDateString('pt-BR')}</span>
               <span className="hidden sm:inline w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600" />
               <span className="capitalize">{campaign.targetSegment === 'all' ? 'Todos' : campaign.targetSegment}</span>
+              {campaign.costInTokens && (
+                <>
+                    <span className="hidden sm:inline w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600" />
+                    <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-bold">
+                        <MessageSquare size={12} /> {campaign.costInTokens} Tokens
+                    </span>
+                </>
+              )}
             </p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors flex-shrink-0">
@@ -101,20 +138,20 @@ const CampaignDetailsModal = ({ campaign, onClose }: { campaign: MarketingCampai
               <div className="flex items-center gap-1 sm:gap-2 text-slate-500 dark:text-slate-400 mb-1 sm:mb-2 text-xs sm:text-sm font-medium">
                 <Eye size={14} /> <span className="hidden sm:inline">Abertura</span>
               </div>
-              <p className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">92%</p>
+              <p className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">{estimatedOpenRate}%</p>
               <p className="text-xs text-green-600 dark:text-green-400">Estimado</p>
             </div>
             <div className="p-2 sm:p-4 bg-slate-50 dark:bg-slate-800 rounded-lg sm:rounded-xl border border-slate-100 dark:border-slate-700">
               <div className="flex items-center gap-1 sm:gap-2 text-slate-500 dark:text-slate-400 mb-1 sm:mb-2 text-xs sm:text-sm font-medium">
                 <MousePointerClick size={14} /> <span className="hidden sm:inline">Conversões</span>
               </div>
-              <p className="text-base sm:text-lg font-bold text-blue-600 dark:text-blue-400 truncate" title={String(campaign.conversionCount || 3)}>{campaign.conversionCount || 3}</p>
+              <p className="text-base sm:text-lg font-bold text-blue-600 dark:text-blue-400 truncate" title={String(campaign.conversionCount || 0)}>{campaign.conversionCount || 0}</p>
             </div>
             <div className="p-2 sm:p-4 bg-green-50 dark:bg-green-900/20 rounded-lg sm:rounded-xl border border-green-100 dark:border-green-900/30">
               <div className="flex items-center gap-1 sm:gap-2 text-green-700 dark:text-green-400 mb-1 sm:mb-2 text-xs sm:text-sm font-medium">
                 <DollarSign size={14} /> <span className="hidden sm:inline">Receita</span>
               </div>
-              <p className="text-base sm:text-lg font-bold text-green-700 dark:text-green-400 truncate" title={formatCurrency(campaign.revenueGenerated || 2100)}>{formatCurrency(campaign.revenueGenerated || 2100)}</p>
+              <p className="text-base sm:text-lg font-bold text-green-700 dark:text-green-400 truncate" title={formatCurrency(campaign.revenueGenerated || 0)}>{formatCurrency(campaign.revenueGenerated || 0)}</p>
             </div>
           </div>
 
@@ -129,10 +166,13 @@ const CampaignDetailsModal = ({ campaign, onClose }: { campaign: MarketingCampai
 
           {/* Lista de Conversões */}
           <div>
-            <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-2 sm:mb-3">
-              Clientes Convertidos (Recentes)
-            </h4>
-            {conversionsWithDefaults.length > 0 ? (
+            <div className="flex justify-between items-center mb-2 sm:mb-3">
+                <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                Clientes Convertidos (Recentes)
+                </h4>
+            </div>
+            
+            {mockConversions.length > 0 ? (
               <>
                 {/* Desktop Table */}
                 <div className="hidden sm:block bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
@@ -146,7 +186,7 @@ const CampaignDetailsModal = ({ campaign, onClose }: { campaign: MarketingCampai
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {conversionsWithDefaults.map((conv, idx) => (
+                      {mockConversions.map((conv, idx) => (
                         <tr key={idx}>
                           <td className="px-4 py-3">
                             <p className="font-medium text-slate-900 dark:text-white text-xs">{conv.client}</p>
@@ -162,7 +202,7 @@ const CampaignDetailsModal = ({ campaign, onClose }: { campaign: MarketingCampai
                 </div>
                 {/* Mobile Cards */}
                 <div className="sm:hidden space-y-2">
-                  {conversionsWithDefaults.map((conv, idx) => (
+                  {mockConversions.map((conv, idx) => (
                     <div key={idx} className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <div className="min-w-0 flex-1">
@@ -186,6 +226,32 @@ const CampaignDetailsModal = ({ campaign, onClose }: { campaign: MarketingCampai
             )}
           </div>
 
+          {/* Simulação de Conversão */}
+          <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+            <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-3 flex items-center gap-2">
+                <TrendingUp size={14} /> Simular / Registrar Conversão Manual
+            </h4>
+            <div className="flex gap-2">
+                <input 
+                    type="number" 
+                    value={manualValue}
+                    onChange={(e) => setManualValue(e.target.value)}
+                    placeholder="Valor da Venda (R$)"
+                    className="flex-1 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white"
+                />
+                <button 
+                    onClick={handleAddConversion}
+                    disabled={!manualValue}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg font-bold text-sm hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+                >
+                    Registrar
+                </button>
+            </div>
+            <p className="text-[10px] text-slate-500 mt-2">
+                * Em produção, isso é automático quando o cliente usa um cupom da campanha na OS.
+            </p>
+          </div>
+
         </div>
         
         <div className="p-3 sm:p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex justify-end flex-shrink-0">
@@ -199,7 +265,8 @@ const CampaignDetailsModal = ({ campaign, onClose }: { campaign: MarketingCampai
 };
 
 export default function Marketing() {
-  const { clients, campaigns, createCampaign, getWhatsappLink, workOrders, reminders } = useApp();
+  const { clients, campaigns, createCampaign, getWhatsappLink, workOrders, reminders, subscription, consumeTokens } = useApp();
+  const { showAlert } = useDialog();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'campaigns' | 'automation' | 'social'>('dashboard');
   
   // --- SOCIAL STUDIO STATE ---
@@ -213,7 +280,7 @@ export default function Marketing() {
 
   // --- CAMPAIGNS STATE ---
   const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
-  const [selectedCampaign, setSelectedCampaign] = useState<MarketingCampaign | null>(null); // NOVO STATE
+  const [selectedCampaign, setSelectedCampaign] = useState<MarketingCampaign | null>(null); 
   const [newCampaign, setNewCampaign] = useState({ 
     name: '',
     target: 'inactive' as ClientSegment | 'all', 
@@ -233,6 +300,10 @@ export default function Marketing() {
   // Lembretes de Retorno
   const returnReminders = reminders.filter(r => r.status === 'pending' || r.status === 'overdue');
 
+  // Calculate Campaign Cost
+  const targetCount = newCampaign.target === 'all' ? clients.length : segments[newCampaign.target].length;
+  const estimatedCost = targetCount * COSTS.WHATSAPP_MSG; // 1 token per message
+
   // --- ACTIONS ---
 
   const handleTemplateSelect = (templateId: string) => {
@@ -243,43 +314,79 @@ export default function Marketing() {
     }
   };
 
-  const handleSendCampaign = () => {
+  const handleSendCampaign = async () => {
     if (!newCampaign.message || !newCampaign.name) return;
     
+    if (estimatedCost > (subscription.tokenBalance || 0)) {
+        await showAlert({
+            title: 'Saldo Insuficiente',
+            message: `Você precisa de ${estimatedCost} tokens, mas tem apenas ${subscription.tokenBalance || 0}. Recarregue sua carteira.`,
+            type: 'warning'
+        });
+        return;
+    }
+
     setSendingCampaign(true);
     
     // Simula envio
     setTimeout(() => {
-      const targetCount = newCampaign.target === 'all' ? clients.length : segments[newCampaign.target].length;
+      // Consume Tokens
+      const success = consumeTokens(estimatedCost, `Campanha: ${newCampaign.name}`);
       
-      const campaign: MarketingCampaign = {
-        id: `cmp-${Date.now()}`,
-        name: newCampaign.name,
-        targetSegment: newCampaign.target,
-        messageTemplate: newCampaign.message,
-        sentCount: targetCount,
-        conversionCount: 0,
-        revenueGenerated: 0,
-        date: new Date().toISOString(),
-        status: 'sent'
-      };
+      if (success) {
+        const campaign: MarketingCampaign = {
+            id: `cmp-${Date.now()}`,
+            name: newCampaign.name,
+            targetSegment: newCampaign.target,
+            messageTemplate: newCampaign.message,
+            sentCount: targetCount,
+            conversionCount: 0,
+            revenueGenerated: 0,
+            date: new Date().toISOString(),
+            status: 'sent',
+            costInTokens: estimatedCost
+        };
 
-      createCampaign(campaign);
-      setSendingCampaign(false);
-      setIsCampaignModalOpen(false);
-      setNewCampaign({ name: '', target: 'inactive', message: '' });
-      setSelectedTemplateId('');
+        createCampaign(campaign);
+        setSendingCampaign(false);
+        setIsCampaignModalOpen(false);
+        setNewCampaign({ name: '', target: 'inactive', message: '' });
+        setSelectedTemplateId('');
+        showAlert({ title: 'Sucesso', message: 'Campanha disparada com sucesso!', type: 'success' });
+      } else {
+        setSendingCampaign(false);
+        showAlert({ title: 'Erro', message: 'Falha ao processar tokens.', type: 'error' });
+      }
     }, 2000);
   };
 
-  const handleGenerateSocial = () => {
+  const handleGenerateSocial = async () => {
     const os = workOrders.find(o => o.id === selectedOSId);
     if (!os) return;
+
+    // Check Balance
+    if ((subscription.tokenBalance || 0) < COSTS.SOCIAL_AI) {
+        await showAlert({
+            title: 'Saldo Insuficiente',
+            message: `A geração com IA custa ${COSTS.SOCIAL_AI} tokens. Seu saldo é ${subscription.tokenBalance || 0}.`,
+            type: 'warning'
+        });
+        return;
+    }
 
     setIsGenerating(true);
 
     // Simula IA Generativa
     setTimeout(() => {
+      // Consume Tokens
+      const success = consumeTokens(COSTS.SOCIAL_AI, `Social Studio AI: OS #${os.id}`);
+      
+      if (!success) {
+          setIsGenerating(false);
+          showAlert({ title: 'Erro', message: 'Falha ao debitar tokens.', type: 'error' });
+          return;
+      }
+
       const service = os.service;
       const vehicle = os.vehicle;
       
@@ -295,7 +402,29 @@ export default function Marketing() {
         cta: 'Clique no link da bio para agendar sua avaliação gratuita!'
       });
       setIsGenerating(false);
+      showAlert({ title: 'Conteúdo Gerado', message: `${COSTS.SOCIAL_AI} tokens debitados.`, type: 'success' });
     }, 1500);
+  };
+
+  const handleSendRecall = async (reminder: any, client: any, vehicle: any) => {
+      // Check Balance
+      if ((subscription.tokenBalance || 0) < COSTS.WHATSAPP_MSG) {
+          await showAlert({
+              title: 'Saldo Insuficiente',
+              message: `O envio custa ${COSTS.WHATSAPP_MSG} token. Recarregue sua carteira.`,
+              type: 'warning'
+          });
+          return;
+      }
+
+      const success = consumeTokens(COSTS.WHATSAPP_MSG, `Recall: ${client?.name} - ${reminder.serviceType}`);
+      
+      if (success) {
+          const message = `Olá ${client?.name}! O sistema da Crystal Care indicou que já está na hora de renovar o serviço de ${reminder.serviceType} do seu ${vehicle?.model}. Vamos agendar para manter a proteção em dia?`;
+          window.open(getWhatsappLink(client?.phone || '', message), '_blank');
+      } else {
+          showAlert({ title: 'Erro', message: 'Falha ao processar tokens.', type: 'error' });
+      }
   };
 
   const getSelectedOSPhotos = () => {
@@ -609,7 +738,21 @@ export default function Marketing() {
                                  />
                              </div>
                              <div>
-                                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Público Alvo</label>
+                                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5 flex items-center gap-2">
+                                     Público Alvo
+                                     <div className="group relative">
+                                         <Info size={14} className="text-slate-400 cursor-help" />
+                                         <div className="absolute left-0 bottom-full mb-2 w-64 p-3 bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                                             <p className="font-bold mb-1">Critérios de Segmentação:</p>
+                                             <ul className="list-disc pl-4 space-y-1">
+                                                 <li><strong>Inativos:</strong> Sem visita há +60 dias.</li>
+                                                 <li><strong>VIP:</strong> LTV alto ou frequência alta.</li>
+                                                 <li><strong>Recorrentes:</strong> Média de 1 visita/mês.</li>
+                                                 <li><strong>Novos:</strong> Primeira visita recente.</li>
+                                             </ul>
+                                         </div>
+                                     </div>
+                                 </label>
                                  <select 
                                     value={newCampaign.target}
                                     onChange={e => setNewCampaign({...newCampaign, target: e.target.value as any})}
@@ -650,6 +793,14 @@ export default function Marketing() {
                                     className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white resize-none"
                                  />
                                  <p className="text-xs text-slate-400 mt-1">Variáveis: {'{cliente}'}</p>
+                             </div>
+
+                             <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                                <div className="flex items-center gap-2">
+                                    <MessageSquare size={16} className="text-amber-500" />
+                                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Custo Estimado:</span>
+                                </div>
+                                <span className="text-sm font-bold text-slate-900 dark:text-white">{targetCount} Tokens</span>
                              </div>
 
                              <button 
@@ -714,6 +865,14 @@ export default function Marketing() {
                                      </button>
                                  ))}
                              </div>
+                         </div>
+
+                         <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                                <Bot size={16} className="text-purple-500" />
+                                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Custo de Geração:</span>
+                            </div>
+                            <span className="text-sm font-bold text-slate-900 dark:text-white">{COSTS.SOCIAL_AI} Tokens</span>
                          </div>
 
                          <button 
@@ -887,18 +1046,16 @@ export default function Marketing() {
                                         <p className="font-bold text-slate-900 dark:text-white">{client?.name} • {vehicle?.model}</p>
                                         <p className="text-sm text-slate-500 dark:text-slate-400">{reminder.serviceType}</p>
                                         <p className={cn("text-xs font-bold mt-1", isOverdue ? "text-red-500" : "text-blue-500")}>
-                                            {isOverdue ? `Venceu em ${new Date(reminder.dueDate).toLocaleDateString()}` : `Vence em ${new Date(reminder.dueDate).toLocaleDateString()}`}
+                                            {isOverdue ? `Venceu em ${new Date(reminder.dueDate).toLocaleDateString()}` : `Vence em ${new Date(reminder.dueDate).toLocaleDateString()}`},
                                         </p>
                                     </div>
                                 </div>
-                                <a 
-                                    href={getWhatsappLink(client?.phone || '', `Olá ${client?.name}! O sistema da Crystal Care indicou que já está na hora de renovar o serviço de ${reminder.serviceType} do seu ${vehicle?.model}. Vamos agendar para manter a proteção em dia?`)}
-                                    target="_blank"
-                                    rel="noreferrer"
+                                <button 
+                                    onClick={() => handleSendRecall(reminder, client, vehicle)}
                                     className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition-colors text-sm w-full md:w-auto justify-center"
                                 >
-                                    <MessageCircle size={16} /> Enviar Aviso
-                                </a>
+                                    <MessageCircle size={16} /> Enviar Aviso (1 Token)
+                                </button>
                             </div>
                         );
                     }) : (

@@ -13,7 +13,8 @@ import {
   Target,
   CheckCircle2,
   AlertCircle,
-  Car
+  Car,
+  MapPin
 } from 'lucide-react';
 import { 
   PieChart, 
@@ -33,9 +34,14 @@ import WorkOrderModal from '../components/WorkOrderModal';
 import { WorkOrder } from '../types';
 import { useNavigate } from 'react-router-dom';
 
-const StatCard = ({ title, value, subtext, icon: Icon, color, trend, tooltip }: any) => (
+const StatCard = ({ title, value, subtext, icon: Icon, color, decorationColor, trend, tooltip }: any) => (
   <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
-    <div className={cn("absolute right-0 top-0 w-24 h-24 opacity-10 rounded-bl-full transition-transform group-hover:scale-110", color.replace('text-', 'bg-'))} />
+    {/* Background Decoration Shape */}
+    <div className={cn(
+      "absolute right-0 top-0 w-24 h-24 opacity-10 rounded-bl-full transition-transform group-hover:scale-110", 
+      decorationColor || color.replace('text-', 'bg-').split(' ')[0] // Fallback safe logic or explicit color
+    )} />
+    
     <div className="flex items-center justify-between mb-4">
       <div className={cn("p-3 rounded-lg bg-slate-50 dark:bg-slate-800", color)}>
         <Icon size={24} />
@@ -56,7 +62,7 @@ const StatCard = ({ title, value, subtext, icon: Icon, color, trend, tooltip }: 
     <p className="text-xs text-slate-400 mt-2">{subtext}</p>
     
     {tooltip && (
-      <div className="absolute left-0 right-0 bottom-0 px-6 py-3 bg-slate-900 dark:bg-slate-950 text-white text-xs rounded-b-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+      <div className="absolute left-0 right-0 bottom-0 px-6 py-3 bg-slate-900 dark:bg-slate-950 text-white text-xs rounded-b-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10">
         {tooltip}
       </div>
     )}
@@ -64,18 +70,28 @@ const StatCard = ({ title, value, subtext, icon: Icon, color, trend, tooltip }: 
 );
 
 export default function Dashboard() {
-  const { theme, workOrders, clients, employeeTransactions, inventory } = useApp();
+  const { theme, workOrders, clients, inventory, financialTransactions, companySettings } = useApp();
   const isDark = theme === 'dark';
   const [selectedOS, setSelectedOS] = useState<WorkOrder | null>(null);
   const navigate = useNavigate();
 
-  // --- CÁLCULOS REAIS ---
+  // --- CÁLCULOS REAIS (Real Data) ---
   
-  // 1. Financeiro
-  const totalIncome = 128500.00 + workOrders.filter(os => os.status === 'Concluído').reduce((acc, os) => acc + os.totalValue, 0);
-  const totalExpense = 86200.00 + employeeTransactions.filter(t => t.type !== 'commission').reduce((acc, t) => acc + t.amount, 0);
+  // 1. Financeiro (Baseado nas transações 'paid')
+  const paidTransactions = financialTransactions.filter(t => t.status === 'paid');
+
+  const totalIncome = paidTransactions
+    .filter(t => t.type === 'income')
+    .reduce((acc, t) => acc + (t.netAmount ?? t.amount), 0);
+
+  const totalExpense = paidTransactions
+    .filter(t => t.type === 'expense')
+    .reduce((acc, t) => acc + Math.abs(t.amount), 0);
+
   const netProfit = totalIncome - totalExpense;
-  const profitMargin = (netProfit / totalIncome) * 100;
+  const currentBalance = (companySettings.initialBalance || 0) + netProfit;
+  
+  const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
 
   const financialData = [
     { name: 'Receita', value: totalIncome, color: '#10b981' }, 
@@ -104,6 +120,14 @@ export default function Dashboard() {
   const avgNPS = ratedOS.length > 0 
     ? (ratedOS.reduce((acc, os) => acc + (os.npsScore || 0), 0) / ratedOS.length).toFixed(1)
     : 'N/A';
+
+  // 5. Visitas do Mês (Novas OS criadas este mês)
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+  const visitsThisMonth = workOrders.filter(os => {
+    const date = new Date(os.createdAt);
+    return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+  }).length;
 
   const handleNewOS = () => {
     const newOS: WorkOrder = {
@@ -163,43 +187,57 @@ export default function Dashboard() {
       {/* Scrollable Content Area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         <div className="space-y-4">
-          {/* KPI Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-shrink-0">
-        <StatCard 
-          title="Lucro Líquido Real" 
-          value={formatCurrency(netProfit)} 
-          subtext={`Margem atual: ${profitMargin.toFixed(1)}%`}
-          trend="up" 
-          icon={DollarSign} 
-          color="text-emerald-600 dark:text-emerald-400" 
-        />
-        <StatCard 
-          title="Pátio Ativo" 
-          value={activeOS.length.toString()} 
-          subtext={`${pendingApproval} aguardando aprovação`}
-          trend={pendingApproval > 0 ? 'down' : 'up'} 
-          icon={Activity} 
-          color="text-blue-600 dark:text-blue-400" 
-        />
-        <StatCard 
-          title="Qualidade (NPS)" 
-          value={avgNPS} 
-          subtext="Média das últimas avaliações"
-          trend="up" 
-          icon={Star} 
-          color="text-yellow-500 dark:text-yellow-400"
-          tooltip="NPS (Net Promoter Score) mede a satisfação do cliente. Escala de 0-10: 9-10 é promotor, 7-8 é passivo, 0-6 é detrator."
-        />
-        <StatCard 
-          title="Risco de Churn" 
-          value={churnRisk.toString()} 
-          subtext="Clientes inativos > 60 dias"
-          trend="down" 
-          icon={Users} 
-          color="text-red-500 dark:text-red-400"
-          tooltip="Clientes identificados como em risco de não retornar. Sem interação há mais de 60 dias. Recomendado contato urgente."
-        />
-      </div>
+          {/* KPI Grid - Updated to 5 columns for large screens */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 flex-shrink-0">
+            <StatCard 
+              title="Lucro Líquido Real" 
+              value={formatCurrency(netProfit)} 
+              subtext={`Margem atual: ${profitMargin.toFixed(1)}%`}
+              trend={netProfit >= 0 ? "up" : "down"} 
+              icon={DollarSign} 
+              color="text-emerald-600 dark:text-emerald-400" 
+              decorationColor="bg-emerald-600"
+            />
+            <StatCard 
+              title="Pátio Ativo" 
+              value={activeOS.length.toString()} 
+              subtext={`${pendingApproval} aguardando aprovação`}
+              trend={pendingApproval > 0 ? 'down' : 'up'} 
+              icon={Activity} 
+              color="text-blue-600 dark:text-blue-400" 
+              decorationColor="bg-blue-600"
+            />
+            <StatCard 
+              title="Qualidade (NPS)" 
+              value={avgNPS} 
+              subtext="Média das últimas avaliações"
+              trend="up" 
+              icon={Star} 
+              color="text-yellow-500 dark:text-yellow-400"
+              decorationColor="bg-yellow-500"
+              tooltip="NPS (Net Promoter Score) mede a satisfação do cliente."
+            />
+            <StatCard 
+              title="Risco de Churn" 
+              value={churnRisk.toString()} 
+              subtext="Clientes inativos > 60 dias"
+              trend="down" 
+              icon={Users} 
+              color="text-red-500 dark:text-red-400"
+              decorationColor="bg-red-500"
+              tooltip="Clientes sem interação recente."
+            />
+            <StatCard 
+              title="Visitas do Mês" 
+              value={visitsThisMonth.toString()} 
+              subtext="Veículos recebidos"
+              trend="up" 
+              icon={Car} 
+              color="text-indigo-600 dark:text-indigo-400"
+              decorationColor="bg-indigo-600"
+              tooltip="Total de novas Ordens de Serviço abertas neste mês."
+            />
+          </div>
 
           {/* Main Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-shrink-0">
@@ -211,10 +249,9 @@ export default function Dashboard() {
                   <Target size={16} className="text-blue-600" />
                   Saúde Financeira
                 </h3>
-                <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-500">Este Mês</span>
+                <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-500">Acumulado</span>
               </div>
               
-              {/* FIX: Use min-h instead of fixed h, remove flex-1 to avoid collapse, use w-full */}
               <div className="w-full min-h-[250px] h-[250px] relative">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -222,8 +259,8 @@ export default function Dashboard() {
                       data={financialData}
                       cx="50%"
                       cy="50%"
-                      innerRadius="65%" // Use percentage for responsiveness
-                      outerRadius="90%" // Use percentage for responsiveness
+                      innerRadius="65%"
+                      outerRadius="90%"
                       paddingAngle={5}
                       dataKey="value"
                       stroke="none"
@@ -247,8 +284,8 @@ export default function Dashboard() {
                 {/* Center Label */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                   <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Saldo</p>
-                  <p className={cn("text-xl font-bold", netProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600")}>
-                    {formatCurrency(netProfit)}
+                  <p className={cn("text-xl font-bold", currentBalance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600")}>
+                    {formatCurrency(currentBalance)}
                   </p>
                 </div>
               </div>
@@ -277,7 +314,6 @@ export default function Dashboard() {
                 <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-500">Total: {clients.length}</span>
               </div>
               
-              {/* FIX: Use min-h instead of fixed h */}
               <div className="w-full min-h-[250px] h-[250px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={clientSegmentsData} layout="vertical" margin={{ left: 10, right: 10 }}>

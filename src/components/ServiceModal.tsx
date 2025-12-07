@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Tag, Clock, FileText, RotateCcw, ToggleLeft, ToggleRight, Image as ImageIcon, Upload } from 'lucide-react';
+import { X, Save, Tag, Clock, FileText, RotateCcw, ToggleLeft, ToggleRight, Image as ImageIcon, Upload, Eye } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ServiceCatalogItem } from '../types';
 
@@ -18,7 +18,8 @@ export default function ServiceModal({ service, onClose }: ServiceModalProps) {
     standardTimeMinutes: 60,
     returnIntervalDays: 0,
     active: true,
-    imageUrl: ''
+    imageUrl: '',
+    showOnLandingPage: true // Default to true
   });
 
   useEffect(() => {
@@ -43,7 +44,8 @@ export default function ServiceModal({ service, onClose }: ServiceModalProps) {
         standardTimeMinutes: formData.standardTimeMinutes || 60,
         returnIntervalDays: formData.returnIntervalDays || 0,
         active: formData.active !== undefined ? formData.active : true,
-        imageUrl: formData.imageUrl || ''
+        imageUrl: formData.imageUrl || '',
+        showOnLandingPage: formData.showOnLandingPage !== undefined ? formData.showOnLandingPage : true
       };
       addService(newService);
     }
@@ -176,15 +178,20 @@ export default function ServiceModal({ service, onClose }: ServiceModalProps) {
                     />
                 </div>
              </div>
-             <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-                <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Serviço Ativo?</span>
-                <button 
-                    type="button"
-                    onClick={() => setFormData({...formData, active: !formData.active})}
-                    className={formData.active ? "text-green-500" : "text-slate-400"}
-                >
-                    {formData.active ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
-                </button>
+             <div className="flex flex-col gap-2">
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Visibilidade</label>
+                <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                        <Eye size={14} /> Exibir na Landing Page?
+                    </span>
+                    <button 
+                        type="button"
+                        onClick={() => setFormData({...formData, showOnLandingPage: !formData.showOnLandingPage})}
+                        className={formData.showOnLandingPage ? "text-blue-500" : "text-slate-400"}
+                    >
+                        {formData.showOnLandingPage ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                    </button>
+                </div>
              </div>
           </div>
 

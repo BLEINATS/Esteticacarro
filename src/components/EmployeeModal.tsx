@@ -128,7 +128,7 @@ export default function EmployeeModal({ employee, onClose }: EmployeeModalProps)
                             : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
                     )}
                 >
-                    Comissionado
+                    Comissão
                 </button>
                 <button 
                     type="button"
@@ -140,51 +140,67 @@ export default function EmployeeModal({ employee, onClose }: EmployeeModalProps)
                             : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
                     )}
                 >
-                    Salário Fixo
+                    Fixo
+                </button>
+                <button 
+                    type="button"
+                    onClick={() => setFormData({...formData, salaryType: 'mixed'})}
+                    className={cn(
+                        "flex-1 py-2 text-xs font-bold rounded-lg transition-all border",
+                        formData.salaryType === 'mixed' 
+                            ? "bg-blue-600 text-white border-blue-600" 
+                            : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    )}
+                >
+                    Misto
                 </button>
             </div>
 
-            {formData.salaryType === 'commission' ? (
-                <div className="grid grid-cols-2 gap-4 animate-in fade-in">
+            <div className="space-y-4 animate-in fade-in">
+                {(formData.salaryType === 'commission' || formData.salaryType === 'mixed') && (
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Taxa (%)</label>
+                            <div className="relative">
+                                <Percent className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                <input 
+                                    type="number" 
+                                    value={formData.commissionRate}
+                                    onChange={e => setFormData({...formData, commissionRate: parseFloat(e.target.value)})}
+                                    className="w-full pl-8 pr-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Base de Cálculo</label>
+                            <select 
+                                value={formData.commissionBase}
+                                onChange={e => setFormData({...formData, commissionBase: e.target.value as any})}
+                                className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
+                            >
+                                <option value="gross">Valor Bruto</option>
+                                <option value="net">Valor Líquido</option>
+                            </select>
+                        </div>
+                    </div>
+                )}
+
+                {(formData.salaryType === 'fixed' || formData.salaryType === 'mixed') && (
                     <div>
-                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Taxa (%)</label>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Salário Mensal (R$)</label>
                         <div className="relative">
-                            <Percent className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                             <input 
                                 type="number" 
-                                value={formData.commissionRate}
-                                onChange={e => setFormData({...formData, commissionRate: parseFloat(e.target.value)})}
-                                className="w-full pl-8 pr-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
+                                value={formData.fixedSalary}
+                                onChange={e => setFormData({...formData, fixedSalary: parseFloat(e.target.value)})}
+                                className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white font-bold"
+                                placeholder="0,00"
                             />
                         </div>
                     </div>
-                    <div>
-                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Base de Cálculo</label>
-                        <select 
-                            value={formData.commissionBase}
-                            onChange={e => setFormData({...formData, commissionBase: e.target.value as any})}
-                            className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
-                        >
-                            <option value="gross">Valor Bruto</option>
-                            <option value="net">Valor Líquido</option>
-                        </select>
-                    </div>
-                </div>
-            ) : (
-                <div className="animate-in fade-in">
-                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Salário Mensal (R$)</label>
-                    <div className="relative">
-                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                        <input 
-                            type="number" 
-                            value={formData.fixedSalary}
-                            onChange={e => setFormData({...formData, fixedSalary: parseFloat(e.target.value)})}
-                            className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white font-bold"
-                            placeholder="0,00"
-                        />
-                    </div>
-                </div>
-            )}
+                )}
+            </div>
           </div>
 
           <div className="pt-4 flex gap-3">

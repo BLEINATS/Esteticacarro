@@ -33,6 +33,7 @@ export interface ServiceCatalogItem {
   standardTimeMinutes: number;
   returnIntervalDays?: number;
   imageUrl?: string;
+  showOnLandingPage?: boolean;
 }
 
 export interface PriceMatrixEntry {
@@ -59,7 +60,16 @@ export interface Client {
   name: string;
   phone: string;
   email: string;
-  address?: string;
+  
+  // Address Fields
+  cep?: string;
+  street?: string;
+  number?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  address?: string; // Full formatted address for display
+  
   notes?: string;
   vehicles: Vehicle[];
   ltv: number; 
@@ -79,6 +89,7 @@ export interface MarketingCampaign {
   revenueGenerated?: number; 
   date: string;
   status: 'draft' | 'sent' | 'scheduled';
+  costInTokens?: number;
 }
 
 export interface InventoryItem {
@@ -89,14 +100,13 @@ export interface InventoryItem {
   unit: string;
   status: 'ok' | 'warning' | 'critical';
   minStock: number;
-  costPrice: number; // Preço de custo por unidade de estoque (ex: preço do Litro)
+  costPrice: number; 
 }
 
-// --- NEW: SERVICE CONSUMPTION (RECIPE) ---
 export interface ServiceConsumptionItem {
   inventoryId: number;
-  quantity: number; // Quantidade usada
-  usageUnit: 'ml' | 'g' | 'un' | 'L' | 'kg'; // Unidade usada na aplicação
+  quantity: number; 
+  usageUnit: 'ml' | 'g' | 'un' | 'L' | 'kg'; 
 }
 
 export interface ServiceConsumption {
@@ -118,7 +128,7 @@ export interface Employee {
   name: string;
   role: 'Manager' | 'Detailer' | 'Funileiro' | 'Lavador' | 'Pintor';
   pin: string;
-  salaryType: 'commission' | 'fixed'; 
+  salaryType: 'commission' | 'fixed' | 'mixed'; 
   fixedSalary: number; 
   commissionRate: number;
   commissionBase: 'gross' | 'net';
@@ -157,20 +167,19 @@ export interface EmployeeTransaction {
   relatedWorkOrderId?: string;
 }
 
-// --- FINANCIAL TYPES ---
 export interface FinancialTransaction {
   id: number;
   desc: string;
   category: string;
-  amount: number; // Valor Bruto (Positivo=Entrada, Negativo=Saída)
-  netAmount: number; // Valor Líquido (após taxas)
-  fee: number; // Taxa em R$
+  amount: number; 
+  netAmount: number; 
+  fee: number; 
   type: 'income' | 'expense';
-  date: string; // Data de Competência/Lançamento (YYYY-MM-DD)
-  dueDate: string; // Data de Vencimento (YYYY-MM-DD)
+  date: string; 
+  dueDate: string; 
   method: string;
-  installments?: number; // Parcelas
-  status: 'paid' | 'pending'; // Status do pagamento
+  installments?: number; 
+  status: 'paid' | 'pending'; 
 }
 
 export interface DamagePoint {
@@ -228,8 +237,6 @@ export interface Discount {
   appliedServiceId?: string;
 }
 
-// --- GAMIFICATION TYPES (REFACTORED) ---
-
 export type TierLevel = 'bronze' | 'silver' | 'gold' | 'platinum';
 
 export interface TierConfig {
@@ -244,7 +251,7 @@ export interface GamificationConfig {
   enabled: boolean;
   levelSystem: boolean;
   pointsMultiplier: number;
-  tiers: TierConfig[]; // Agora os tiers são configuráveis
+  tiers: TierConfig[]; 
 }
 
 export interface Reward {
@@ -263,13 +270,12 @@ export interface Reward {
   redeemedCount?: number;
 }
 
-// Novo tipo para Vouchers/Resgates
 export interface Redemption {
   id: string;
   clientId: string;
   rewardId: string;
   rewardName: string;
-  code: string; // Código único do voucher
+  code: string; 
   pointsCost: number;
   status: 'active' | 'used' | 'expired';
   redeemedAt: string;
@@ -280,14 +286,14 @@ export interface Redemption {
 export interface ClientPoints {
   clientId: string;
   totalPoints: number;
-  currentLevel: number; // 1-4 levels (index based on tiers array)
+  currentLevel: number; 
   tier: TierLevel;
   lastServiceDate: string;
   servicesCompleted: number;
   pointsHistory: {
     id: string;
     workOrderId: string;
-    points: number; // Pode ser negativo (resgate) ou positivo (ganho)
+    points: number; 
     description: string;
     date: string;
   }[];
@@ -328,6 +334,11 @@ export interface WorkOrder {
   additionalItems?: AdditionalItem[]; 
   discount?: Discount;
 
+  // Payment Info
+  paymentStatus?: 'pending' | 'paid';
+  paymentMethod?: string;
+  paidAt?: string;
+
   damages: DamagePoint[];
   vehicleInventory: VehicleInventory;
   dailyLog: DailyLogEntry[];
@@ -345,8 +356,6 @@ export interface WorkOrder {
   
   origin?: 'manual' | 'web_lead'; 
 }
-
-// --- SAAS & CONFIG TYPES ---
 
 export interface WhatsappSessionInfo {
   status: 'disconnected' | 'scanning' | 'connected';
@@ -378,6 +387,7 @@ export interface LandingPageConfig {
   primaryColor: string;
   showServices: boolean;
   showTestimonials: boolean;
+  whatsappMessage?: string; // NEW: Custom message for landing page
 }
 
 export interface CompanyPreferences {
@@ -387,16 +397,32 @@ export interface CompanyPreferences {
     lowStock: boolean;
     osUpdates: boolean;
     marketing: boolean;
+    financial?: boolean;
+    security?: boolean;
+    channels?: {
+      email: boolean;
+      whatsapp: boolean;
+      system: boolean;
+    };
   };
 }
 
 export interface CompanySettings {
   name: string;
+  slug: string;
   responsibleName: string;
   cnpj: string;
   email: string;
   phone: string;
   address: string;
+  // Structured Address Fields
+  cep?: string;
+  street?: string;
+  number?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  
   logoUrl: string;
   website?: string;
   instagram?: string; 
@@ -409,16 +435,17 @@ export interface CompanySettings {
   gamification: GamificationConfig;
 }
 
-export interface SubscriptionPlan {
-  id: 'starter' | 'pro' | 'enterprise';
-  name: string;
-  price: number;
-  features: string[];
-  maxUsers: number;
+// --- TOKEN SYSTEM TYPES ---
+export interface TokenTransaction {
+  id: string;
+  type: 'credit' | 'debit'; // Compra (+) ou Uso (-)
+  amount: number;
+  description: string; // Ex: "Compra Pacote 500" ou "Campanha Black Friday"
+  date: string;
 }
 
 export interface SubscriptionDetails {
-  planId: 'starter' | 'pro' | 'enterprise';
+  planId: 'starter' | 'pro' | 'enterprise' | 'trial';
   status: 'active' | 'past_due' | 'canceled' | 'trial';
   nextBillingDate: string;
   paymentMethod: string; 
@@ -429,6 +456,9 @@ export interface SubscriptionDetails {
     status: 'paid' | 'pending' | 'failed';
     pdfUrl: string;
   }[];
+  // Token System
+  tokenBalance: number;
+  tokenHistory: TokenTransaction[];
 }
 
 export interface Notification {
@@ -439,4 +469,41 @@ export interface Notification {
   createdAt: string;
   type: 'info' | 'warning' | 'success' | 'error';
   link?: string;
+}
+
+// --- SAAS SUPER ADMIN TYPES ---
+
+export interface SaaSPlan {
+  id: 'starter' | 'pro' | 'enterprise';
+  name: string;
+  price: number;
+  features: string[];
+  includedTokens: number; // Tokens mensais inclusos
+  maxDiskSpace: number; // GB
+  active: boolean;
+  highlight?: boolean;
+}
+
+export interface TokenPackage {
+  id: string;
+  name: string;
+  tokens: number;
+  price: number;
+  active: boolean;
+}
+
+export interface SaaSTenant {
+  id: string;
+  name: string; // Shop Name
+  responsibleName: string;
+  email: string;
+  phone: string;
+  planId: 'starter' | 'pro' | 'enterprise';
+  status: 'active' | 'suspended' | 'trial' | 'cancelled';
+  joinedAt: string;
+  nextBilling: string;
+  tokenBalance: number;
+  mrr: number; // Monthly Recurring Revenue from this tenant
+  lastLogin: string;
+  logoUrl?: string;
 }

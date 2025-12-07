@@ -1,23 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Wrench, Calendar, 
   Package, Settings, LogOut, Menu, X, 
   Bell, Search, Globe, UserCircle,
-  Megaphone, DollarSign, GraduationCap, Tags
+  Megaphone, DollarSign, Trophy, Tags,
+  Check, Trash2, Info, AlertTriangle, CheckCircle2, Bot
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useDialog } from '../context/DialogContext';
+import { cn } from '../lib/utils';
 
 export default function Layout() {
-  // Estado único para controlar a visibilidade do menu (Drawer)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationRef = useRef<HTMLDivElement>(null);
+  
   const location = useLocation();
   const navigate = useNavigate();
-  const { notifications, markNotificationAsRead, ownerUser, logoutOwner } = useApp();
+  const { notifications, markNotificationAsRead, clearAllNotifications, ownerUser, logoutOwner, subscription } = useApp();
   const { showConfirm } = useDialog();
 
   const unreadNotifications = notifications.filter(n => !n.read).length;
+
+  // Close notifications when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setIsNotificationsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleLogout = async () => {
     const confirm = await showConfirm({
@@ -44,14 +59,23 @@ export default function Layout() {
     { icon: Package, label: 'Produtos - Estoque', path: '/inventory' },
     { icon: Tags, label: 'Catálogo & Preços', path: '/pricing' },
     { icon: Megaphone, label: 'Marketing', path: '/marketing' },
-    { icon: GraduationCap, label: 'Treinamento', path: '/gamification' },
+    { icon: Trophy, label: 'Gamificação & Fidelidade', path: '/gamification' },
     { icon: Users, label: 'Equipe', path: '/team' },
     { icon: Settings, label: 'Configurações', path: '/settings' },
   ];
 
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'success': return <CheckCircle2 size={16} className="text-green-500" />;
+      case 'warning': return <AlertTriangle size={16} className="text-amber-500" />;
+      case 'error': return <Trash2 size={16} className="text-red-500" />;
+      default: return <Info size={16} className="text-blue-500" />;
+    }
+  };
+
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden">
-      {/* Sidebar - Agora funciona como Drawer (Gaveta) para todas as telas */}
+      {/* Sidebar */}
       <aside 
         className={`
           fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transform transition-transform duration-300 ease-in-out shadow-2xl
@@ -59,7 +83,6 @@ export default function Layout() {
         `}
       >
         <div className="h-full flex flex-col">
-          {/* Logo & Close Button */}
           <div className="h-16 flex items-center justify-between px-4 border-b border-slate-200 dark:border-slate-800">
             <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent truncate">
               {ownerUser?.storeName || 'Crystal Care'}
@@ -72,7 +95,6 @@ export default function Layout() {
             </button>
           </div>
 
-          {/* Menu Items */}
           <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
             {menuItems.map((item) => {
               const isActive = location.pathname === item.path;
@@ -80,7 +102,7 @@ export default function Layout() {
                 <Link
                   key={item.path}
                   to={item.path}
-                  onClick={closeSidebar} // Fecha o menu ao clicar
+                  onClick={closeSidebar}
                   className={`
                     flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group relative
                     ${isActive 
@@ -95,7 +117,22 @@ export default function Layout() {
             })}
           </nav>
 
-          {/* Bottom Actions */}
+          {/* Token Balance Indicator */}
+          <div className="px-4 py-2">
+            <div className="bg-gradient-to-r from-slate-800 to-slate-900 dark:from-slate-900 dark:to-black rounded-xl p-3 text-white shadow-lg border border-slate-700">
+                <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                        <Bot size={16} className="text-green-400" />
+                        <span className="text-xs font-bold uppercase tracking-wide text-slate-300">Tokens Bot</span>
+                    </div>
+                    <Link to="/settings" state={{ activeTab: 'billing' }} className="text-[10px] bg-white/10 hover:bg-white/20 px-2 py-0.5 rounded transition-colors">
+                        Recarregar
+                    </Link>
+                </div>
+                <p className="text-xl font-bold">{subscription.tokenBalance || 0}</p>
+            </div>
+          </div>
+
           <div className="p-3 border-t border-slate-200 dark:border-slate-800 space-y-1">
             <a
               href="/shop"
@@ -122,10 +159,8 @@ export default function Layout() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top Header */}
         <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 lg:px-8">
           <div className="flex items-center gap-4">
-            {/* Botão Hamburguer Principal */}
             <button 
               onClick={() => setIsSidebarOpen(true)}
               className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
@@ -144,14 +179,91 @@ export default function Layout() {
           </div>
 
           <div className="flex items-center gap-3 sm:gap-6">
-            {/* Notifications */}
-            <div className="relative">
-              <button className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg relative">
+            
+            {/* Notifications Dropdown */}
+            <div className="relative" ref={notificationRef}>
+              <button 
+                onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg relative transition-colors"
+              >
                 <Bell size={20} />
                 {unreadNotifications > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-slate-900 animate-pulse"></span>
                 )}
               </button>
+
+              {isNotificationsOpen && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                  <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/50">
+                    <h3 className="font-bold text-slate-900 dark:text-white text-sm">Notificações</h3>
+                    {notifications.length > 0 && (
+                      <button 
+                        onClick={clearAllNotifications}
+                        className="text-xs text-slate-500 hover:text-red-500 transition-colors"
+                      >
+                        Limpar tudo
+                      </button>
+                    )}
+                  </div>
+                  
+                  <div className="max-h-[400px] overflow-y-auto">
+                    {notifications.length > 0 ? (
+                      notifications.map((notif) => (
+                        <div 
+                          key={notif.id}
+                          onClick={() => markNotificationAsRead(notif.id)}
+                          className={cn(
+                            "p-4 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer flex gap-3",
+                            !notif.read ? "bg-blue-50/30 dark:bg-blue-900/10" : ""
+                          )}
+                        >
+                          <div className={cn(
+                            "mt-1 p-1.5 rounded-full flex-shrink-0 h-fit",
+                            notif.type === 'success' ? "bg-green-100 dark:bg-green-900/30" :
+                            notif.type === 'warning' ? "bg-amber-100 dark:bg-amber-900/30" :
+                            notif.type === 'error' ? "bg-red-100 dark:bg-red-900/30" :
+                            "bg-blue-100 dark:bg-blue-900/30"
+                          )}>
+                            {getNotificationIcon(notif.type)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-start mb-1">
+                              <p className={cn("text-sm font-bold truncate", !notif.read ? "text-slate-900 dark:text-white" : "text-slate-600 dark:text-slate-400")}>
+                                {notif.title}
+                              </p>
+                              <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">
+                                {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                              {notif.message}
+                            </p>
+                          </div>
+                          {!notif.read && (
+                            <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0" />
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-8 text-center text-slate-400 dark:text-slate-500">
+                        <Bell size={32} className="mx-auto mb-2 opacity-20" />
+                        <p className="text-sm">Nenhuma notificação</p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="p-2 bg-slate-50 dark:bg-slate-950/50 text-center border-t border-slate-100 dark:border-slate-800">
+                    <Link 
+                      to="/settings" 
+                      state={{ activeTab: 'preferences' }}
+                      onClick={() => setIsNotificationsOpen(false)}
+                      className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      Configurar alertas
+                    </Link>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* User Profile */}
@@ -167,13 +279,11 @@ export default function Layout() {
           </div>
         </header>
 
-        {/* Page Content */}
         <main className="flex-1 overflow-y-auto p-4 lg:p-8 scroll-smooth">
           <Outlet />
         </main>
       </div>
 
-      {/* Overlay (Fundo escuro quando o menu está aberto) */}
       {isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"

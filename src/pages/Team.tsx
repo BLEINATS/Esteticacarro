@@ -14,7 +14,7 @@ export default function Team() {
     updateEmployeeTransaction, 
     deleteEmployeeTransaction, 
     deleteEmployee,
-    addFinancialTransaction // NOVO: Importar função do financeiro
+    addFinancialTransaction 
   } = useApp();
   const { showConfirm, showAlert } = useDialog();
   
@@ -61,7 +61,6 @@ export default function Team() {
       });
 
       // 2. Registra no Financeiro (Saída)
-      // FIXED: Ensure ID is unique and amount is negative for expense
       addFinancialTransaction({
         id: Date.now() + Math.floor(Math.random() * 1000), // Avoid collision
         desc: `Vale - ${selectedEmployee.name}: ${description}`,
@@ -106,7 +105,7 @@ export default function Team() {
 
   const handlePayBalance = async (employee: Employee) => {
     if (employee.balance <= 0) {
-        if (employee.salaryType === 'fixed') {
+        if (employee.salaryType === 'fixed' || employee.salaryType === 'mixed') {
              showAlert({ 
                 title: 'Saldo Insuficiente', 
                 message: `O saldo atual é ${formatCurrency(employee.balance)}. Se você já descontou vales, lembre-se de clicar em "Lançar Salário" primeiro para creditar o valor mensal e regularizar a conta.`, 
@@ -178,7 +177,7 @@ export default function Team() {
     setTransForm({
         amount: trans.amount.toString(),
         description: trans.description,
-        date: formatDateToLocalInput(trans.date), // CORREÇÃO: Usa a data local para o input
+        date: formatDateToLocalInput(trans.date),
         type: trans.type
     });
     setIsTransactionModalOpen(true);
@@ -378,10 +377,12 @@ export default function Team() {
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500 dark:text-slate-400">Modelo</span>
-                <span className="font-medium text-slate-900 dark:text-white">
+                <span className="font-medium text-slate-900 dark:text-white text-right">
                     {member.salaryType === 'fixed' 
                         ? `Fixo: ${formatCurrency(member.fixedSalary)}` 
-                        : `${member.commissionRate}% (${member.commissionBase === 'gross' ? 'Bruto' : 'Líquido'})`
+                        : member.salaryType === 'mixed'
+                            ? `Fixo: ${formatCurrency(member.fixedSalary)} + ${member.commissionRate}%`
+                            : `${member.commissionRate}% (${member.commissionBase === 'gross' ? 'Bruto' : 'Líquido'})`
                     }
                 </span>
               </div>
@@ -395,7 +396,7 @@ export default function Team() {
                 </div>
                 
                 <div className="flex flex-col gap-2 mt-2">
-                    {member.salaryType === 'fixed' && (
+                    {(member.salaryType === 'fixed' || member.salaryType === 'mixed') && (
                         <button 
                             onClick={() => handleCreditSalary(member)}
                             className="w-full py-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors flex items-center justify-center gap-1"
@@ -513,7 +514,7 @@ export default function Team() {
                             </button>
                             <button 
                                 onClick={() => handleDeleteTransaction(t.id)}
-                                className="p-1 sm:p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" 
+                                className="p-1 sm:p-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors" 
                                 title="Excluir"
                             >
                                 <Trash2 size={14} className="sm:w-4 sm:h-4" />

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { Shield, Lock, Mail, User, Store, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Shield, Lock, Mail, User, Store, ArrowRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function OwnerLogin() {
@@ -180,14 +180,14 @@ export default function OwnerLogin() {
 
           <div className="mt-6 pt-6 border-t border-slate-800 text-center">
             <p className="text-slate-500 text-xs">
-              Ao continuar, você concorda com nossos <a href="#" className="text-blue-400 hover:underline">Termos de Uso</a> e <a href="#" className="text-blue-400 hover:underline">Política de Privacidade</a>.
+              Ao continuar, você concorda com nossos <Link to="/terms" className="text-blue-400 hover:underline">Termos de Uso</Link> e <Link to="/privacy" className="text-blue-400 hover:underline">Política de Privacidade</Link>.
             </p>
           </div>
         </div>
         
         <div className="mt-8 text-center">
             <p className="text-slate-500 text-sm">
-                É um técnico? <a href="/tech-portal" className="text-blue-400 font-bold hover:underline">Acesse o Portal do Técnico</a>
+                É um técnico? <Link to="/tech-portal" className="text-blue-400 font-bold hover:underline">Acesse o Portal do Técnico</Link>
             </p>
         </div>
       </div>

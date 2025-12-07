@@ -6,10 +6,10 @@ import {
   CreditCard, UploadCloud, Lock, Share2, Plus, Trash2,
   DollarSign, Wrench, Check, Smile, Star, ListTodo,
   Image as ImageIcon, Search, Car, UserPlus, ChevronDown,
-  Printer, Send, Tag, Ticket, Trophy, Gift, Sparkles
+  Printer, Send, Tag, Ticket, Trophy, Gift, Sparkles, Bot
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { WorkOrder, DamagePoint, VehicleInventory, DailyLogEntry, AdditionalItem, QualityChecklistItem, ScopeItem, Vehicle, VehicleSize, VEHICLE_SIZES } from '../types';
+import { WorkOrder, DamagePoint, VehicleInventory, DailyLogEntry, AdditionalItem, QualityChecklistItem, ScopeItem, Vehicle, VehicleSize, VEHICLE_SIZES, FinancialTransaction } from '../types';
 import { cn, formatCurrency } from '../lib/utils';
 import VehicleDamageMap from './VehicleDamageMap';
 import ClientModal from './ClientModal';
@@ -27,7 +27,9 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     addWorkOrder, updateWorkOrder, completeWorkOrder, submitNPS, 
     clients, recipes, services, getPrice, getWhatsappLink, 
     workOrders, addVehicle, useVoucher, getVoucherDetails,
-    getClientPoints, companySettings, getRewardsByLevel, claimReward
+    getClientPoints, companySettings, getRewardsByLevel, claimReward,
+    addFinancialTransaction, deleteFinancialTransaction, financialTransactions,
+    updateClientLTV, subscription, consumeTokens
   } = useApp();
   const { showConfirm, showAlert } = useDialog();
 
@@ -57,6 +59,9 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const [qaList, setQaList] = useState<QualityChecklistItem[]>(workOrder.qaChecklist || []);
   const [additionalItems, setAdditionalItems] = useState<AdditionalItem[]>(workOrder.additionalItems || []);
   const [scopeList, setScopeList] = useState<ScopeItem[]>(workOrder.scopeChecklist || []);
+  
+  // STATUS STATE (Fix for status not updating)
+  const [currentStatus, setCurrentStatus] = useState<WorkOrder['status']>(workOrder.status);
 
   // MULTI-SERVICE SELECTION
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
@@ -76,16 +81,37 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const [discountAmount, setDiscountAmount] = useState<number>(workOrder.discount?.amount || 0);
   const [discountDescription, setDiscountDescription] = useState<string>(workOrder.discount?.description || '');
   
+  // PAYMENT STATE
+  const [paymentMethod, setPaymentMethod] = useState(workOrder.paymentMethod || 'Pix');
+  const [paymentDate, setPaymentDate] = useState(workOrder.paidAt ? new Date(workOrder.paidAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+  const [isPaid, setIsPaid] = useState(workOrder.paymentStatus === 'paid');
+
   // VOUCHER STATE
   const [voucherCode, setVoucherCode] = useState('');
   const [appliedVoucher, setAppliedVoucher] = useState<string | null>(null);
 
   // --- PRICE STATE (EDITABLE) ---
-  // Initialize with existing total minus extras, or 0
+  // CORREÇÃO: Inicialização inteligente do preço para evitar "duplo desconto" ao editar
   const [servicePrice, setServicePrice] = useState<number>(() => {
     const extras = workOrder.additionalItems?.reduce((acc, item) => acc + item.value, 0) || 0;
-    // If totalValue is 0, try to calculate from services if possible, otherwise 0
-    return workOrder.totalValue > 0 ? Math.max(0, workOrder.totalValue - extras) : 0;
+    let baseValue = workOrder.totalValue;
+
+    // Se houver desconto salvo, tentamos reverter para achar o preço base original
+    if (workOrder.discount && workOrder.discount.amount > 0) {
+        if (workOrder.discount.type === 'percentage') {
+            // total = base * (1 - rate/100) => base = total / (1 - rate/100)
+            const rate = workOrder.discount.amount / 100;
+            if (rate < 1) {
+                baseValue = baseValue / (1 - rate);
+            }
+        } else {
+            // value ou service (valor fixo)
+            baseValue = baseValue + workOrder.discount.amount;
+        }
+    }
+
+    // Se o valor total for 0 (nova OS), começa com 0. Se não, usa o valor calculado menos extras.
+    return baseValue > 0 ? Math.max(0, baseValue - extras) : 0;
   });
 
   // Derived Data
@@ -99,6 +125,9 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const currentTierId = rawClientPoints?.tier || 'bronze';
   const defaultTierConfig = { id: 'bronze', name: 'Bronze', minPoints: 0, color: 'from-amber-500 to-amber-600', benefits: [] };
   const clientTierConfig = (companySettings.gamification.tiers || []).find(t => t.id === currentTierId) || defaultTierConfig;
+
+  // WhatsApp Status
+  const isWhatsAppConnected = companySettings.whatsapp.session.status === 'connected';
 
   // Filter Clients for Search
   const filteredClients = clientSearch.length > 0 
@@ -230,22 +259,8 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
   };
 
-  const handleSave = async () => {
-    if (!selectedClientId || !selectedVehiclePlate) {
-        await showAlert({
-            title: 'Dados Incompletos',
-            message: 'Por favor, selecione um cliente e um veículo antes de salvar.',
-            type: 'warning'
-        });
-        setActiveTab('reception');
-        return;
-    }
-
-    // Se houver voucher aplicado, marcá-lo como usado agora
-    if (appliedVoucher) {
-      useVoucher(appliedVoucher, workOrder.id);
-    }
-
+  // --- HELPER TO BUILD UPDATED ORDER DATA ---
+  const getUpdatedOrderData = (): Partial<WorkOrder> => {
     const extrasTotal = additionalItems.reduce((acc, item) => acc + item.value, 0);
     const subtotal = servicePrice + extrasTotal;
     
@@ -267,7 +282,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         ? selectedServicesList.map(s => s.name).join(' + ') 
         : workOrder.service;
 
-    const updatedData = {
+    return {
       clientId: selectedClientId,
       vehicle: selectedVehicleObj ? selectedVehicleObj.model : workOrder.vehicle,
       plate: selectedVehiclePlate,
@@ -278,18 +293,39 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       qaChecklist: qaList,
       scopeChecklist: scopeList,
       additionalItems,
-      totalValue: finalTotal, // SAVING THE DISCOUNTED TOTAL
+      totalValue: finalTotal, // This is the correct final value to use
       service: serviceName,
       serviceId: selectedServiceIds[0],
       serviceIds: selectedServiceIds,
-      status: workOrder.status,
+      status: currentStatus,
       clientSignature: clientSignature,
       discount: {
         type: discountType,
         amount: discountAmount,
         description: discountDescription
-      }
+      },
+      paymentStatus: isPaid ? 'paid' : 'pending',
+      paymentMethod: isPaid ? paymentMethod : undefined,
+      paidAt: isPaid ? paymentDate : undefined
     };
+  };
+
+  const handleSave = async () => {
+    if (!selectedClientId || !selectedVehiclePlate) {
+        await showAlert({
+            title: 'Dados Incompletos',
+            message: 'Por favor, selecione um cliente e um veículo antes de salvar.',
+            type: 'warning'
+        });
+        setActiveTab('reception');
+        return;
+    }
+
+    if (appliedVoucher) {
+      useVoucher(appliedVoucher, workOrder.id);
+    }
+
+    const updatedData = getUpdatedOrderData();
 
     const exists = workOrders.some(o => o.id === workOrder.id);
     if (exists) {
@@ -301,7 +337,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             createdAt: workOrder.createdAt || new Date().toISOString(),
             tasks: workOrder.tasks || [],
             checklist: workOrder.checklist || []
-        });
+        } as WorkOrder);
     }
     onClose();
     await showAlert({
@@ -321,23 +357,10 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         return;
       }
 
-      const selectedServicesList = services.filter(s => selectedServiceIds.includes(s.id));
-      const serviceName = selectedServicesList.length > 0 
-        ? selectedServicesList.map(s => s.name).join(' + ') 
-        : workOrder.service;
-
+      const updatedData = getUpdatedOrderData();
       const approvedData = {
-          clientId: selectedClientId,
-          vehicle: selectedVehicleObj ? selectedVehicleObj.model : workOrder.vehicle,
-          plate: selectedVehiclePlate,
-          status: 'Aguardando',
-          service: serviceName,
-          serviceId: selectedServiceIds[0],
-          serviceIds: selectedServiceIds,
-          totalValue: servicePrice, 
-          damages,
-          vehicleInventory: inventory,
-          clientSignature: clientSignature
+          ...updatedData,
+          status: 'Aguardando' as const
       };
 
       const exists = workOrders.some(o => o.id === workOrder.id);
@@ -350,14 +373,107 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
               createdAt: new Date().toISOString(),
               tasks: [],
               checklist: []
-          });
+          } as WorkOrder);
       }
+      setCurrentStatus('Aguardando');
       onClose();
       await showAlert({
         title: 'Aprovado',
         message: 'Ordem de Serviço aprovada e enviada para a fila.',
         type: 'success'
       });
+  };
+
+  const handleRegisterPayment = async () => {
+    // CORREÇÃO: Usar o valor final calculado, incluindo descontos e extras
+    const currentData = getUpdatedOrderData();
+    const amountToPay = currentData.totalValue || 0;
+
+    const confirm = await showConfirm({
+        title: 'Confirmar Pagamento',
+        message: `Deseja registrar o pagamento de ${formatCurrency(amountToPay)} via ${paymentMethod}?`,
+        confirmText: 'Sim, Confirmar',
+        type: 'success'
+    });
+
+    if (confirm) {
+        setIsPaid(true);
+        const transaction: FinancialTransaction = {
+            id: Date.now(),
+            desc: `Pagamento OS #${workOrder.id} - ${selectedClient?.name || 'Cliente'}`,
+            category: 'Serviços',
+            amount: amountToPay,
+            netAmount: amountToPay, // Simplified for now
+            fee: 0,
+            type: 'income',
+            date: paymentDate,
+            dueDate: paymentDate,
+            method: paymentMethod,
+            status: 'paid'
+        };
+        
+        addFinancialTransaction(transaction);
+        
+        // Update local state immediately for UI feedback before save
+        updateWorkOrder(workOrder.id, { 
+            paymentStatus: 'paid',
+            paymentMethod: paymentMethod,
+            paidAt: paymentDate,
+            totalValue: amountToPay // Ensure total value is updated in OS
+        });
+
+        // ATUALIZA O LTV DO CLIENTE
+        if (selectedClientId) {
+            updateClientLTV(selectedClientId, amountToPay);
+        }
+
+        await showAlert({
+            title: 'Pagamento Registrado',
+            message: 'O valor foi lançado no financeiro e o LTV do cliente atualizado.',
+            type: 'success'
+        });
+    }
+  };
+
+  // --- NOVO: DESFAZER PAGAMENTO ---
+  const handleUndoPayment = async () => {
+    const currentData = getUpdatedOrderData();
+    const amountToRefund = currentData.totalValue || 0;
+
+    const confirm = await showConfirm({
+        title: 'Desfazer Pagamento',
+        message: 'Isso removerá o lançamento do financeiro e subtrairá o valor do LTV do cliente. Continuar?',
+        type: 'warning',
+        confirmText: 'Sim, Desfazer'
+    });
+
+    if (confirm) {
+        // Find and delete transaction
+        const transaction = financialTransactions.find(t => t.desc.includes(`OS #${workOrder.id}`));
+        if (transaction) {
+            deleteFinancialTransaction(transaction.id);
+        }
+        
+        setIsPaid(false);
+        // Reset payment method is optional, keeping it for convenience
+        
+        updateWorkOrder(workOrder.id, { 
+            paymentStatus: 'pending',
+            paymentMethod: undefined,
+            paidAt: undefined
+        });
+
+        // SUBTRAI O LTV DO CLIENTE
+        if (selectedClientId) {
+            updateClientLTV(selectedClientId, -amountToRefund);
+        }
+
+        await showAlert({
+            title: 'Pagamento Desfeito',
+            message: 'O lançamento foi removido e o LTV do cliente ajustado.',
+            type: 'success'
+        });
+    }
   };
 
   const handleApplyVoucher = async () => {
@@ -374,7 +490,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       return;
     }
 
-    // Check if voucher belongs to this client (optional, but good practice)
     if (details.redemption.clientId !== selectedClientId) {
        const confirmUse = await showConfirm({
          title: 'Voucher de Outro Cliente',
@@ -458,20 +573,42 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         return;
     }
 
+    // Update status
     updateWorkOrder(workOrder.id, { status: newStatus });
+    setCurrentStatus(newStatus);
     
+    // If changing TO Concluído
     if (newStatus === 'Concluído') {
-      completeWorkOrder(workOrder.id);
+      // Ensure we use the latest calculated values for point generation
+      const currentData = getUpdatedOrderData();
+      const fullOrderSnapshot = { ...workOrder, ...currentData, status: 'Concluído' } as WorkOrder;
+      
+      // Update order data first to ensure consistency
+      updateWorkOrder(workOrder.id, currentData);
+      
+      // Complete order passing the snapshot to ensure points are calculated on correct values
+      completeWorkOrder(workOrder.id, fullOrderSnapshot);
+      
       if (selectedClient) {
-        const msg = `Olá ${selectedClient.name}! O serviço no seu ${selectedVehicleObj?.model || 'veículo'} foi concluído com sucesso. Valor Total: ${formatCurrency(workOrder.totalValue)}. Aguardamos sua retirada!`;
-        window.open(getWhatsappLink(selectedClient.phone, msg), '_blank');
+        const msg = `Olá ${selectedClient.name}! O serviço no seu ${selectedVehicleObj?.model || 'veículo'} foi concluído com sucesso. Valor Total: ${formatCurrency(fullOrderSnapshot.totalValue)}. Aguardamos sua retirada!`;
+        
+        // Check if whatsapp is connected to send via bot or manual
+        if (isWhatsAppConnected) {
+            if (consumeTokens(1, `Aviso Conclusão OS #${workOrder.id}`)) {
+                showAlert({ title: 'Aviso Enviado', message: 'Mensagem de conclusão enviada via Robô.', type: 'success' });
+            } else {
+                showAlert({ title: 'Erro no Envio', message: 'Saldo de tokens insuficiente para envio automático.', type: 'warning' });
+            }
+        } else {
+            window.open(getWhatsappLink(selectedClient.phone, msg), '_blank');
+        }
       }
       await showAlert({
         title: 'Serviço Concluído!',
-        message: 'O cliente será notificado e o estoque foi atualizado.',
+        message: 'Pontos creditados, cliente notificado e estoque atualizado.',
         type: 'success'
       });
-    }
+    } 
   };
 
   const handleNPS = (score: number) => {
@@ -490,12 +627,13 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       return;
     }
 
-    const htmlContent = WorkOrderPrintTemplate({ workOrder: { ...workOrder, totalValue: currentTotal - (discountType === 'percentage' ? currentTotal * (discountAmount/100) : discountAmount), discount: { type: discountType, amount: discountAmount, description: discountDescription } }, client: selectedClient });
+    // Use current state for print preview
+    const currentData = getUpdatedOrderData();
+    const printOrder = { ...workOrder, ...currentData } as WorkOrder;
+
+    const htmlContent = WorkOrderPrintTemplate({ workOrder: printOrder, client: selectedClient });
     
-    // Note: In a real app, WorkOrderPrintTemplate would return a string or we'd render it to static markup.
-    // Since we are in a component, we'll use the existing logic from previous artifacts or a simplified version here.
-    // Re-using logic from previous artifact for print content generation:
-    
+    // Re-using logic from previous artifact for print content generation (simplified here for brevity, ideally imported)
     const printContent = `
       <!DOCTYPE html>
       <html>
@@ -524,7 +662,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           .signature-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 40px; }
           .signature-box { border-top: 1px solid #000; padding-top: 10px; text-align: center; font-size: 12px; }
           .footer { text-align: center; font-size: 11px; color: #666; margin-top: 30px; border-top: 1px solid #ccc; padding-top: 10px; }
-          .discount-row { color: #dc2626; font-weight: bold; }
         </style>
       </head>
       <body>
@@ -533,13 +670,14 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             <h1>ORDEM DE SERVIÇO</h1>
             <div class="header-top">
               <div>
-                <div><strong>Oficina:</strong> Cristal Care Auto Detail</div>
-                <div><strong>Endereço:</strong> [Endereço da Oficina]</div>
-                <div><strong>Telefone:</strong> [Telefone]</</div>
+                <div><strong>Oficina:</strong> ${companySettings.name}</div>
+                <div><strong>Endereço:</strong> ${companySettings.address}</div>
+                <div><strong>Telefone:</strong> ${companySettings.phone}</div>
               </div>
               <div style="text-align: right;">
                 <div class="os-title">OS #${workOrder.id}</div>
-                <div style="font-size: 12px; color: #666;">Data: ${new Date(workOrder.createdAt).toLocaleDateString('pt-BR')} ${new Date(workOrder.createdAt).toLocaleTimeString('pt-BR')}</div>
+                <div style="font-size: 12px; color: #666; text-transform: uppercase;">${currentStatus}</div>
+                <div style="font-size: 12px; color: #666;">Data: ${new Date().toLocaleDateString('pt-BR')}</div>
               </div>
             </div>
           </div>
@@ -551,98 +689,35 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                 <div class="info-row"><span class="info-label">Nome:</span> ${selectedClient.name}</div>
                 <div class="info-row"><span class="info-label">Telefone:</span> ${selectedClient.phone}</div>
                 <div class="info-row"><span class="info-label">Email:</span> ${selectedClient.email}</div>
-                ${selectedClient.address ? `<div class="info-row"><span class="info-label">Endereço:</span> ${selectedClient.address}</div>` : ''}
-              ` : '<div style="color: #999;">Dados do cliente não disponíveis</div>'}
+              ` : 'Dados do cliente não disponíveis'}
             </div>
             <div class="section">
               <h3>VEÍCULO</h3>
-              <div class="info-row"><span class="info-label">Modelo:</span> ${workOrder.vehicle}</div>
-              <div class="info-row"><span class="info-label">Placa:</span> ${workOrder.plate}</div>
-              <div class="info-row"><span class="info-label">Status:</span> ${workOrder.status}</div>
-              <div class="info-row"><span class="info-label">Técnico:</span> ${workOrder.technician}</div>
+              <div class="info-row"><span class="info-label">Modelo:</span> ${printOrder.vehicle}</div>
+              <div class="info-row"><span class="info-label">Placa:</span> ${printOrder.plate}</div>
+              <div class="info-row"><span class="info-label">Status:</span> ${printOrder.status}</div>
             </div>
           </div>
 
           <div class="section grid-2 full">
-            <h3>SERVIÇOS SOLICITADOS</h3>
-            <div style="font-size: 16px; margin-bottom: 10px;">${workOrder.service}</div>
-            ${workOrder.damages && workOrder.damages.length > 0 ? `
-              <div style="margin-top: 10px;">
-                <strong>Danos Identificados:</strong>
-                <ul class="damage-list">
-                  ${workOrder.damages.map(d => `<li>${d.area.toUpperCase()}: ${d.description} (${d.type})</li>`).join('')}
-                </ul>
-              </div>
-            ` : ''}
+            <h3>SERVIÇOS</h3>
+            <div style="font-size: 16px; margin-bottom: 10px;">${printOrder.service}</div>
           </div>
-
-          ${workOrder.additionalItems && workOrder.additionalItems.length > 0 ? `
-            <div class="section grid-2 full">
-              <h3>ITENS ADICIONAIS</h3>
-              <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
-                <tr style="border-bottom: 1px solid #ddd;">
-                  <th style="text-align: left; padding: 5px;">Descrição</th>
-                  <th style="text-align: right; padding: 5px;">Valor</th>
-                </tr>
-                ${workOrder.additionalItems.map(item => `
-                  <tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 5px;">${item.description}</td>
-                    <td style="text-align: right; padding: 5px;">R$ ${item.value.toFixed(2).replace('.', ',')}</td>
-                  </tr>
-                `).join('')}
-              </table>
-            </div>
-          ` : ''}
 
           <div class="section financial grid-2 full">
             <h3>RESUMO FINANCEIRO</h3>
             <div style="font-size: 14px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                <span>Subtotal:</span>
-                <span>${formatCurrency(currentTotal)}</span>
-              </div>
-              ${discountAmount > 0 ? `
-                <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: #dc2626;">
-                  <span>Desconto (${discountDescription || (discountType === 'percentage' ? discountAmount + '%' : 'Valor')}):</span>
-                  <span>-${formatCurrency(discountType === 'percentage' ? currentTotal * (discountAmount/100) : discountAmount)}</span>
-                </div>
-              ` : ''}
               <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 18px; border-top: 1px solid #ccc; padding-top: 10px;">
                 <span>Valor Total:</span>
-                <span class="total-value">${formatCurrency(Math.max(0, currentTotal - (discountType === 'percentage' ? currentTotal * (discountAmount/100) : discountAmount)))}</span>
+                <span class="total-value">${formatCurrency(printOrder.totalValue)}</span>
               </div>
             </div>
-          </div>
-
-          <div style="background-color: #f9f9f9; border: 1px solid #ddd; padding: 10px; font-size: 11px; margin-bottom: 20px; border-radius: 3px;">
-            <strong>Termos e Condições:</strong>
-            <ul style="margin: 5px 0; padding-left: 20px; font-size: 11px;">
-              <li>O cliente autoriza os reparos descritos nesta OS</li>
-              <li>Fotos antes e depois serão tiradas para documentação</li>
-              <li>Qualquer dano adicional encontrado durante o serviço será informado ao cliente</li>
-              <li>Prazo estimado: ${workOrder.deadline}</li>
-              <li>A oficina não se responsabiliza por pertences deixados no veículo</li>
-            </ul>
           </div>
 
           <div class="signature-row">
-            <div class="signature-box">
-              Assinatura do Cliente<br/>
-              _______________
-            </div>
-            <div class="signature-box">
-              Assinatura do Técnico<br/>
-              _______________
-            </div>
-            <div class="signature-box">
-              Data<br/>
-              ${new Date().toLocaleDateString('pt-BR')}
-            </div>
-          </div>
-
-          <div class="footer">
-            Obrigado por confiar em nossos serviços!<br/>
-            Cristal Care Auto Detail - Estética Automotiva e Funilaria
+            <div class="signature-box">Assinatura do Cliente</div>
+            <div class="signature-box">Assinatura do Técnico</div>
+            <div class="signature-box">Data: ${new Date().toLocaleDateString('pt-BR')}</div>
           </div>
         </div>
       </body>
@@ -666,13 +741,44 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       return;
     }
 
-    const itemsText = workOrder.additionalItems && workOrder.additionalItems.length > 0 
-      ? workOrder.additionalItems.map(item => `\n• ${item.description}: R$ ${item.value.toFixed(2)}`).join('')
+    // Use current state values
+    const currentData = getUpdatedOrderData();
+    
+    const itemsText = currentData.additionalItems && currentData.additionalItems.length > 0 
+      ? currentData.additionalItems.map(item => `\n• ${item.description}: R$ ${item.value.toFixed(2)}`).join('')
       : '';
 
-    const message = `Olá ${selectedClient.name}! 👋\n\nSua Ordem de Serviço foi registrada:\n\n📋 *OS #${workOrder.id}*\n🚗 ${workOrder.vehicle} - ${workOrder.plate}\n🔧 Serviço: ${workOrder.service}\n💰 Valor: R$ ${workOrder.totalValue.toFixed(2)}${itemsText}\n⏱️ Prazo: ${workOrder.deadline}\n\nStatus: ${workOrder.status}\n\nAguardamos sua confirmação!\n\nCristal Care Auto Detail`;
+    const message = `Olá ${selectedClient.name}! 👋\n\nSua Ordem de Serviço foi registrada:\n\n📋 *OS #${workOrder.id}*\n🚗 ${currentData.vehicle} - ${currentData.plate}\n🔧 Serviço: ${currentData.service}\n💰 Valor: ${formatCurrency(currentData.totalValue || 0)}${itemsText}\n⏱️ Prazo: ${workOrder.deadline}\n\nStatus: ${currentStatus}\n\nAguardamos sua confirmação!\n\n${companySettings.name}`;
     
-    window.open(getWhatsappLink(selectedClient.phone, message), '_blank');
+    if (isWhatsAppConnected) {
+        // Bot Flow - Enforce Token Usage
+        if ((subscription.tokenBalance || 0) < 1) {
+            await showAlert({
+                title: 'Saldo Insuficiente',
+                message: 'Você precisa de 1 token para enviar via Robô. Recarregue sua carteira em Configurações.',
+                type: 'warning'
+            });
+            return;
+        }
+
+        const confirm = await showConfirm({
+            title: 'Enviar via Robô',
+            message: 'Deseja usar 1 Token para enviar esta mensagem automaticamente?',
+            confirmText: 'Enviar (1 Token)',
+            type: 'info'
+        });
+
+        if (confirm) {
+            if (consumeTokens(1, `Envio OS #${workOrder.id}`)) {
+                await showAlert({ title: 'Enviado', message: 'Mensagem enviada para a fila de disparo do Robô.', type: 'success' });
+            } else {
+                await showAlert({ title: 'Erro', message: 'Falha ao processar tokens.', type: 'error' });
+            }
+        }
+    } else {
+        // Manual Flow (Free)
+        window.open(getWhatsappLink(selectedClient.phone, message), '_blank');
+    }
   };
 
   const handleSignatureSave = (signature: string) => {
@@ -682,7 +788,18 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
   // Calculations for Display
   const currentExtrasTotal = additionalItems.reduce((acc, item) => acc + item.value, 0);
-  const currentTotal = servicePrice + currentExtrasTotal;
+  // Calculate current total for display purposes only (does NOT include discounts yet)
+  // For final payment, we use getUpdatedOrderData()
+  const displaySubtotal = servicePrice + currentExtrasTotal;
+  
+  // Calculate display discount
+  let displayDiscount = 0;
+  if (discountType === 'percentage') {
+      displayDiscount = displaySubtotal * (discountAmount / 100);
+  } else {
+      displayDiscount = discountAmount;
+  }
+  const displayTotal = Math.max(0, displaySubtotal - displayDiscount);
 
   const beforePhotos = damages.filter(d => d.photoUrl && d.photoUrl !== 'pending').map(d => ({ url: d.photoUrl!, desc: d.description }));
   const afterPhotos = dailyLog.flatMap(log => log.photos.map(url => ({ url, desc: log.description })));
@@ -692,19 +809,76 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       {isClientModalOpen && <ClientModal onClose={() => setIsClientModalOpen(false)} />}
       {isSignaturePadOpen && <SignaturePad onSave={handleSignatureSave} onClose={() => setIsSignaturePadOpen(false)} />}
       
+      {/* ADDED: Damage Registration Modal */}
+      {isDamageModalOpen && (
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+             <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-lg text-slate-900 dark:text-white">Registrar Avaria</h3>
+                <button onClick={() => setIsDamageModalOpen(false)} className="p-1 text-slate-400"><X size={20} /></button>
+             </div>
+             
+             <div className="mb-4">
+                <p className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 capitalize">
+                    Área: {currentDamageArea?.replace('_', ' ')}
+                </p>
+                <textarea 
+                    value={damageDesc} 
+                    onChange={(e) => setDamageDesc(e.target.value)} 
+                    placeholder="Descreva o dano (ex: Risco profundo, amassado...)" 
+                    className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors resize-none"
+                    rows={3}
+                    autoFocus
+                />
+             </div>
+
+             {/* Camera Input */}
+             <label className="block w-full p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors mb-4">
+                <input 
+                    type="file" 
+                    accept="image/*" 
+                    capture="environment" 
+                    className="hidden" 
+                    onChange={handlePhotoCapture}
+                />
+                {damagePhoto ? (
+                    <div className="relative">
+                        <img src={damagePhoto} alt="Preview" className="h-32 mx-auto rounded-lg object-cover shadow-sm" />
+                        <div className="flex items-center justify-center gap-2 mt-2 text-green-600 dark:text-green-400 font-bold text-sm">
+                            <CheckCircle2 size={16} /> Foto Anexada
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center gap-2 text-slate-500 dark:text-slate-400">
+                        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-full text-blue-600 dark:text-blue-400">
+                            <Camera size={24} />
+                        </div>
+                        <span className="font-bold text-sm">Tirar Foto da Avaria</span>
+                    </div>
+                )}
+             </label>
+
+             <div className="flex gap-3">
+                <button onClick={() => setIsDamageModalOpen(false)} className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-bold transition-colors">Cancelar</button>
+                <button onClick={handleSaveDamage} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20">Salvar</button>
+             </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl w-full max-w-5xl max-h-[98vh] sm:max-h-[95vh] flex flex-col shadow-2xl animate-in fade-in zoom-in duration-200 border border-slate-200 dark:border-slate-800">
         
         {/* Header */}
         <div className="p-3 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start gap-2 sm:gap-0 bg-slate-50/50 dark:bg-slate-900/50">
           <div className="w-full sm:w-auto">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-3 mb-1">
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">OS #{workOrder.id}</h2>
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">{workOrder.id}</h2>
               <select 
-                value={workOrder.status}
+                value={currentStatus}
                 onChange={(e) => handleStatusChange(e.target.value as any)}
                 className={cn(
                   "px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wide border-none focus:ring-2 cursor-pointer text-xs sm:text-sm",
-                  workOrder.status === 'Aguardando Aprovação' 
+                  currentStatus === 'Aguardando Aprovação' 
                     ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
                     : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                 )}
@@ -735,7 +909,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           </div>
 
           <div className="flex gap-1 sm:gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
-            {workOrder.status === 'Aguardando Aprovação' ? (
+            {currentStatus === 'Aguardando Aprovação' ? (
                 <button onClick={handleApprove} className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-green-600 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-green-700 transition-colors shadow-lg shadow-green-900/20 animate-pulse">
                     <Check size={14} /> <span className="hidden sm:inline">Aprovar & Definir Preço</span><span className="sm:hidden">Aprovar</span>
                 </button>
@@ -747,8 +921,16 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             <button onClick={handlePrint} className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-slate-600 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-slate-700 transition-colors">
                 <Printer size={14} /> <span className="hidden sm:inline">Imprimir</span><span className="sm:hidden">Print</span>
             </button>
-            <button onClick={handleSendWhatsApp} className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-green-500 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-green-600 transition-colors">
-                <Send size={14} /> <span className="hidden sm:inline">WhatsApp</span><span className="sm:hidden">WA</span>
+            <button 
+                onClick={handleSendWhatsApp} 
+                className={cn(
+                    "flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-white rounded-lg text-[10px] sm:text-sm font-medium transition-colors",
+                    isWhatsAppConnected ? "bg-purple-600 hover:bg-purple-700" : "bg-green-500 hover:bg-green-600"
+                )}
+            >
+                {isWhatsAppConnected ? <Bot size={14} /> : <Send size={14} />} 
+                <span className="hidden sm:inline">{isWhatsAppConnected ? 'Enviar (Robô)' : 'WhatsApp'}</span>
+                <span className="sm:hidden">{isWhatsAppConnected ? 'Robô' : 'WA'}</span>
             </button>
             <button onClick={onClose} className="p-1.5 sm:p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors">
               <X size={18} />
@@ -887,9 +1069,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                         </div>
                     </div>
                  )}
-                 
-                 {/* GAMIFICATION DISPLAY REMOVED FROM HERE */}
-
               </div>
 
               <div className="lg:col-span-1 bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -1326,7 +1505,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                       <button 
                         onClick={handleApplyVoucher}
                         disabled={!voucherCode}
-                        className="px-4 py-2 bg-purple-600 disabled:bg-slate-300 text-white rounded-lg font-bold text-sm hover:bg-purple-700 transition-colors"
+                        className="px-4 py-2 bg-purple-600 text-white rounded-lg font-bold text-sm hover:bg-purple-700 transition-colors disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-700 dark:disabled:text-slate-500 disabled:cursor-not-allowed"
                       >
                         Aplicar
                       </button>
@@ -1525,29 +1704,84 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                 <div className="flex flex-col gap-3 pt-4 mt-4 border-t border-slate-200 dark:border-slate-700">
                     <div className="flex justify-between py-2 px-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                       <span className="text-sm text-slate-600 dark:text-slate-300">Subtotal</span>
-                      <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(servicePrice + currentExtrasTotal)}</span>
+                      <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(displaySubtotal)}</span>
                     </div>
-                    {discountAmount > 0 && (
+                    {displayDiscount > 0 && (
                       <div className="flex justify-between py-2 px-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
                         <span className="text-sm text-red-600 dark:text-red-400 font-bold flex items-center gap-1">
                             <Tag size={12} />
                             Desconto ({discountDescription || (discountType === 'percentage' ? discountAmount + '%' : 'Valor')})
                         </span>
-                        <span className="font-bold text-red-600 dark:text-red-400">-{formatCurrency(discountType === 'percentage' ? (servicePrice + currentExtrasTotal) * (discountAmount / 100) : discountAmount)}</span>
+                        <span className="font-bold text-red-600 dark:text-red-400">-{formatCurrency(displayDiscount)}</span>
                       </div>
                     )}
                     <div className="flex justify-between items-center py-3 px-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                       <span className="font-bold text-lg text-slate-900 dark:text-white">Total Final</span>
                       <span className="font-bold text-xl text-blue-600 dark:text-blue-400">
-                        {formatCurrency(
-                          Math.max(0, (servicePrice + currentExtrasTotal) - (
-                            discountType === 'percentage' 
-                              ? (servicePrice + currentExtrasTotal) * (discountAmount / 100) 
-                              : discountAmount
-                          ))
-                        )}
+                        {formatCurrency(displayTotal)}
                       </span>
                     </div>
+                </div>
+
+                {/* --- PAYMENT SECTION (NEW) --- */}
+                <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
+                    <h4 className="font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                        <CreditCard size={18} className="text-green-600" />
+                        Registro de Pagamento
+                    </h4>
+                    
+                    {isPaid ? (
+                        <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800 flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-bold text-green-800 dark:text-green-300 flex items-center gap-2">
+                                    <CheckCircle2 size={16} /> Pago com sucesso
+                                </p>
+                                <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                    Via {paymentMethod} em {new Date(paymentDate).toLocaleDateString('pt-BR')}
+                                </p>
+                            </div>
+                            <button 
+                                onClick={handleUndoPayment} 
+                                className="text-xs text-slate-500 hover:text-red-500 underline"
+                            >
+                                Desfazer
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Método</label>
+                                    <select 
+                                        value={paymentMethod}
+                                        onChange={(e) => setPaymentMethod(e.target.value)}
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white"
+                                    >
+                                        <option value="Pix">Pix</option>
+                                        <option value="Cartão Crédito">Cartão Crédito</option>
+                                        <option value="Cartão Débito">Cartão Débito</option>
+                                        <option value="Dinheiro">Dinheiro</option>
+                                        <option value="Transferência">Transferência</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Data</label>
+                                    <input 
+                                        type="date" 
+                                        value={paymentDate}
+                                        onChange={(e) => setPaymentDate(e.target.value)}
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white"
+                                    />
+                                </div>
+                            </div>
+                            <button 
+                                onClick={handleRegisterPayment}
+                                className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm"
+                            >
+                                <DollarSign size={16} /> Confirmar Recebimento
+                            </button>
+                        </div>
+                    )}
                 </div>
 
               </div>

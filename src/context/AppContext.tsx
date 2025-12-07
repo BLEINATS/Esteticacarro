@@ -4,7 +4,7 @@ import {
   ServiceCatalogItem, PriceMatrixEntry, VehicleSize, Employee, Task, 
   TimeLog, EmployeeTransaction, MarketingCampaign, ClientSegment,
   CompanySettings, SubscriptionDetails, FinancialTransaction, ClientPoints, FidelityCard, Reward,
-  Redemption, TierConfig, TierLevel, ShopOwner, Notification, ServiceConsumption
+  Redemption, TierConfig, TierLevel, ShopOwner, Notification, ServiceConsumption, TokenTransaction
 } from '../types';
 import { differenceInDays, addDays, subDays, formatISO, startOfWeek, addHours } from 'date-fns';
 
@@ -25,28 +25,30 @@ interface AppContextType {
   redemptions: Redemption[];
   serviceConsumptions: ServiceConsumption[];
   
-  currentUser: Employee | null; // Tech Portal User
-  ownerUser: ShopOwner | null; // Admin/Shop Owner User
+  currentUser: Employee | null; 
+  ownerUser: ShopOwner | null; 
   
   theme: 'light' | 'dark';
   campaigns: MarketingCampaign[];
   
-  // Notifications
   notifications: Notification[];
   markNotificationAsRead: (id: string) => void;
+  clearAllNotifications: () => void;
+  addNotification: (notification: Omit<Notification, 'id' | 'read' | 'createdAt'>) => void;
   
-  // SaaS & Config
   companySettings: CompanySettings;
   subscription: SubscriptionDetails;
   updateCompanySettings: (settings: Partial<CompanySettings>) => void;
   
-  // WhatsApp Actions
+  buyTokens: (amount: number, cost: number) => void;
+  consumeTokens: (amount: number, description: string) => boolean;
+  changePlan: (planId: 'starter' | 'pro' | 'enterprise') => void;
+
   connectWhatsapp: () => void;
   disconnectWhatsapp: () => void;
   
-  // Actions
-  login: (pin: string) => boolean; // Tech Login
-  logout: () => void; // Tech Logout
+  login: (pin: string) => boolean; 
+  logout: () => void; 
   
   loginOwner: (email: string, password: string) => boolean;
   registerOwner: (name: string, email: string, shopName: string) => void;
@@ -54,14 +56,19 @@ interface AppContextType {
 
   addWorkOrder: (os: WorkOrder) => void;
   updateWorkOrder: (id: string, updates: Partial<WorkOrder>) => void;
-  completeWorkOrder: (id: string) => void;
+  completeWorkOrder: (id: string, orderSnapshot?: WorkOrder) => void;
+  recalculateClientMetrics: (clientId: string) => void;
+  updateClientLTV: (clientId: string, amount: number) => void;
+  updateClientVisits: (clientId: string, amount: number) => void;
   submitNPS: (workOrderId: string, score: number, comment?: string) => void;
   
   addClient: (client: Partial<Client>) => void;
   updateClient: (id: string, updates: Partial<Client>) => void;
+  deleteClient: (id: string) => void;
   addVehicle: (clientId: string, vehicle: Vehicle) => void;
+  updateVehicle: (clientId: string, vehicle: Vehicle) => void;
+  removeVehicle: (clientId: string, vehicleId: string) => void;
   
-  // Inventory Actions
   addInventoryItem: (item: Omit<InventoryItem, 'id' | 'status'>) => void;
   updateInventoryItem: (id: number, updates: Partial<InventoryItem>) => void;
   deleteInventoryItem: (id: number) => void;
@@ -70,7 +77,6 @@ interface AppContextType {
   toggleTheme: () => void;
   generateReminders: (os: WorkOrder) => void;
   
-  // Service & Pricing Actions
   addService: (service: Partial<ServiceCatalogItem>) => void;
   updateService: (id: string, updates: Partial<ServiceCatalogItem>) => void;
   deleteService: (id: string) => void; 
@@ -79,12 +85,10 @@ interface AppContextType {
   bulkUpdatePrices: (targetSize: VehicleSize | 'all', percentage: number) => void;
   getPrice: (serviceId: string, size: VehicleSize) => number;
   
-  // Consumption/Recipe Actions
   updateServiceConsumption: (consumption: ServiceConsumption) => void;
   getServiceConsumption: (serviceId: string) => ServiceConsumption | undefined;
   calculateServiceCost: (serviceId: string) => number;
 
-  // HR Actions
   addEmployee: (employee: Omit<Employee, 'id' | 'balance'>) => void;
   updateEmployee: (id: string, updates: Partial<Employee>) => void;
   deleteEmployee: (id: string) => void;
@@ -95,31 +99,26 @@ interface AppContextType {
   updateEmployeeTransaction: (id: string, updates: Partial<EmployeeTransaction>) => void; 
   deleteEmployeeTransaction: (id: string) => void; 
 
-  // Finance Actions
   addFinancialTransaction: (trans: FinancialTransaction) => void;
   updateFinancialTransaction: (id: number, updates: Partial<FinancialTransaction>) => void;
   deleteFinancialTransaction: (id: number) => void;
 
-  // Marketing Actions
   createCampaign: (campaign: MarketingCampaign) => void;
+  updateCampaign: (id: string, updates: Partial<MarketingCampaign>) => void;
   getWhatsappLink: (phone: string, message: string) => string;
 
-  // Gamification Actions
   addPointsToClient: (clientId: string, workOrderId: string, points: number, description: string) => void;
   getClientPoints: (clientId: string) => ClientPoints | undefined;
   createFidelityCard: (clientId: string) => FidelityCard;
   getFidelityCard: (clientId: string) => FidelityCard | undefined;
   
-  // Rewards Actions
   addReward: (reward: Omit<Reward, 'id' | 'createdAt'>) => void;
   updateReward: (id: string, updates: Partial<Reward>) => void;
   deleteReward: (id: string) => void;
   getRewardsByLevel: (level: TierLevel) => Reward[];
   
-  // Tier Management
   updateTierConfig: (tiers: TierConfig[]) => void;
   
-  // Redemption / Voucher
   claimReward: (clientId: string, rewardId: string) => { success: boolean; message: string; voucherCode?: string };
   getClientRedemptions: (clientId: string) => Redemption[];
   useVoucher: (code: string, workOrderId: string) => boolean;
@@ -131,26 +130,26 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// --- HELPER: LOCAL STORAGE ---
-const getStorage = <T,>(key: string, initial: T): T => {
+// --- STORAGE HELPERS ---
+const getStorage = <T,>(key: string, initialValue: T): T => {
   try {
-    const item = localStorage.getItem(`crystal_care_${key}`);
-    return item ? JSON.parse(item) : initial;
+    const item = window.localStorage.getItem(key);
+    return item ? JSON.parse(item) : initialValue;
   } catch (error) {
-    console.error(`Error loading ${key} from storage`, error);
-    return initial;
+    console.error(`Error reading localStorage key "${key}":`, error);
+    return initialValue;
   }
 };
 
-const setStorage = <T,>(key: string, value: T) => {
+const setStorage = <T,>(key: string, value: T): void => {
   try {
-    localStorage.setItem(`crystal_care_${key}`, JSON.stringify(value));
+    window.localStorage.setItem(key, JSON.stringify(value));
   } catch (error) {
-    console.error(`Error saving ${key} to storage`, error);
+    console.error(`Error saving localStorage key "${key}":`, error);
   }
 };
 
-// ... (Existing Mock Data)
+// --- INITIAL DATA ---
 const defaultTiers: TierConfig[] = [
   { id: 'bronze', name: 'Bronze', minPoints: 0, color: 'from-amber-500 to-amber-600', benefits: ['5% desconto em serviços'] },
   { id: 'silver', name: 'Prata', minPoints: 500, color: 'from-slate-400 to-slate-600', benefits: ['10% desconto', 'Frete grátis'] },
@@ -160,6 +159,7 @@ const defaultTiers: TierConfig[] = [
 
 const initialCompanySettings: CompanySettings = {
   name: 'Cristal Care Autodetail',
+  slug: 'cristal-care', // DEFAULT SLUG
   responsibleName: 'Anderson Silva',
   cnpj: '12.345.678/0001-90',
   email: 'contato@cristalcare.com.br',
@@ -172,9 +172,7 @@ const initialCompanySettings: CompanySettings = {
   initialBalance: 15000.00,
   whatsapp: {
     enabled: true,
-    session: {
-      status: 'disconnected'
-    },
+    session: { status: 'disconnected' },
     templates: {
       welcome: 'Olá {cliente}! Bem-vindo à Cristal Care. Seu cadastro foi realizado com sucesso.',
       completion: 'Olá {cliente}! O serviço no seu {veiculo} foi concluído. Valor Total: {valor}. Aguardamos sua retirada!',
@@ -189,7 +187,8 @@ const initialCompanySettings: CompanySettings = {
     heroImage: 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=1920&q=80',
     primaryColor: '#2563eb',
     showServices: true,
-    showTestimonials: true
+    showTestimonials: true,
+    whatsappMessage: 'Olá, gostaria de agendar uma visita.' // Default message
   },
   preferences: {
     theme: 'dark',
@@ -197,7 +196,10 @@ const initialCompanySettings: CompanySettings = {
     notifications: {
       lowStock: true,
       osUpdates: true,
-      marketing: false
+      marketing: false,
+      financial: true,
+      security: true,
+      channels: { email: true, whatsapp: false, system: true }
     }
   },
   gamification: {
@@ -213,6 +215,10 @@ const initialSubscription: SubscriptionDetails = {
   status: 'active',
   nextBillingDate: formatISO(addDays(new Date(), 15)),
   paymentMethod: 'Mastercard final 4242',
+  tokenBalance: 50,
+  tokenHistory: [
+    { id: 'init', type: 'credit', amount: 50, description: 'Bônus Inicial de Boas-vindas', date: new Date().toISOString() }
+  ],
   invoices: [
     { id: 'inv-001', date: formatISO(subDays(new Date(), 15)), amount: 299.90, status: 'paid', pdfUrl: '#' },
     { id: 'inv-002', date: formatISO(subDays(new Date(), 45)), amount: 299.90, status: 'paid', pdfUrl: '#' },
@@ -220,106 +226,141 @@ const initialSubscription: SubscriptionDetails = {
   ]
 };
 
-const today = new Date();
-const yesterday = subDays(today, 1);
 const initialClients: Client[] = [
   { 
     id: 'c1', name: 'Dr. Roberto Silva', phone: '11999998888', email: 'roberto.med@email.com', notes: 'Cliente VIP. Exigente com acabamento interno.',
+    address: 'Av. Paulista, 1000 - Bela Vista, São Paulo - SP',
+    cep: '01310-100', street: 'Av. Paulista', number: '1000', neighborhood: 'Bela Vista', city: 'São Paulo', state: 'SP',
     vehicles: [
       { id: 'v1', model: 'Porsche Macan', plate: 'POR-9111', color: 'Cinza Nardo', year: '2023', size: 'large' },
       { id: 'v2', model: 'BMW X5', plate: 'BMW-5588', color: 'Preto Obsidiana', year: '2022', size: 'large' }
     ],
-    ltv: 15500.00, lastVisit: formatISO(yesterday), visitCount: 12, status: 'active', segment: 'vip'
+    ltv: 15500.00, lastVisit: formatISO(subDays(new Date(), 1)), visitCount: 12, status: 'active', segment: 'vip'
   },
 ];
-const initialReminders: Reminder[] = []; 
+
 const initialEmployees: Employee[] = [
   { id: 'e1', name: 'Mestre Miyagi', role: 'Funileiro', pin: '1234', salaryType: 'commission', fixedSalary: 0, commissionRate: 30, commissionBase: 'net', active: true, balance: 3450.00 },
   { id: 'e5', name: 'Fernanda Gerente', role: 'Manager', pin: '9999', salaryType: 'fixed', fixedSalary: 3500, commissionRate: 0, commissionBase: 'gross', active: true, balance: 0 },
 ];
 
+// Updated Initial Services List with showOnLandingPage
 const initialServices: ServiceCatalogItem[] = [
-    { 
-      id: 'srv1', 
-      name: 'Lavagem Técnica', 
-      description: 'Limpeza detalhada de carroceria, rodas e caixas de roda com produtos biodegradáveis de pH neutro.', 
-      category: 'Lavagem', 
-      active: true, 
-      standardTimeMinutes: 90, 
-      returnIntervalDays: 30, 
-      imageUrl: 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=800&q=80' 
-    },
+    { id: 'srv1', name: 'Lavagem Técnica', description: 'Limpeza detalhada de carroceria, rodas e caixas de roda com produtos biodegradáveis de pH neutro.', category: 'Lavagem', active: true, standardTimeMinutes: 90, returnIntervalDays: 30, imageUrl: 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=800&q=80', showOnLandingPage: true },
+    { id: 'srv2', name: 'Polimento Técnico', description: 'Correção de pintura, remoção de riscos e recuperação do brilho original com acabamento espelhado.', category: 'Polimento', active: true, standardTimeMinutes: 240, returnIntervalDays: 0, imageUrl: 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&q=80&w=1000', showOnLandingPage: true },
+    { id: 'srv3', name: 'Vitrificação Cerâmica', description: 'Proteção de alta durabilidade (até 3 anos) contra sol, chuva ácida e sujeira, com hidrofobia extrema.', category: 'Proteção', active: true, standardTimeMinutes: 360, returnIntervalDays: 365, imageUrl: 'https://images.unsplash.com/photo-1507136566006-cfc505b114fc?auto=format&fit=crop&q=80&w=1000', showOnLandingPage: true },
+    { id: 'srv4', name: 'Higienização Premium', description: 'Limpeza profunda de bancos, teto, carpetes e hidratação de couro com produtos bactericidas.', category: 'Interior', active: true, standardTimeMinutes: 180, returnIntervalDays: 180, imageUrl: 'https://images.unsplash.com/photo-1605218427360-6961d3748ea9?auto=format&fit=crop&q=80&w=1000', showOnLandingPage: true },
+    { id: 'srv5', name: 'Detalhamento de Motor', description: 'Limpeza técnica e proteção de plásticos e borrachas do cofre do motor, sem uso de água sob pressão.', category: 'Lavagem', active: true, standardTimeMinutes: 60, returnIntervalDays: 90, imageUrl: 'https://images.unsplash.com/photo-1552930294-6b595f4c2974?auto=format&fit=crop&q=80&w=1000', showOnLandingPage: true },
+    { id: 'srv6', name: 'Revitalização de Faróis', description: 'Remoção do amarelado e opacidade das lentes, devolvendo a transparência e segurança na iluminação.', category: 'Polimento', active: true, standardTimeMinutes: 45, returnIntervalDays: 365, imageUrl: 'https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&q=80&w=1000', showOnLandingPage: true },
+    { id: 'srv7', name: 'Oxi-Sanitização', description: 'Eliminação de odores, fungos e bactérias do interior do veículo através de gerador de ozônio.', category: 'Interior', active: true, standardTimeMinutes: 30, returnIntervalDays: 90, imageUrl: 'https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&q=80&w=1000', showOnLandingPage: true }
 ];
-
-const initialPriceMatrix: PriceMatrixEntry[] = []; 
 
 const initialInventory: InventoryItem[] = [
     { id: 1, name: 'Shampoo Neutro', category: 'Lavagem', stock: 50, unit: 'L', minStock: 20, status: 'ok', costPrice: 15.00 },
 ];
 
-const initialWorkOrders: WorkOrder[] = [];
-const initialEmployeeTransactions: EmployeeTransaction[] = [];
-const initialCampaigns: MarketingCampaign[] = [];
-const initialFinancialTransactions: FinancialTransaction[] = [];
-const initialClientPoints: ClientPoints[] = [];
-const initialFidelityCards: FidelityCard[] = [];
-const initialRewards: Reward[] = [];
-const initialRedemptions: Redemption[] = [];
-const initialServiceConsumptions: ServiceConsumption[] = [];
+const initialRewards: Reward[] = [
+  { id: 'r1', name: 'Desconto de 10% na Lavagem', description: 'Aplicável em qualquer tipo de lavagem.', requiredPoints: 500, requiredLevel: 'bronze', rewardType: 'discount', percentage: 10, active: true, createdAt: new Date().toISOString() },
+  { id: 'r2', name: 'Hidratação de Couro Grátis', description: 'Na contratação de uma lavagem completa.', requiredPoints: 1200, requiredLevel: 'silver', rewardType: 'service', gift: 'Hidratação de Couro', active: true, createdAt: new Date().toISOString() },
+  { id: 'r3', name: 'Polimento de Faróis', description: 'Revitalização completa das lentes dos faróis.', requiredPoints: 2500, requiredLevel: 'gold', rewardType: 'free_service', gift: 'Polimento de Farol', active: true, createdAt: new Date().toISOString() },
+  { id: 'r4', name: 'Kit de Produtos Premium', description: 'Kit com cera, microfibra e pretinho.', requiredPoints: 5000, requiredLevel: 'platinum', rewardType: 'gift', gift: 'Kit Premium', active: true, createdAt: new Date().toISOString() }
+];
+
+const initialClientPoints: ClientPoints[] = [
+  {
+    clientId: 'c1', totalPoints: 2450, currentLevel: 3, tier: 'gold', servicesCompleted: 12, lastServiceDate: formatISO(subDays(new Date(), 5)),
+    pointsHistory: [
+      { id: 'ph1', workOrderId: 'os-prev-1', points: 500, description: 'Vitrificação de Pintura', date: formatISO(subDays(new Date(), 60)) },
+      { id: 'ph2', workOrderId: 'os-prev-2', points: 150, description: 'Lavagem Detalhada', date: formatISO(subDays(new Date(), 30)) },
+      { id: 'ph3', workOrderId: 'os-prev-3', points: 1800, description: 'Bônus de Indicação + Serviço', date: formatISO(subDays(new Date(), 5)) }
+    ]
+  }
+];
+
+const initialFidelityCards: FidelityCard[] = [
+  { clientId: 'c1', cardNumber: 'CC98765432', cardHolder: 'Dr. Roberto Silva', cardColor: 'amber', qrCode: 'https://qrcode.example.com/c1', issueDate: formatISO(subDays(new Date(), 100)), expiresAt: formatISO(addDays(new Date(), 265)) }
+];
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  // State Initialization
-  const [companySettings, setCompanySettings] = useState<CompanySettings>(() => getStorage('companySettings_v13', initialCompanySettings)); 
-  const [subscription, setSubscription] = useState<SubscriptionDetails>(() => getStorage('subscription_v1', initialSubscription));
+  const [companySettings, setCompanySettings] = useState<CompanySettings>(() => {
+    const stored = getStorage('companySettings_v16', initialCompanySettings); // Incremented version
+    return {
+      ...initialCompanySettings,
+      ...stored,
+      slug: stored.slug || initialCompanySettings.slug,
+      gamification: { ...initialCompanySettings.gamification, ...(stored.gamification || {}) },
+      landingPage: { ...initialCompanySettings.landingPage, ...(stored.landingPage || {}) }, // Ensure landingPage is merged
+      preferences: { 
+        ...initialCompanySettings.preferences, 
+        ...(stored.preferences || {}),
+        notifications: {
+            ...initialCompanySettings.preferences.notifications,
+            ...(stored.preferences?.notifications || {}),
+            channels: {
+                ...initialCompanySettings.preferences.notifications.channels,
+                ...(stored.preferences?.notifications?.channels || {})
+            }
+        }
+      },
+      whatsapp: { ...initialCompanySettings.whatsapp, ...(stored.whatsapp || {}) }
+    };
+  }); 
+
+  const [subscription, setSubscription] = useState<SubscriptionDetails>(() => {
+    const stored = getStorage('subscription_v2', initialSubscription);
+    return {
+        ...initialSubscription,
+        ...stored,
+        tokenBalance: stored.tokenBalance ?? initialSubscription.tokenBalance,
+        tokenHistory: stored.tokenHistory ?? initialSubscription.tokenHistory
+    };
+  });
   
   const [inventory, setInventory] = useState<InventoryItem[]>(() => getStorage('inventory_v10', initialInventory)); 
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() => getStorage<WorkOrder[]>('workOrders_v8', initialWorkOrders));
-  const [clients, setClients] = useState<Client[]>(() => getStorage<Client[]>('clients_v8', initialClients));
-  const [reminders, setReminders] = useState<Reminder[]>(() => getStorage('reminders_v8', initialReminders));
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() => getStorage('workOrders_v8', []));
+  const [clients, setClients] = useState<Client[]>(() => getStorage('clients_v8', initialClients));
+  const [reminders, setReminders] = useState<Reminder[]>(() => getStorage('reminders_v8', []));
   
-  const [services, setServices] = useState<ServiceCatalogItem[]>(() => getStorage('services_v10', initialServices));
-  const [priceMatrix, setPriceMatrix] = useState<PriceMatrixEntry[]>(() => getStorage('priceMatrix_v8', initialPriceMatrix));
-  const [serviceConsumptions, setServiceConsumptions] = useState<ServiceConsumption[]>(() => getStorage('serviceConsumptions_v1', initialServiceConsumptions));
+  const [services, setServices] = useState<ServiceCatalogItem[]>(() => getStorage('services_v12', initialServices));
+  const [priceMatrix, setPriceMatrix] = useState<PriceMatrixEntry[]>(() => getStorage('priceMatrix_v8', []));
+  const [serviceConsumptions, setServiceConsumptions] = useState<ServiceConsumption[]>(() => getStorage('serviceConsumptions_v1', []));
   
   const [employees, setEmployees] = useState<Employee[]>(() => getStorage('employees_v9', initialEmployees)); 
-  const [employeeTransactions, setEmployeeTransactions] = useState<EmployeeTransaction[]>(() => getStorage('employeeTransactions_v8', initialEmployeeTransactions));
-  const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>(() => getStorage('financialTransactions_v3', initialFinancialTransactions));
+  const [employeeTransactions, setEmployeeTransactions] = useState<EmployeeTransaction[]>(() => getStorage('employeeTransactions_v8', []));
+  const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>(() => getStorage('financialTransactions_v3', []));
   const [clientPoints, setClientPoints] = useState<ClientPoints[]>(() => getStorage('clientPoints_v1', initialClientPoints));
   const [fidelityCards, setFidelityCards] = useState<FidelityCard[]>(() => getStorage('fidelityCards_v1', initialFidelityCards));
   const [rewards, setRewards] = useState<Reward[]>(() => getStorage('rewards_v1', initialRewards));
-  const [redemptions, setRedemptions] = useState<Redemption[]>(() => getStorage('redemptions_v1', initialRedemptions)); 
+  const [redemptions, setRedemptions] = useState<Redemption[]>(() => getStorage('redemptions_v1', [])); 
 
-  const [campaigns, setCampaigns] = useState<MarketingCampaign[]>(() => getStorage<MarketingCampaign[]>('campaigns_v7', initialCampaigns));
+  const [campaigns, setCampaigns] = useState<MarketingCampaign[]>(() => getStorage('campaigns_v7', []));
   
   const [currentUser, setCurrentUser] = useState<Employee | null>(null);
   const [ownerUser, setOwnerUser] = useState<ShopOwner | null>(() => getStorage('ownerUser', null)); 
 
   const [notifications, setNotifications] = useState<Notification[]>([
-    { 
-      id: 'welcome-msg', 
-      title: 'Bem-vindo', 
-      message: 'Sistema iniciado com sucesso.', 
-      read: false, 
-      createdAt: new Date().toISOString(), 
-      type: 'info' 
-    }
+    { id: 'welcome-msg', title: 'Bem-vindo', message: 'Sistema iniciado com sucesso.', read: false, createdAt: new Date().toISOString(), type: 'info' }
   ]);
 
-  const markNotificationAsRead = (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  const markNotificationAsRead = (id: string) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  const clearAllNotifications = () => setNotifications([]);
+  const addNotification = (notification: Omit<Notification, 'id' | 'read' | 'createdAt'>) => {
+    const newNotification: Notification = { id: `notif-${Date.now()}`, read: false, createdAt: new Date().toISOString(), ...notification };
+    setNotifications(prev => [newNotification, ...prev]);
   };
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => getStorage('theme', 'dark'));
   const [recipes] = useState<ServiceRecipe[]>([]);
 
-  // Persistence
-  useEffect(() => setStorage('companySettings_v13', companySettings), [companySettings]);
-  useEffect(() => setStorage('subscription_v1', subscription), [subscription]);
+  useEffect(() => setStorage('companySettings_v16', companySettings), [companySettings]);
+  useEffect(() => setStorage('subscription_v2', subscription), [subscription]);
   useEffect(() => setStorage('theme', theme), [theme]);
   useEffect(() => setStorage('reminders_v8', reminders), [reminders]); 
-  useEffect(() => setStorage('services_v10', services), [services]);
+  useEffect(() => setStorage('services_v12', services), [services]);
   useEffect(() => setStorage('priceMatrix_v8', priceMatrix), [priceMatrix]); 
   useEffect(() => setStorage('inventory_v10', inventory), [inventory]);
+  useEffect(() => setStorage('workOrders_v8', workOrders), [workOrders]);
+  useEffect(() => setStorage('clients_v8', clients), [clients]);
   useEffect(() => setStorage('employees_v9', employees), [employees]); 
   useEffect(() => setStorage('employeeTransactions_v8', employeeTransactions), [employeeTransactions]);
   useEffect(() => setStorage('financialTransactions_v3', financialTransactions), [financialTransactions]);
@@ -329,66 +370,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => setStorage('redemptions_v1', redemptions), [redemptions]);
   useEffect(() => setStorage('ownerUser', ownerUser), [ownerUser]); 
   useEffect(() => setStorage('serviceConsumptions_v1', serviceConsumptions), [serviceConsumptions]);
-
-  // Check for points expiration on load
-  useEffect(() => {
-    const checkExpiration = () => {
-      const oneYearAgo = subDays(new Date(), 365);
-      
-      setClientPoints(prev => prev.map(cp => {
-        const oldPositivePoints = cp.pointsHistory
-          .filter(h => h.points > 0 && new Date(h.date) < oneYearAgo)
-          .reduce((acc, h) => acc + h.points, 0);
-          
-        const totalDeducted = cp.pointsHistory
-          .filter(h => h.points < 0)
-          .reduce((acc, h) => acc + Math.abs(h.points), 0);
-          
-        const pointsToExpire = Math.max(0, oldPositivePoints - totalDeducted);
-        
-        if (pointsToExpire > 0) {
-          return {
-            ...cp,
-            totalPoints: cp.totalPoints - pointsToExpire,
-            pointsHistory: [
-              ...cp.pointsHistory,
-              {
-                id: `exp-${Date.now()}`,
-                workOrderId: 'system',
-                points: -pointsToExpire,
-                description: 'Expiração de Pontos (> 1 ano)',
-                date: new Date().toISOString()
-              }
-            ]
-          };
-        }
-        return cp;
-      }));
-    };
-    
-    checkExpiration();
-  }, []); 
-
-  // RECOVERY LOGIC
-  useEffect(() => {
-    if (companySettings.whatsapp.session.status === 'scanning') {
-      setCompanySettings(prev => ({
-        ...prev,
-        whatsapp: {
-          ...prev.whatsapp,
-          session: { 
-            status: 'connected',
-            device: {
-              name: 'WhatsApp Web',
-              number: prev.phone,
-              battery: 92,
-              avatarUrl: prev.logoUrl
-            }
-          }
-        }
-      }));
-    }
-  }, []);
+  useEffect(() => setStorage('campaigns_v7', campaigns), [campaigns]);
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -398,7 +380,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   
-  // --- TECH PORTAL AUTH ---
   const login = (pin: string) => {
     const user = employees.find(e => e.pin === pin);
     if (user) { setCurrentUser(user); return true; }
@@ -406,15 +387,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
   const logout = () => setCurrentUser(null);
 
-  // --- OWNER AUTH ---
   const loginOwner = (email: string, password: string) => {
     if (email && password) {
-      const fakeOwner: ShopOwner = {
-        id: 'owner-1',
-        name: 'Admin Demo',
-        email: email,
-        shopName: companySettings.name
-      };
+      const fakeOwner: ShopOwner = { id: 'owner-1', name: 'Admin Demo', email: email, shopName: companySettings.name };
       setOwnerUser(fakeOwner);
       return true;
     }
@@ -422,140 +397,83 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const registerOwner = (name: string, email: string, shopName: string) => {
-    const newOwner: ShopOwner = {
-        id: `owner-${Date.now()}`,
-        name,
-        email,
-        shopName
-    };
+    const newOwner: ShopOwner = { id: `owner-${Date.now()}`, name, email, shopName };
     setOwnerUser(newOwner);
-    
-    setCompanySettings({
-        ...initialCompanySettings,
-        name: shopName,
-        responsibleName: name,
-        email: email
-    });
+    // Generate slug from shop name
+    const slug = shopName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    setCompanySettings({ ...initialCompanySettings, name: shopName, responsibleName: name, email: email, slug });
   };
 
-  const logoutOwner = () => {
-    setOwnerUser(null);
-  };
+  const logoutOwner = () => setOwnerUser(null);
 
-  const updateCompanySettings = (settings: Partial<CompanySettings>) => {
-    setCompanySettings(prev => ({ ...prev, ...settings }));
-  };
+  const updateCompanySettings = (settings: Partial<CompanySettings>) => setCompanySettings(prev => ({ ...prev, ...settings }));
 
   const connectWhatsapp = () => {
-    setCompanySettings(prev => ({
-      ...prev,
-      whatsapp: {
-        ...prev.whatsapp,
-        session: { status: 'scanning' }
-      }
-    }));
-
+    setCompanySettings(prev => ({ ...prev, whatsapp: { ...prev.whatsapp, session: { status: 'scanning' } } }));
     setTimeout(() => {
       setCompanySettings(prev => ({
         ...prev,
-        whatsapp: {
-          ...prev.whatsapp,
-          session: { 
-            status: 'connected',
-            device: {
-              name: 'WhatsApp Web',
-              number: prev.phone,
-              battery: 85,
-              avatarUrl: prev.logoUrl
-            }
-          }
-        }
+        whatsapp: { ...prev.whatsapp, session: { status: 'connected', device: { name: 'WhatsApp Web', number: prev.phone, battery: 85, avatarUrl: prev.logoUrl } } }
       }));
     }, 4000);
   };
 
-  const disconnectWhatsapp = () => {
-    setCompanySettings(prev => ({
-      ...prev,
-      whatsapp: {
-        ...prev.whatsapp,
-        session: { status: 'disconnected' }
-      }
-    }));
-  };
+  const disconnectWhatsapp = () => setCompanySettings(prev => ({ ...prev, whatsapp: { ...prev.whatsapp, session: { status: 'disconnected' } } }));
 
   const generateReminders = (os: WorkOrder) => {
     const service = services.find(s => s.id === os.serviceId) || services.find(s => s.name === os.service);
     if (!service || !service.returnIntervalDays || service.returnIntervalDays <= 0) return;
-
     const client = clients.find(c => c.id === os.clientId);
     if (!client) return;
     const vehicle = client.vehicles.find(v => v.plate === os.plate);
     const vehicleId = vehicle ? vehicle.id : 'unknown';
-
     const dueDate = addDays(new Date(), service.returnIntervalDays);
-    
-    const newReminder: Reminder = {
-      id: `rem-${Date.now()}`,
-      clientId: os.clientId,
-      vehicleId: vehicleId,
-      serviceType: service.name,
-      dueDate: formatISO(dueDate),
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      autoGenerated: true
-    };
-
+    const newReminder: Reminder = { id: `rem-${Date.now()}`, clientId: os.clientId, vehicleId: vehicleId, serviceType: service.name, dueDate: formatISO(dueDate), status: 'pending', createdAt: new Date().toISOString(), autoGenerated: true };
     setReminders(prev => [...prev, newReminder]);
   };
 
   const addWorkOrder = (os: WorkOrder) => setWorkOrders(prev => [os, ...prev]);
-  const updateWorkOrder = (id: string, updates: Partial<WorkOrder>) => setWorkOrders(prev => prev.map(os => os.id === id ? { ...os, ...updates } : os));
+  
+  const updateWorkOrder = (id: string, updates: Partial<WorkOrder>) => {
+    setWorkOrders(prev => prev.map(os => {
+        if (os.id === id) {
+            const oldStatus = os.status;
+            const newStatus = updates.status;
+            
+            if (newStatus && newStatus !== oldStatus) {
+                if (newStatus === 'Concluído') {
+                    updateClientVisits(os.clientId, 1);
+                } else if (oldStatus === 'Concluído') {
+                    updateClientVisits(os.clientId, -1);
+                }
+            }
+            return { ...os, ...updates };
+        }
+        return os;
+    }));
+  };
+
   const addClient = (client: Partial<Client>) => setClients(prev => [...prev, { id: `c-${Date.now()}`, vehicles: [], ltv: 0, lastVisit: new Date().toISOString(), visitCount: 0, status: 'active', segment: 'new', name: '', phone: '', email: '', ...client } as Client]);
   const updateClient = (id: string, updates: Partial<Client>) => setClients(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  const deleteClient = (id: string) => setClients(prev => prev.filter(c => c.id !== id));
   const addVehicle = (clientId: string, vehicle: Vehicle) => setClients(prev => prev.map(c => c.id === clientId ? { ...c, vehicles: [...c.vehicles, vehicle] } : c));
+  const updateVehicle = (clientId: string, vehicle: Vehicle) => setClients(prev => prev.map(c => c.id === clientId ? { ...c, vehicles: c.vehicles.map(v => v.id === vehicle.id ? vehicle : v) } : c));
+  const removeVehicle = (clientId: string, vehicleId: string) => setClients(prev => prev.map(c => c.id === clientId ? { ...c, vehicles: c.vehicles.filter(v => v.id !== vehicleId) } : c));
   
-  // --- INVENTORY ACTIONS ---
   const calculateStatus = (stock: number, minStock: number): 'ok' | 'warning' | 'critical' => {
     if (stock <= minStock) return 'critical';
     if (stock <= minStock * 1.5) return 'warning';
     return 'ok';
   };
 
-  const addInventoryItem = (item: Omit<InventoryItem, 'id' | 'status'>) => {
-    const newItem: InventoryItem = {
-      ...item,
-      id: Date.now(),
-      status: calculateStatus(item.stock, item.minStock)
-    };
-    setInventory(prev => [...prev, newItem]);
-  };
+  const addInventoryItem = (item: Omit<InventoryItem, 'id' | 'status'>) => setInventory(prev => [...prev, { ...item, id: Date.now(), status: calculateStatus(item.stock, item.minStock) }]);
+  const updateInventoryItem = (id: number, updates: Partial<InventoryItem>) => setInventory(prev => prev.map(item => item.id === id ? { ...item, ...updates, status: calculateStatus(updates.stock ?? item.stock, updates.minStock ?? item.minStock) } : item));
+  const deleteInventoryItem = (id: number) => setInventory(prev => prev.filter(item => item.id !== id));
 
-  const updateInventoryItem = (id: number, updates: Partial<InventoryItem>) => {
-    setInventory(prev => prev.map(item => {
-      if (item.id === id) {
-        const updatedItem = { ...item, ...updates };
-        updatedItem.status = calculateStatus(updatedItem.stock, updatedItem.minStock);
-        return updatedItem;
-      }
-      return item;
-    }));
-  };
-
-  const deleteInventoryItem = (id: number) => {
-    setInventory(prev => prev.filter(item => item.id !== id));
-  };
-
-  // --- CONSUMPTION & STOCK DEDUCTION LOGIC ---
-  
   const updateServiceConsumption = (consumption: ServiceConsumption) => {
     setServiceConsumptions(prev => {
       const existing = prev.findIndex(c => c.serviceId === consumption.serviceId);
-      if (existing >= 0) {
-        const updated = [...prev];
-        updated[existing] = consumption;
-        return updated;
-      }
+      if (existing >= 0) { const updated = [...prev]; updated[existing] = consumption; return updated; }
       return [...prev, consumption];
     });
   };
@@ -565,28 +483,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const calculateServiceCost = (serviceId: string): number => {
     const consumption = getServiceConsumption(serviceId);
     if (!consumption) return 0;
-
     return consumption.items.reduce((total, item) => {
       const invItem = inventory.find(i => i.id === item.inventoryId);
       if (!invItem) return total;
-
-      // Basic unit conversion logic
       let multiplier = 1;
-      
-      // If stock is in Liters and usage is in ml
-      if (invItem.unit.toLowerCase() === 'l' && item.usageUnit === 'ml') {
-        multiplier = 0.001;
-      } 
-      // If stock is in kg and usage is in g
-      else if (invItem.unit.toLowerCase() === 'kg' && item.usageUnit === 'g') {
-        multiplier = 0.001;
-      }
-      // If units match (e.g., un -> un, L -> L)
-      else if (invItem.unit.toLowerCase() === item.usageUnit.toLowerCase()) {
-        multiplier = 1;
-      }
-      // Fallback for mismatched units without clear conversion (treat as 1:1)
-      
+      if (invItem.unit.toLowerCase() === 'l' && item.usageUnit === 'ml') multiplier = 0.001;
+      else if (invItem.unit.toLowerCase() === 'kg' && item.usageUnit === 'g') multiplier = 0.001;
       return total + (invItem.costPrice * item.quantity * multiplier);
     }, 0);
   };
@@ -594,93 +496,92 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deductStock = (serviceId: string) => {
     const consumption = getServiceConsumption(serviceId);
     if (!consumption) return;
-
     setInventory(prev => prev.map(invItem => {
       const consumptionItem = consumption.items.find(i => i.inventoryId === invItem.id);
-      
       if (consumptionItem) {
         let deductionAmount = consumptionItem.quantity;
-        
-        // Apply conversion
-        if (invItem.unit.toLowerCase() === 'l' && consumptionItem.usageUnit === 'ml') {
-          deductionAmount = consumptionItem.quantity / 1000;
-        } else if (invItem.unit.toLowerCase() === 'kg' && consumptionItem.usageUnit === 'g') {
-          deductionAmount = consumptionItem.quantity / 1000;
-        }
-
+        if (invItem.unit.toLowerCase() === 'l' && consumptionItem.usageUnit === 'ml') deductionAmount = consumptionItem.quantity / 1000;
+        else if (invItem.unit.toLowerCase() === 'kg' && consumptionItem.usageUnit === 'g') deductionAmount = consumptionItem.quantity / 1000;
         const newStock = Math.max(0, invItem.stock - deductionAmount);
-        
-        return {
-          ...invItem,
-          stock: parseFloat(newStock.toFixed(3)), // Avoid float precision issues
-          status: calculateStatus(newStock, invItem.minStock)
-        };
+        return { ...invItem, stock: parseFloat(newStock.toFixed(3)), status: calculateStatus(newStock, invItem.minStock) };
       }
       return invItem;
     }));
   };
   
-  // --- SERVICE ACTIONS ---
-  const addService = (service: Partial<ServiceCatalogItem>) => {
-    const newService = { id: `srv-${Date.now()}`, active: true, standardTimeMinutes: 60, returnIntervalDays: 0, ...service } as ServiceCatalogItem;
-    setServices(prev => [...prev, newService]);
-  };
+  const addService = (service: Partial<ServiceCatalogItem>) => setServices(prev => [...prev, { id: `srv-${Date.now()}`, active: true, standardTimeMinutes: 60, returnIntervalDays: 0, showOnLandingPage: true, ...service } as ServiceCatalogItem]);
   const updateService = (id: string, updates: Partial<ServiceCatalogItem>) => setServices(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
-  
-  const deleteService = (id: string) => {
-    setServices(prev => prev.filter(s => s.id !== id));
-    setPriceMatrix(prev => prev.filter(p => p.serviceId !== id));
-    setServiceConsumptions(prev => prev.filter(c => c.serviceId !== id));
-  };
-
+  const deleteService = (id: string) => { setServices(prev => prev.filter(s => s.id !== id)); setPriceMatrix(prev => prev.filter(p => p.serviceId !== id)); setServiceConsumptions(prev => prev.filter(c => c.serviceId !== id)); };
   const updatePrice = (serviceId: string, size: VehicleSize, newPrice: number) => setPriceMatrix(prev => { const exists = prev.find(p => p.serviceId === serviceId && p.size === size); return exists ? prev.map(p => p.serviceId === serviceId && p.size === size ? { ...p, price: newPrice } : p) : [...prev, { serviceId, size, price: newPrice }]; });
   const updateServiceInterval = (serviceId: string, days: number) => setServices(prev => prev.map(s => s.id === serviceId ? { ...s, returnIntervalDays: days } : s));
   const bulkUpdatePrices = (targetSize: VehicleSize | 'all', percentage: number) => { const factor = 1 + (percentage / 100); setPriceMatrix(prev => prev.map(entry => (targetSize === 'all' || entry.size === targetSize) ? { ...entry, price: Math.ceil(entry.price * factor) } : entry)); };
   const getPrice = (serviceId: string, size: VehicleSize) => priceMatrix.find(p => p.serviceId === serviceId && p.size === size)?.price || 0;
   
-  // --- HR ACTIONS ---
-  const addEmployee = (employee: Omit<Employee, 'id' | 'balance'>) => {
-    const newEmp: Employee = { 
-      ...employee, 
-      id: `e-${Date.now()}`, 
-      balance: 0,
-      active: true 
-    };
-    setEmployees(prev => [...prev, newEmp]);
-  };
-
-  const updateEmployee = (id: string, updates: Partial<Employee>) => {
-    setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
-  };
-
-  const deleteEmployee = (id: string) => {
-    setEmployees(prev => prev.filter(e => e.id !== id));
-  };
-
+  const addEmployee = (employee: Omit<Employee, 'id' | 'balance'>) => setEmployees(prev => [...prev, { ...employee, id: `e-${Date.now()}`, balance: 0, active: true }]);
+  const updateEmployee = (id: string, updates: Partial<Employee>) => setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
+  const deleteEmployee = (id: string) => setEmployees(prev => prev.filter(e => e.id !== id));
   const assignTask = () => {}; const startTask = () => {}; const stopTask = () => {};
   
-  const completeWorkOrder = (id: string) => {
-      const os = workOrders.find(o => o.id === id);
+  const updateClientLTV = (clientId: string, amount: number) => {
+    setClients(prev => prev.map(client => {
+      if (client.id === clientId) {
+        return {
+          ...client,
+          ltv: Math.max(0, (client.ltv || 0) + amount)
+        };
+      }
+      return client;
+    }));
+  };
+
+  const updateClientVisits = (clientId: string, amount: number) => {
+    setClients(prev => prev.map(client => {
+      if (client.id === clientId) {
+        return {
+          ...client,
+          visitCount: Math.max(0, (client.visitCount || 0) + amount),
+          lastVisit: amount > 0 ? new Date().toISOString() : client.lastVisit
+        };
+      }
+      return client;
+    }));
+  };
+
+  const recalculateClientMetrics = (clientId: string) => {
+    setClients(prev => prev.map(client => {
+      if (client.id === clientId) {
+        const paidOrders = workOrders.filter(os => os.clientId === clientId && os.paymentStatus === 'paid');
+        const totalSpent = paidOrders.reduce((acc, os) => acc + (os.totalValue || 0), 0);
+        
+        const completedOrders = workOrders.filter(os => os.clientId === clientId && os.status === 'Concluído');
+        const visitCount = completedOrders.length;
+        
+        return {
+          ...client,
+          ltv: totalSpent,
+          visitCount: visitCount,
+          lastVisit: completedOrders.length > 0 
+            ? completedOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0].createdAt 
+            : client.lastVisit
+        };
+      }
+      return client;
+    }));
+  };
+
+  const completeWorkOrder = (id: string, orderSnapshot?: WorkOrder) => {
+      const os = orderSnapshot || workOrders.find(o => o.id === id);
       if (os) {
-        // 1. Gamification Points
         if (companySettings.gamification?.enabled) {
             const points = Math.round(os.totalValue * (companySettings.gamification.pointsMultiplier || 1));
             addPointsToClient(os.clientId, id, points, `Serviço concluído: ${os.service}`);
         }
         
-        // 2. Update Status
         updateWorkOrder(id, { status: 'Concluído' });
-        
-        // 3. Generate Reminders
+
         generateReminders(os); 
-        
-        // 4. Deduct Stock based on service recipe
-        if (os.serviceId) {
-            deductStock(os.serviceId);
-        } else if (os.serviceIds && os.serviceIds.length > 0) {
-            // Handle multi-service deduction
-            os.serviceIds.forEach(sId => deductStock(sId));
-        }
+        if (os.serviceId) deductStock(os.serviceId);
+        else if (os.serviceIds && os.serviceIds.length > 0) os.serviceIds.forEach(sId => deductStock(sId));
       }
   };
   
@@ -688,254 +589,106 @@ export function AppProvider({ children }: { children: ReactNode }) {
   
   const addEmployeeTransaction = (trans: EmployeeTransaction) => { 
     setEmployeeTransactions(prev => [...prev, trans]); 
-    setEmployees(prev => prev.map(e => { 
-        if (e.id === trans.employeeId) { 
-            const change = (trans.type === 'commission' || trans.type === 'salary') ? trans.amount : -trans.amount; 
-            return { ...e, balance: e.balance + change }; 
-        } 
-        return e; 
-    })); 
+    setEmployees(prev => prev.map(e => { if (e.id === trans.employeeId) { const change = (trans.type === 'commission' || trans.type === 'salary') ? trans.amount : -trans.amount; return { ...e, balance: e.balance + change }; } return e; })); 
   };
-
   const updateEmployeeTransaction = (id: string, updates: Partial<EmployeeTransaction>) => {
     const oldTrans = employeeTransactions.find(t => t.id === id);
     if (!oldTrans) return;
-
     const oldChange = (oldTrans.type === 'commission' || oldTrans.type === 'salary') ? -oldTrans.amount : oldTrans.amount;
-    
     const newType = updates.type || oldTrans.type;
     const newAmount = updates.amount !== undefined ? updates.amount : oldTrans.amount;
     const newChange = (newType === 'commission' || newType === 'salary') ? newAmount : -newAmount;
-
     const totalAdjustment = oldChange + newChange;
-
     setEmployeeTransactions(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-    
-    setEmployees(prev => prev.map(e => {
-        if (e.id === oldTrans.employeeId) {
-            return { ...e, balance: e.balance + totalAdjustment };
-        }
-        return e;
-    }));
+    setEmployees(prev => prev.map(e => { if (e.id === oldTrans.employeeId) { return { ...e, balance: e.balance + totalAdjustment }; } return e; }));
   };
-
   const deleteEmployeeTransaction = (id: string) => {
     const trans = employeeTransactions.find(t => t.id === id);
     if (!trans) return;
-
     const revertChange = (trans.type === 'commission' || trans.type === 'salary') ? -trans.amount : trans.amount;
-
     setEmployeeTransactions(prev => prev.filter(t => t.id !== id));
-    
-    setEmployees(prev => prev.map(e => {
-        if (e.id === trans.employeeId) {
-            return { ...e, balance: e.balance + revertChange };
-        }
-        return e;
-    }));
+    setEmployees(prev => prev.map(e => { if (e.id === trans.employeeId) { return { ...e, balance: e.balance + revertChange }; } return e; }));
   };
 
-  // --- FINANCE ACTIONS ---
-  const addFinancialTransaction = (trans: FinancialTransaction) => {
-    setFinancialTransactions(prev => [trans, ...prev]);
-  };
-
-  const updateFinancialTransaction = (id: number, updates: Partial<FinancialTransaction>) => {
-    setFinancialTransactions(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-  };
-
-  const deleteFinancialTransaction = (id: number) => {
-    setFinancialTransactions(prev => prev.filter(t => t.id !== id));
-  };
+  const addFinancialTransaction = (trans: FinancialTransaction) => setFinancialTransactions(prev => [trans, ...prev]);
+  const updateFinancialTransaction = (id: number, updates: Partial<FinancialTransaction>) => setFinancialTransactions(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+  const deleteFinancialTransaction = (id: number) => setFinancialTransactions(prev => prev.filter(t => t.id !== id));
 
   const createCampaign = (campaign: MarketingCampaign) => setCampaigns(prev => [campaign, ...prev]);
+  
+  const updateCampaign = (id: string, updates: Partial<MarketingCampaign>) => {
+    setCampaigns(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  };
+
   const getWhatsappLink = (phone: string, message: string) => `https://wa.me/55${phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
 
-  // --- GAMIFICATION ACTIONS ---
-  
-  const updateTierConfig = (tiers: TierConfig[]) => {
-    updateCompanySettings({
-      ...companySettings,
-      gamification: {
-        ...companySettings.gamification,
-        tiers
-      }
-    });
-  };
+  const updateTierConfig = (tiers: TierConfig[]) => updateCompanySettings({ ...companySettings, gamification: { ...companySettings.gamification, tiers } });
 
   const addPointsToClient = (clientId: string, workOrderId: string, points: number, description: string) => {
     setClientPoints(prev => {
       const existing = prev.find(cp => cp.clientId === clientId);
+      const tiers = companySettings.gamification?.tiers || defaultTiers;
       if (existing) {
         const newTotal = existing.totalPoints + points;
-        
-        // Use dynamic tiers from config
-        const tiers = companySettings.gamification.tiers || defaultTiers;
-        // Sort tiers by points descending to find the highest matching tier
         const sortedTiers = [...tiers].sort((a, b) => b.minPoints - a.minPoints);
         const currentTierConfig = sortedTiers.find(t => newTotal >= t.minPoints) || tiers[0];
-        
-        // Map tier config to level index (1-based)
         const currentLevel = tiers.findIndex(t => t.id === currentTierConfig.id) + 1;
-
-        return prev.map(cp => cp.clientId === clientId ? {
-          ...cp, 
-          totalPoints: newTotal,
-          currentLevel: currentLevel,
-          tier: currentTierConfig.id,
-          servicesCompleted: cp.servicesCompleted + 1,
-          lastServiceDate: formatISO(new Date()),
-          pointsHistory: [...cp.pointsHistory, { id: `p-${Date.now()}`, workOrderId, points, description, date: formatISO(new Date()) }]
-        } : cp);
+        return prev.map(cp => cp.clientId === clientId ? { ...cp, totalPoints: newTotal, currentLevel: currentLevel, tier: currentTierConfig.id, servicesCompleted: cp.servicesCompleted + 1, lastServiceDate: formatISO(new Date()), pointsHistory: [...cp.pointsHistory, { id: `p-${Date.now()}`, workOrderId, points, description, date: formatISO(new Date()) }] } : cp);
       }
-      return prev;
+      const currentTierConfig = tiers.find(t => points >= t.minPoints) || tiers[0];
+      const currentLevel = tiers.findIndex(t => t.id === currentTierConfig.id) + 1;
+      return [...prev, { clientId, totalPoints: points, currentLevel: currentLevel, tier: currentTierConfig.id, servicesCompleted: 1, lastServiceDate: formatISO(new Date()), pointsHistory: [{ id: `p-${Date.now()}`, workOrderId, points, description, date: formatISO(new Date()) }] }];
     });
   };
 
   const getClientPoints = (clientId: string): ClientPoints | undefined => clientPoints.find(cp => cp.clientId === clientId);
 
   const createFidelityCard = (clientId: string): FidelityCard => {
+    const existing = fidelityCards.find(c => c.clientId === clientId);
+    if (existing) return existing;
     const client = clients.find(c => c.id === clientId);
     const points = clientPoints.find(cp => cp.clientId === clientId);
     const tierColors: Record<string, 'blue' | 'purple' | 'emerald' | 'amber'> = { bronze: 'blue', silver: 'emerald', gold: 'amber', platinum: 'purple' };
-    const card: FidelityCard = {
-      clientId,
-      cardNumber: `CC${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
-      cardHolder: client?.name || '',
-      cardColor: tierColors[points?.tier || 'bronze'],
-      qrCode: `https://qrcode.example.com/${clientId}`,
-      issueDate: formatISO(new Date()),
-      expiresAt: formatISO(addDays(new Date(), 365))
-    };
+    const card: FidelityCard = { clientId, cardNumber: `CC${Math.random().toString(36).substring(2, 10).toUpperCase()}`, cardHolder: client?.name || '', cardColor: tierColors[points?.tier || 'bronze'], qrCode: `https://qrcode.example.com/${clientId}`, issueDate: formatISO(new Date()), expiresAt: formatISO(addDays(new Date(), 365)) };
     setFidelityCards(prev => [...prev, card]);
     return card;
   };
 
   const getFidelityCard = (clientId: string): FidelityCard | undefined => fidelityCards.find(c => c.clientId === clientId);
 
-  // --- REWARDS ACTIONS ---
-  const addReward = (reward: Omit<Reward, 'id' | 'createdAt'>) => {
-    const newReward: Reward = {
-      ...reward,
-      id: `r-${Date.now()}`,
-      createdAt: formatISO(new Date())
-    };
-    setRewards(prev => [...prev, newReward]);
-  };
+  const addReward = (reward: Omit<Reward, 'id' | 'createdAt'>) => setRewards(prev => [...prev, { ...reward, id: `r-${Date.now()}`, createdAt: formatISO(new Date()) }]);
+  const updateReward = (id: string, updates: Partial<Reward>) => setRewards(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+  const deleteReward = (id: string) => setRewards(prev => prev.filter(r => r.id !== id));
+  const getRewardsByLevel = (level: TierLevel): Reward[] => rewards.filter(r => r.active && r.requiredLevel === level);
+  const updateTier = (tier: TierLevel, updates: any) => updateCompanySettings({ ...companySettings, gamification: { ...companySettings.gamification, tiers: (companySettings.gamification?.tiers || []).map(t => t.id === tier ? { ...t, ...updates } : t) } });
 
-  const updateReward = (id: string, updates: Partial<Reward>) => {
-    setRewards(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
-  };
-
-  const deleteReward = (id: string) => {
-    setRewards(prev => prev.filter(r => r.id !== id));
-  };
-
-  const getRewardsByLevel = (level: TierLevel): Reward[] => {
-    return rewards.filter(r => r.active && r.requiredLevel === level);
-  };
-
-  // --- TIER MANAGEMENT ---
-  const updateTier = (tier: TierLevel, updates: any) => {
-    updateCompanySettings({
-      ...companySettings,
-      gamification: {
-        ...companySettings.gamification,
-        tiers: (companySettings.gamification?.tiers || []).map(t => 
-          t.id === tier ? { ...t, ...updates } : t
-        )
-      }
-    });
-  };
-
-  // --- PKPass & Google Wallet Generation ---
   const generatePKPass = (clientId: string): string => {
     const card = getFidelityCard(clientId);
     const points = getClientPoints(clientId);
     if (!card || !points) return '';
-    
-    const cardData = `
-CARTÃO DE FIDELIDADE - CRISTAL CARE
-=====================================
-Nome: ${card.cardHolder}
-Número: ${card.cardNumber}
-Pontos: ${points.totalPoints}
-Nível: ${points.tier.toUpperCase()}
-Serviços: ${points.servicesCompleted}
-Data Emissão: ${new Date().toLocaleDateString('pt-BR')}
-
-Escaneie o QR CODE abaixo no ponto de venda:
-${card.qrCode}
-    `;
-    
+    const cardData = `CARTÃO DE FIDELIDADE - CRISTAL CARE\n=====================================\nNome: ${card.cardHolder}\nNúmero: ${card.cardNumber}\nPontos: ${points.totalPoints}\nNível: ${points.tier.toUpperCase()}\nServiços: ${points.servicesCompleted}\nData Emissão: ${new Date().toLocaleDateString('pt-BR')}\n\nEscaneie o QR CODE abaixo no ponto de venda:\n${card.qrCode}`;
     return `data:text/plain;base64,${btoa(cardData)}`;
   };
 
-  const generateGoogleWallet = (clientId: string): string => {
-    // Retorna um URL de compartilhamento direto do cartão
-    const baseUrl = window.location.origin;
-    return `${baseUrl}/client-profile/${clientId}`;
-  };
+  const generateGoogleWallet = (clientId: string): string => `${window.location.origin}/client-profile/${clientId}`;
   
-  // --- REDEMPTION SYSTEM (VOUCHERS) ---
   const claimReward = (clientId: string, rewardId: string): { success: boolean; message: string; voucherCode?: string } => {
     const reward = rewards.find(r => r.id === rewardId);
     const clientPoints = getClientPoints(clientId);
-    
     if (!reward || !clientPoints) return { success: false, message: 'Recompensa ou cliente não encontrado' };
-    if (clientPoints.totalPoints < reward.requiredPoints) {
-      return { success: false, message: `Pontos insuficientes. Você tem ${clientPoints.totalPoints}, precisa de ${reward.requiredPoints}` };
-    }
-    
-    // Generate Voucher Code
+    if (clientPoints.totalPoints < reward.requiredPoints) return { success: false, message: `Pontos insuficientes. Você tem ${clientPoints.totalPoints}, precisa de ${reward.requiredPoints}` };
     const voucherCode = `DESC-${Math.floor(Math.random() * 10000)}-${reward.name.substring(0, 3).toUpperCase()}`;
-
-    // Create Redemption Record
-    const newRedemption: Redemption = {
-      id: `red-${Date.now()}`,
-      clientId,
-      rewardId,
-      rewardName: reward.name,
-      code: voucherCode,
-      pointsCost: reward.requiredPoints,
-      status: 'active',
-      redeemedAt: new Date().toISOString()
-    };
-
+    const newRedemption: Redemption = { id: `red-${Date.now()}`, clientId, rewardId, rewardName: reward.name, code: voucherCode, pointsCost: reward.requiredPoints, status: 'active', redeemedAt: new Date().toISOString() };
     setRedemptions(prev => [...prev, newRedemption]);
-
-    // Deduct Points
-    setClientPoints(prev => prev.map(cp => 
-      cp.clientId === clientId 
-        ? {
-            ...cp,
-            totalPoints: cp.totalPoints - reward.requiredPoints,
-            pointsHistory: [
-              ...cp.pointsHistory,
-              {
-                id: `claim-${Date.now()}`,
-                workOrderId: '',
-                points: -reward.requiredPoints,
-                description: `✅ Resgate: ${reward.name} (Voucher: ${voucherCode})`,
-                date: new Date().toISOString()
-              }
-            ]
-          }
-        : cp
-    ));
-    
-    // Update Reward Stats
+    setClientPoints(prev => prev.map(cp => cp.clientId === clientId ? { ...cp, totalPoints: cp.totalPoints - reward.requiredPoints, pointsHistory: [...cp.pointsHistory, { id: `claim-${Date.now()}`, workOrderId: '', points: -reward.requiredPoints, description: `✅ Resgate: ${reward.name} (Voucher: ${voucherCode})`, date: new Date().toISOString() }] } : cp));
     updateReward(rewardId, { redeemedCount: (reward.redeemedCount || 0) + 1 });
-    
     return { success: true, message: `✅ Recompensa resgatada! Seu código é: ${voucherCode}`, voucherCode };
   };
 
   const getClientRedemptions = (clientId: string) => redemptions.filter(r => r.clientId === clientId);
-
   const useVoucher = (code: string, workOrderId: string): boolean => {
     const redemption = redemptions.find(r => r.code === code && r.status === 'active');
     if (!redemption) return false;
-
     setRedemptions(prev => prev.map(r => r.id === redemption.id ? { ...r, status: 'used', usedAt: new Date().toISOString(), usedInWorkOrderId: workOrderId } : r));
     return true;
   };
@@ -947,6 +700,32 @@ ${card.qrCode}
     return { redemption, reward };
   };
 
+  const buyTokens = (amount: number, cost: number) => {
+    setSubscription(prev => ({
+      ...prev,
+      tokenBalance: (prev.tokenBalance || 0) + amount,
+      tokenHistory: [{ id: `tok-${Date.now()}`, type: 'credit', amount: amount, description: `Compra de pacote (${amount} tokens)`, date: new Date().toISOString() }, ...(prev.tokenHistory || [])]
+    }));
+    addFinancialTransaction({ id: Date.now(), desc: `Compra de Tokens WhatsApp (${amount})`, category: 'Marketing', amount: -cost, netAmount: -cost, fee: 0, type: 'expense', date: new Date().toISOString().split('T')[0], dueDate: new Date().toISOString().split('T')[0], method: 'Cartão Crédito', status: 'paid' });
+  };
+
+  const consumeTokens = (amount: number, description: string): boolean => {
+    if ((subscription.tokenBalance || 0) < amount) return false;
+    setSubscription(prev => ({
+      ...prev,
+      tokenBalance: prev.tokenBalance - amount,
+      tokenHistory: [{ id: `tok-${Date.now()}`, type: 'debit', amount: amount, description: description, date: new Date().toISOString() }, ...(prev.tokenHistory || [])]
+    }));
+    return true;
+  };
+
+  const changePlan = (planId: 'starter' | 'pro' | 'enterprise') => {
+    setSubscription(prev => ({
+        ...prev,
+        planId
+    }));
+  };
+
   return (
     <AppContext.Provider value={{ 
       inventory, workOrders, clients, recipes, reminders, services, priceMatrix, theme,
@@ -955,21 +734,22 @@ ${card.qrCode}
       financialTransactions,
       login, logout,
       loginOwner, registerOwner, logoutOwner,
-      addWorkOrder, updateWorkOrder, completeWorkOrder, submitNPS,
-      addClient, updateClient, addVehicle,
+      addWorkOrder, updateWorkOrder, completeWorkOrder, recalculateClientMetrics, updateClientLTV, updateClientVisits, submitNPS,
+      addClient, updateClient, deleteClient, addVehicle, updateVehicle, removeVehicle,
       addInventoryItem, updateInventoryItem, deleteInventoryItem, deductStock,
       toggleTheme, generateReminders,
       updatePrice, updateServiceInterval, bulkUpdatePrices, getPrice, addService, updateService, deleteService,
       assignTask, startTask, stopTask, addEmployeeTransaction, updateEmployeeTransaction, deleteEmployeeTransaction,
       addEmployee, updateEmployee, deleteEmployee,
       addFinancialTransaction, updateFinancialTransaction, deleteFinancialTransaction,
-      createCampaign, getWhatsappLink,
+      createCampaign, updateCampaign, getWhatsappLink,
       connectWhatsapp, disconnectWhatsapp,
       addPointsToClient, getClientPoints, createFidelityCard, getFidelityCard,
       addReward, updateReward, deleteReward, getRewardsByLevel,
       updateTier, updateTierConfig, generatePKPass, generateGoogleWallet, claimReward, getClientRedemptions, useVoucher, getVoucherDetails,
-      notifications, markNotificationAsRead,
-      updateServiceConsumption, getServiceConsumption, calculateServiceCost, serviceConsumptions
+      notifications, markNotificationAsRead, clearAllNotifications, addNotification,
+      updateServiceConsumption, getServiceConsumption, calculateServiceCost, serviceConsumptions,
+      buyTokens, consumeTokens, changePlan
     }}>
       {children}
     </AppContext.Provider>

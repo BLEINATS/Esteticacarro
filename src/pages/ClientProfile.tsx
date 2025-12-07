@@ -1,27 +1,46 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { ArrowLeft, Download, Share2, QrCode, Smartphone, Wallet, Copy, Check, Gift } from 'lucide-react';
+import { ArrowLeft, Smartphone, Wallet, QrCode, Copy, Share2, Loader2, Gift } from 'lucide-react';
 import FidelityCard from '../components/FidelityCard';
 import QRCode from 'qrcode';
+import { ClientPoints } from '../types';
+import { getWhatsappLink } from '../lib/utils'; // Importando helper se necessário, ou usando do contexto
 
 export default function ClientProfile() {
   const { clientId } = useParams();
   const navigate = useNavigate();
-  const { clients, getClientPoints, getFidelityCard, companySettings, getRewardsByLevel, generatePKPass, generateGoogleWallet, getWhatsappLink } = useApp();
+  const { clients, getClientPoints, getFidelityCard, createFidelityCard, companySettings, getRewardsByLevel, generatePKPass, generateGoogleWallet, getWhatsappLink, ownerUser } = useApp();
   const client = clients.find(c => c.id === clientId);
-  const points = getClientPoints(clientId || '');
+  
+  // Default points if not found
+  const rawPoints = getClientPoints(clientId || '');
+  const points: ClientPoints = rawPoints || {
+    clientId: clientId || '',
+    totalPoints: 0,
+    currentLevel: 1,
+    tier: 'bronze',
+    servicesCompleted: 0,
+    lastServiceDate: new Date().toISOString(),
+    pointsHistory: []
+  };
+
   const card = getFidelityCard(clientId || '');
   
   const [qrCodeUrl, setQrCodeUrl] = useState('');
-  const [copied, setCopied] = useState(false);
-  const [linkCopied, setLinkCopied] = useState(false);
   const [pkpassUrl, setPkpassUrl] = useState('');
   const [googleWalletUrl, setGoogleWalletUrl] = useState('');
   const [shareLink, setShareLink] = useState('');
 
+  // Ensure card exists if gamification is enabled
   useEffect(() => {
-    if (!card || !points) return;
+    if (clientId && !card && companySettings.gamification?.enabled) {
+      createFidelityCard(clientId);
+    }
+  }, [clientId, card, companySettings.gamification?.enabled, createFidelityCard]);
+
+  useEffect(() => {
+    if (!card) return;
     
     // Gerar QR code com dados do cliente
     const qrData = {
@@ -46,10 +65,10 @@ export default function ClientProfile() {
     setShareLink(`${baseUrl}/client-profile/${clientId}`);
   }, [clientId, card, points, generatePKPass, generateGoogleWallet, client?.id]);
 
-  if (!client || !points || !card) {
+  if (!client) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <p className="text-slate-500">Cliente não encontrado</p>
+      <div className="flex items-center justify-center h-screen bg-slate-50 dark:bg-slate-950">
+        <p className="text-slate-500">Cliente não encontrado.</p>
       </div>
     );
   }
@@ -58,7 +77,7 @@ export default function ClientProfile() {
     if (pkpassUrl) {
       const link = document.createElement('a');
       link.href = pkpassUrl;
-      link.download = `cartao-fidelidade-${card.cardNumber}.txt`;
+      link.download = `cartao-fidelidade-${card?.cardNumber || 'novo'}.txt`;
       link.click();
     }
   };
@@ -69,31 +88,8 @@ export default function ClientProfile() {
     }
   };
 
-  const handleCopyCardNumber = () => {
-    navigator.clipboard.writeText(card.cardNumber);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleShare = () => {
-    const shareText = `Meu cartão de fidelidade Cristal Care:\nNúmero: ${card.cardNumber}\nPontos: ${points.totalPoints}\nNível: ${points.tier.toUpperCase()}`;
-    if (navigator.share) {
-      navigator.share({ title: 'Meu Cartão de Fidelidade', text: shareText }).catch(() => {
-        navigator.clipboard.writeText(shareText);
-      });
-    } else {
-      navigator.clipboard.writeText(shareText);
-    }
-  };
-
-  const handleCopyShareLink = () => {
-    navigator.clipboard.writeText(shareLink);
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 2000);
-  };
-
   const handleSendViaWhatsApp = () => {
-    const message = `Olá ${client?.name}! 🎁\n\nSeu cartão de fidelidade ${companySettings.name} está pronto! Você já tem ${points.totalPoints} pontos no nível ${points.tier.toUpperCase()}.\n\nAdicione ao seu Wallet:\n${shareLink}\n\nNúmero: ${card.cardNumber}`;
+    const message = `Olá ${client?.name}! 🎁\n\nSeu cartão de fidelidade ${companySettings.name} está pronto! Você já tem ${points.totalPoints} pontos no nível ${points.tier.toUpperCase()}.\n\nAdicione ao seu Wallet:\n${shareLink}\n\nNúmero: ${card?.cardNumber}`;
     const whatsappLink = getWhatsappLink(client?.phone || '', message);
     window.open(whatsappLink, '_blank');
   };
@@ -103,16 +99,18 @@ export default function ClientProfile() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 p-4 sm:p-6">
       <div className="max-w-4xl mx-auto">
-        {/* Back Button */}
-        <button
-          onClick={() => navigate('/clients')}
-          className="flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 mb-6 font-semibold transition-colors"
-        >
-          <ArrowLeft size={20} /> Voltar para Clientes
-        </button>
+        {/* Back Button - Only visible if user is logged in (Owner) */}
+        {ownerUser && (
+            <button
+            onClick={() => navigate('/clients')}
+            className="flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 mb-6 font-semibold transition-colors"
+            >
+            <ArrowLeft size={20} /> Voltar para Clientes
+            </button>
+        )}
 
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-8 text-center sm:text-left">
           <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-2">
             {client.name}
           </h1>
@@ -125,20 +123,27 @@ export default function ClientProfile() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           {/* Fidelity Card */}
           <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl p-6 sm:p-8 shadow-xl border border-slate-200 dark:border-slate-800">
-            <FidelityCard
-              clientName={client.name}
-              clientPhone={client.phone}
-              totalPoints={points.totalPoints}
-              currentLevel={points.currentLevel}
-              tier={points.tier}
-              cardNumber={card.cardNumber}
-              servicesCompleted={points.servicesCompleted}
-              logoUrl={companySettings.logoUrl}
-              shopName={companySettings.name}
-              instagram={companySettings.instagram}
-              facebook={companySettings.facebook}
-              website={companySettings.website}
-            />
+            {card ? (
+                <FidelityCard
+                clientName={client.name}
+                clientPhone={client.phone}
+                totalPoints={points.totalPoints}
+                currentLevel={points.currentLevel}
+                tier={points.tier}
+                cardNumber={card.cardNumber}
+                servicesCompleted={points.servicesCompleted}
+                logoUrl={companySettings.logoUrl}
+                shopName={companySettings.name}
+                instagram={companySettings.instagram}
+                facebook={companySettings.facebook}
+                website={companySettings.website}
+                />
+            ) : (
+                <div className="h-64 flex flex-col items-center justify-center text-slate-400">
+                    <Loader2 size={32} className="animate-spin mb-2" />
+                    <p>Gerando seu cartão...</p>
+                </div>
+            )}
           </div>
 
           {/* QR Code Section */}
@@ -146,7 +151,7 @@ export default function ClientProfile() {
             {qrCodeUrl ? (
               <>
                 <img src={qrCodeUrl} alt="QR Code" className="w-48 h-48 rounded-lg border-2 border-slate-200 dark:border-slate-700" />
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-4 text-center">Escanear para acompanhar pontos</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-4 text-center">Apresente no caixa para pontuar</p>
               </>
             ) : (
               <div className="w-48 h-48 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center">
@@ -170,56 +175,14 @@ export default function ClientProfile() {
           >
             <Wallet size={20} /> Google Wallet
           </button>
-          <button
-            onClick={handleSendViaWhatsApp}
-            className="flex items-center justify-center gap-2 px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold transition-colors shadow-lg"
-          >
-            💬 Enviar via WhatsApp
-          </button>
-        </div>
-
-        {/* Card Number & Actions */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl p-6 shadow-lg border border-slate-200 dark:border-slate-800 mb-8">
-          <div className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-bold text-slate-900 dark:text-white">Número do Cartão</h3>
-                <button
-                  onClick={handleCopyCardNumber}
-                  className="flex items-center gap-2 px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors text-slate-700 dark:text-slate-300 font-semibold text-sm"
-                >
-                  {copied ? <Check size={16} /> : <Copy size={16} />}
-                  {copied ? 'Copiado!' : 'Copiar'}
-                </button>
-              </div>
-              <p className="text-2xl font-mono font-bold text-blue-600 dark:text-blue-400">{card.cardNumber}</p>
-            </div>
-
-            <div>
-              <h4 className="font-bold text-slate-900 dark:text-white mb-2">Link de Compartilhamento</h4>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={shareLink}
-                  readOnly
-                  className="flex-1 px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded text-sm font-mono text-slate-600 dark:text-slate-400"
-                />
-                <button
-                  onClick={handleCopyShareLink}
-                  className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors font-semibold text-sm"
-                >
-                  {linkCopied ? <Check size={16} /> : <Copy size={16} />}
-                </button>
-              </div>
-            </div>
-
+          {ownerUser && (
             <button
-              onClick={handleShare}
-              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold transition-colors"
+                onClick={handleSendViaWhatsApp}
+                className="flex items-center justify-center gap-2 px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold transition-colors shadow-lg"
             >
-              <Share2 size={18} /> Compartilhar Cartão
+                <Share2 size={20} /> Enviar via WhatsApp
             </button>
-          </div>
+          )}
         </div>
 
         {/* Points History */}
@@ -227,15 +190,17 @@ export default function ClientProfile() {
           <h3 className="font-bold text-blue-900 dark:text-blue-200 mb-4 flex items-center gap-2">
             📋 Histórico de Pontos ({points.pointsHistory?.length || 0})
           </h3>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
             {points.pointsHistory && points.pointsHistory.length > 0 ? (
-              points.pointsHistory.map(entry => (
-                <div key={entry.id} className="flex justify-between items-center p-3 bg-white/60 dark:bg-slate-900/50 rounded-lg">
+              points.pointsHistory.slice().reverse().map(entry => (
+                <div key={entry.id} className="flex justify-between items-center p-3 bg-white/60 dark:bg-slate-900/50 rounded-lg shadow-sm">
                   <div>
                     <p className="font-semibold text-blue-900 dark:text-blue-200 text-sm">{entry.description}</p>
                     <p className="text-xs text-blue-700 dark:text-blue-400">{new Date(entry.date).toLocaleDateString('pt-BR')}</p>
                   </div>
-                  <span className="font-bold text-blue-600 dark:text-blue-400">+{entry.points}</span>
+                  <span className={`font-bold ${entry.points > 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                    {entry.points > 0 ? '+' : ''}{entry.points}
+                  </span>
                 </div>
               ))
             ) : (
@@ -250,12 +215,19 @@ export default function ClientProfile() {
             <h3 className="font-bold text-amber-900 dark:text-amber-200 mb-4 flex items-center gap-2">
               <Gift size={20} /> Recompensas Disponíveis ({availableRewards.length})
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-48 overflow-y-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-48 overflow-y-auto pr-2">
               {availableRewards.map(reward => (
-                <div key={reward.id} className="p-3 bg-white/60 dark:bg-slate-900/50 rounded-lg">
-                  <p className="font-semibold text-amber-900 dark:text-amber-200 text-sm">{reward.name}</p>
-                  <p className="text-xs text-amber-700 dark:text-amber-400">{reward.description}</p>
-                  <p className="text-xs font-bold text-amber-600 dark:text-amber-300 mt-1">
+                <div key={reward.id} className="p-3 bg-white/60 dark:bg-slate-900/50 rounded-lg shadow-sm">
+                  <div className="flex justify-between items-start">
+                    <div>
+                        <p className="font-semibold text-amber-900 dark:text-amber-200 text-sm">{reward.name}</p>
+                        <p className="text-xs text-amber-700 dark:text-amber-400">{reward.description}</p>
+                    </div>
+                    <span className="text-xs font-bold bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200 px-2 py-1 rounded">
+                        {reward.requiredPoints} pts
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold text-amber-600 dark:text-amber-300 mt-2">
                     {reward.rewardType === 'discount' ? `${reward.percentage}% desconto` : reward.gift}
                   </p>
                 </div>

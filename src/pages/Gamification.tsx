@@ -14,15 +14,16 @@ export default function Gamification() {
   const [editingRewardId, setEditingRewardId] = useState<string | null>(null);
   const [newReward, setNewReward] = useState({ name: '', description: '', requiredPoints: 100, requiredLevel: 'bronze', rewardType: 'discount', percentage: 0, gift: '' });
 
-  // Tier Config State
-  const [tiers, setTiers] = useState<TierConfig[]>(companySettings.gamification.tiers || []);
+  // Tier Config State - Safe initialization
+  const [tiers, setTiers] = useState<TierConfig[]>(companySettings.gamification?.tiers || []);
   const [isEditingTiers, setIsEditingTiers] = useState(false);
 
   useEffect(() => {
-    if (companySettings.gamification.tiers) {
+    // Safe check for tiers existence
+    if (companySettings.gamification?.tiers) {
         setTiers(companySettings.gamification.tiers);
     }
-  }, [companySettings.gamification.tiers]);
+  }, [companySettings.gamification?.tiers]);
 
   const handleToggle = (value: boolean) => {
     setIsEnabled(value);

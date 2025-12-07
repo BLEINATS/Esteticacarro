@@ -26,6 +26,7 @@ import { formatCurrency, cn, displayDate } from '../lib/utils';
 import { useDialog } from '../context/DialogContext';
 import { useApp } from '../context/AppContext';
 import { FinancialTransaction } from '../types';
+import { Link } from 'react-router-dom';
 
 export default function Finance() {
   const { financialTransactions, addFinancialTransaction, updateFinancialTransaction, deleteFinancialTransaction, companySettings } = useApp();
@@ -426,90 +427,39 @@ export default function Finance() {
         <div className="flex gap-2">
           <button 
             onClick={() => {
-              const reportHTML = `
-                <!DOCTYPE html>
-                <html lang="pt-BR">
-                <head>
-                  <meta charset="UTF-8">
-                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                  <title>Extrato - ${companySettings.name}</title>
-                  <style>
-                    body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-                    .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                    .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1e40af; padding-bottom: 20px; }
-                    .header h1 { color: #1e40af; margin: 0; }
-                    .header p { color: #666; margin: 5px 0; }
-                    .summary { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 30px; }
-                    .summary-box { padding: 20px; background: #f9fafb; border-left: 4px solid #1e40af; border-radius: 4px; }
-                    .summary-label { font-size: 12px; color: #666; text-transform: uppercase; font-weight: bold; margin-bottom: 5px; }
-                    .summary-value { font-size: 24px; font-weight: bold; color: #1e40af; }
-                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                    table th { background: #f3f4f6; padding: 12px; text-align: left; font-weight: bold; border-bottom: 2px solid #1e40af; color: #333; }
-                    table td { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; }
-                    table tr:hover { background: #f9fafb; }
-                    .footer { text-align: center; margin-top: 30px; color: #999; font-size: 12px; }
-                    @media print { body { margin: 0; } }
-                  </style>
-                </head>
-                <body>
-                  <div class="container">
-                    <div class="header">
-                      <h1>${companySettings.name}</h1>
-                      <p>Extrato Bancário</p>
-                      <p>Período: ${startDate ? `${displayDate(startDate)} a ${displayDate(endDate || new Date().toISOString().split('T')[0])}` : 'Completo'}</p>
-                      <p>Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}</p>
-                    </div>
-                    
-                    <div class="summary">
-                      <div class="summary-box">
-                        <div class="summary-label">Saldo Inicial</div>
-                        <div class="summary-value">${formatCurrency(balanceData.initialBalance)}</div>
-                      </div>
-                      <div class="summary-box">
-                        <div class="summary-label">Movimento</div>
-                        <div class="summary-value" style="color: ${balanceData.totalMovement >= 0 ? '#16a34a' : '#dc2626'}">${balanceData.totalMovement >= 0 ? '+' : ''}${formatCurrency(balanceData.totalMovement)}</div>
-                      </div>
-                      <div class="summary-box">
-                        <div class="summary-label">Saldo Final</div>
-                        <div class="summary-value">${formatCurrency(balanceData.finalBalance)}</div>
-                      </div>
-                    </div>
-                    
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Data</th>
-                          <th>Descrição</th>
-                          <th>Categoria</th>
-                          <th style="text-align: right;">Valor</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        ${visibleTransactions.map(t => `
-                          <tr>
-                            <td>${displayDate(t.date)}</td>
-                            <td>${t.desc}</td>
-                            <td>${t.category}</td>
-                            <td style="text-align: right; font-weight: bold; color: ${t.type === 'income' ? '#16a34a' : '#dc2626'}">${t.type === 'income' ? '+' : ''}${formatCurrency(t.netAmount)}</td>
-                          </tr>
-                        `).join('')}
-                      </tbody>
-                    </table>
-                    
-                    <div class="footer">
-                      <p>Este é um documento gerado eletronicamente pelo sistema Cristal Care.</p>
-                    </div>
-                  </div>
-                </body>
-                </html>
-              `;
+              const reportData = {
+                empresa: companySettings.name,
+                dataRelatorio: new Date().toLocaleDateString('pt-BR'),
+                saldoInicial: formatCurrency(balanceData.initialBalance),
+                movimento: formatCurrency(balanceData.totalMovement),
+                saldoFinal: formatCurrency(balanceData.finalBalance),
+                transacoes: visibleTransactions.map(t => ({
+                  data: displayDate(t.date),
+                  descricao: t.desc,
+                  categoria: t.category,
+                  valor: formatCurrency(t.netAmount),
+                  tipo: t.type
+                }))
+              };
               
-              const newWindow = window.open('', '', 'width=900,height=600');
-              if (newWindow) {
-                newWindow.document.write(reportHTML);
-                newWindow.document.close();
-                setTimeout(() => newWindow.print(), 250);
-              }
+              const csvContent = [
+                `EXTRATO BANCÁRIO - ${reportData.empresa}`,
+                `Data do Relatório: ${reportData.dataRelatorio}`,
+                '',
+                `SALDO INICIAL,${reportData.saldoInicial}`,
+                `MOVIMENTO PERÍODO,${reportData.movimento}`,
+                `SALDO FINAL,${reportData.saldoFinal}`,
+                '',
+                'DATA,DESCRIÇÃO,CATEGORIA,VALOR,TIPO',
+                ...reportData.transacoes.map(t => `${t.data},${t.descricao},${t.categoria},${t.valor},${t.tipo}`)
+              ].join('\n');
+              
+              const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+              const link = document.createElement('a');
+              const url = URL.createObjectURL(blob);
+              link.setAttribute('href', url);
+              link.setAttribute('download', `extrato_${new Date().toISOString().split('T')[0]}.csv`);
+              link.click();
             }}
             className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
           >
@@ -556,12 +506,24 @@ export default function Finance() {
             {/* EXTRATO ESTILO BANCO COM SALDO INICIAL E FINAL */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Saldo Inicial */}
-              <div className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm">
+              <div className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm relative group">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs uppercase font-bold text-slate-500 dark:text-slate-400 mb-1">Saldo Inicial</p>
+                    <div className="flex items-center gap-2 mb-1">
+                        <p className="text-xs uppercase font-bold text-slate-500 dark:text-slate-400">Saldo Inicial</p>
+                        <Link 
+                            to="/settings" 
+                            state={{ activeTab: 'general' }}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-400 hover:text-blue-600"
+                            title="Configurar Saldo Inicial"
+                        >
+                            <Pencil size={12} />
+                        </Link>
+                    </div>
                     <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(balanceData.initialBalance)}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Período anterior</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                        {startDate ? 'Calculado até o período anterior' : 'Configurado em Ajustes'}
+                    </p>
                   </div>
                   <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400">
                     <Landmark size={24} />

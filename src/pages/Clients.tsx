@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
-import { Search, UserPlus, Filter, TrendingUp, Users, AlertCircle } from 'lucide-react';
+import { Search, UserPlus, Filter, TrendingUp, Users, AlertCircle, Trash2, Eye, Calendar } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Client } from '../types';
 import { cn, formatCurrency } from '../lib/utils';
 import ClientModal from '../components/ClientModal';
 import ClientDetailsModal from '../components/ClientDetailsModal';
+import { useDialog } from '../context/DialogContext';
 
 export default function Clients() {
-  const { clients } = useApp();
+  const { clients, deleteClient } = useApp();
+  const { showConfirm, showAlert } = useDialog();
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null); // Alterado para guardar ID
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
 
   const filteredClients = clients.filter(client => 
     client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -18,10 +21,50 @@ export default function Clients() {
     client.vehicles.some(v => v.plate.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  // Busca o cliente atualizado do contexto usando o ID selecionado
+  const activeClient = selectedClientId ? clients.find(c => c.id === selectedClientId) : null;
+
+  const handleDelete = async (client: Client, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    const confirmed = await showConfirm({
+        title: 'Excluir Cliente',
+        message: `Tem certeza que deseja excluir ${client.name}? O histórico de serviços será mantido, mas o cliente não aparecerá mais na lista ativa.`,
+        type: 'danger',
+        confirmText: 'Sim, Excluir'
+    });
+
+    if (confirmed) {
+        deleteClient(client.id);
+        await showAlert({
+            title: 'Cliente Excluído',
+            message: 'O cliente foi removido com sucesso.',
+            type: 'success'
+        });
+    }
+  };
+
+  const handleCreateNew = () => {
+    setEditingClient(null);
+    setIsCreateModalOpen(true);
+  };
+
   return (
     <div className="space-y-6">
-      {isCreateModalOpen && <ClientModal onClose={() => setIsCreateModalOpen(false)} />}
-      {selectedClient && <ClientDetailsModal client={selectedClient} onClose={() => setSelectedClient(null)} />}
+      {isCreateModalOpen && (
+        <ClientModal 
+            client={editingClient} 
+            onClose={() => setIsCreateModalOpen(false)} 
+        />
+      )}
+      
+      {/* Renderiza o modal apenas se tivermos um cliente ativo válido */}
+      {activeClient && (
+        <ClientDetailsModal 
+            client={activeClient} 
+            onClose={() => setSelectedClientId(null)} 
+        />
+      )}
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -29,7 +72,7 @@ export default function Clients() {
           <p className="text-slate-500 dark:text-slate-400">Gestão de relacionamento e ciclo de vida.</p>
         </div>
         <button 
-          onClick={() => setIsCreateModalOpen(true)}
+          onClick={handleCreateNew}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm transition-colors"
         >
           <UserPlus size={18} />
@@ -57,7 +100,7 @@ export default function Clients() {
             <span className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400">LTV Médio</span>
           </div>
           <p className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
-            {formatCurrency(clients.reduce((acc, c) => acc + c.ltv, 0) / (clients.length || 1))}
+            {formatCurrency(clients.reduce((acc, c) => acc + (c.ltv || 0), 0) / (clients.length || 1))}
           </p>
         </div>
 
@@ -100,6 +143,7 @@ export default function Clients() {
               <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-xs sm:text-sm text-slate-700 dark:text-slate-300">Cliente</th>
               <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-xs sm:text-sm text-slate-700 dark:text-slate-300">Veículos</th>
               <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-xs sm:text-sm text-slate-700 dark:text-slate-300">Total Gasto</th>
+              <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-xs sm:text-sm text-slate-700 dark:text-slate-300 text-center">Visitas</th>
               <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-xs sm:text-sm text-slate-700 dark:text-slate-300">Última Visita</th>
               <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-xs sm:text-sm text-slate-700 dark:text-slate-300">Status</th>
               <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-xs sm:text-sm text-slate-700 dark:text-slate-300 text-right">Ações</th>
@@ -109,8 +153,8 @@ export default function Clients() {
             {filteredClients.map((client) => (
               <tr 
                 key={client.id} 
-                onClick={() => setSelectedClient(client)}
-                className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                onClick={() => setSelectedClientId(client.id)}
+                className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group"
               >
                 <td className="px-4 sm:px-6 py-3 sm:py-4">
                   <div className="flex items-center gap-2 sm:gap-3">
@@ -128,7 +172,10 @@ export default function Clients() {
                     ? `${client.vehicles[0].model.substring(0, 15)} ${client.vehicles.length > 1 ? `+${client.vehicles.length - 1}` : ''}`
                     : 'Sem veículo'}
                 </td>
-                <td className="px-4 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium text-slate-900 dark:text-white">{formatCurrency(client.ltv)}</td>
+                <td className="px-4 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium text-slate-900 dark:text-white">{formatCurrency(client.ltv || 0)}</td>
+                <td className="px-4 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-slate-900 dark:text-white text-center font-bold">
+                  {client.visitCount || 0}
+                </td>
                 <td className="px-4 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
                   {new Date(client.lastVisit).toLocaleDateString('pt-BR')}
                 </td>
@@ -143,7 +190,22 @@ export default function Clients() {
                   </span>
                 </td>
                 <td className="px-4 sm:px-6 py-3 sm:py-4 text-right">
-                  <button className="text-xs sm:text-sm text-blue-600 dark:text-blue-400 font-medium hover:underline">Ver Detalhes</button>
+                  <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); setSelectedClientId(client.id); }}
+                        className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors" 
+                        title="Ver Detalhes"
+                    >
+                        <Eye size={16} />
+                    </button>
+                    <button 
+                        onClick={(e) => handleDelete(client, e)}
+                        className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" 
+                        title="Excluir"
+                    >
+                        <Trash2 size={16} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -157,7 +219,7 @@ export default function Clients() {
           filteredClients.map((client) => (
             <div 
               key={client.id}
-              onClick={() => setSelectedClient(client)}
+              onClick={() => setSelectedClientId(client.id)}
               className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
             >
               <div className="flex items-start justify-between gap-2 mb-2">
@@ -179,25 +241,39 @@ export default function Clients() {
                   {client.status === 'active' ? 'Ativo' : client.status === 'churn_risk' ? 'Risco' : 'Inativo'}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs mb-2">
-                <div>
+              <div className="grid grid-cols-3 gap-2 text-xs mb-2">
+                <div className="col-span-3">
                   <p className="text-slate-500 dark:text-slate-400">Veículos</p>
                   <p className="font-medium text-slate-900 dark:text-white">{client.vehicles.length > 0 ? client.vehicles[0].model : 'Sem veículo'}</p>
                 </div>
                 <div>
                   <p className="text-slate-500 dark:text-slate-400">Total Gasto</p>
-                  <p className="font-medium text-slate-900 dark:text-white">{formatCurrency(client.ltv)}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500 dark:text-slate-400">Última Visita</p>
-                  <p className="font-medium text-slate-900 dark:text-white">{new Date(client.lastVisit).toLocaleDateString('pt-BR')}</p>
+                  <p className="font-medium text-slate-900 dark:text-white">{formatCurrency(client.ltv || 0)}</p>
                 </div>
                 <div>
                   <p className="text-slate-500 dark:text-slate-400">Visitas</p>
-                  <p className="font-medium text-slate-900 dark:text-white">{client.visitCount}</p>
+                  <p className="font-medium text-slate-900 dark:text-white">{client.visitCount || 0}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 dark:text-slate-400">Última</p>
+                  <p className="font-medium text-slate-900 dark:text-white">{new Date(client.lastVisit).toLocaleDateString('pt-BR')}</p>
                 </div>
               </div>
-              <button className="w-full text-xs text-blue-600 dark:text-blue-400 font-medium py-1 hover:underline">Ver Detalhes</button>
+              
+              <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                 <button 
+                    onClick={(e) => { e.stopPropagation(); setSelectedClientId(client.id); }}
+                    className="text-xs text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1"
+                 >
+                    <Eye size={14} /> Detalhes
+                 </button>
+                 <button 
+                    onClick={(e) => handleDelete(client, e)}
+                    className="text-xs text-red-600 dark:text-red-400 font-medium flex items-center gap-1"
+                 >
+                    <Trash2 size={14} /> Excluir
+                 </button>
+              </div>
             </div>
           ))
         ) : (

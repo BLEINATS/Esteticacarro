@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Package, AlertTriangle, Search, Plus, Info, Trash2, Pencil } from 'lucide-react';
+import { Package, AlertTriangle, Search, Plus, Info, Trash2, Pencil, CheckCircle2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatCurrency, cn } from '../lib/utils';
 import InventoryModal from '../components/InventoryModal';
@@ -19,6 +19,11 @@ export default function Inventory() {
     const matchesFilter = filterStatus === 'all' || item.status === filterStatus;
     return matchesSearch && matchesFilter;
   });
+
+  // Lógica de Inteligência de Estoque (Dados Reais)
+  const criticalItem = inventory.find(i => i.status === 'critical');
+  const warningItem = inventory.find(i => i.status === 'warning');
+  const alertItem = criticalItem || warningItem;
 
   const handleEdit = (item: InventoryItem) => {
     setEditingItem(item);
@@ -72,17 +77,37 @@ export default function Inventory() {
         </button>
       </div>
 
-      {/* AI Insights / Alerts */}
-      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-3">
-        <Info className="text-amber-600 dark:text-amber-400 mt-0.5" size={20} />
-        <div>
-          <h4 className="font-bold text-amber-800 dark:text-amber-300 text-sm">Inteligência de Estoque</h4>
-          <p className="text-amber-700 dark:text-amber-400 text-sm mt-1">
-            O sistema detectou um alto consumo de <strong>Verniz Alto Sólidos</strong> nesta semana. 
-            Considere antecipar a compra para evitar paradas na Funilaria.
-          </p>
+      {/* AI Insights / Alerts - DYNAMIC WITH REAL DATA */}
+      {alertItem ? (
+        <div className={cn(
+          "border rounded-xl p-4 flex items-start gap-3 transition-colors",
+          alertItem.status === 'critical' 
+            ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800" 
+            : "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800"
+        )}>
+          <Info className={cn("mt-0.5 flex-shrink-0", alertItem.status === 'critical' ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400")} size={20} />
+          <div>
+            <h4 className={cn("font-bold text-sm", alertItem.status === 'critical' ? "text-red-800 dark:text-red-300" : "text-amber-800 dark:text-amber-300")}>
+              Inteligência de Estoque
+            </h4>
+            <p className={cn("text-sm mt-1", alertItem.status === 'critical' ? "text-red-700 dark:text-red-400" : "text-amber-700 dark:text-amber-400")}>
+              O sistema detectou um alto consumo de <strong>{alertItem.name}</strong>. 
+              Restam apenas <strong>{alertItem.stock} {alertItem.unit}</strong> (Mínimo: {alertItem.minStock}). 
+              Considere antecipar a compra para evitar paradas.
+            </p>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 flex items-start gap-3">
+          <CheckCircle2 className="text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" size={20} />
+          <div>
+            <h4 className="font-bold text-green-800 dark:text-green-300 text-sm">Estoque Saudável</h4>
+            <p className="text-green-700 dark:text-green-400 text-sm mt-1">
+              Todos os itens estão com níveis adequados. Nenhuma ação de compra necessária no momento.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row gap-4 transition-colors">
         <div className="relative flex-1">
