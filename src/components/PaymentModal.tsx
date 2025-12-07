@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, QrCode, Copy, CheckCircle2, Loader2, CreditCard, Smartphone, Lock, Calendar, User } from 'lucide-react';
+import { X, QrCode, Copy, CheckCircle2, Loader2, CreditCard, Lock, Calendar, User, ShieldCheck, Globe } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { createPixCharge, createCreditCardCharge, AsaasPayment } from '../services/asaas';
+import { createStripePixPaymentIntent, createStripeCardPaymentIntent } from '../services/stripe';
 import QRCode from 'qrcode';
 
 interface PaymentModalProps {
@@ -10,9 +11,10 @@ interface PaymentModalProps {
   amount: number;
   description: string;
   onSuccess: () => void;
+  gateway?: 'asaas' | 'stripe'; // Prop para definir o gateway
 }
 
-export default function PaymentModal({ isOpen, onClose, amount, description, onSuccess }: PaymentModalProps) {
+export default function PaymentModal({ isOpen, onClose, amount, description, onSuccess, gateway = 'asaas' }: PaymentModalProps) {
   const [step, setStep] = useState<'method' | 'card_details' | 'processing' | 'payment' | 'success'>('method');
   const [paymentData, setPaymentData] = useState<AsaasPayment | null>(null);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
@@ -51,11 +53,18 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
   const handleSelectPix = async () => {
     setStep('processing');
     try {
-      const data = await createPixCharge(amount, description);
+      let data;
+      // Lógica de seleção do Gateway
+      if (gateway === 'stripe') {
+        data = await createStripePixPaymentIntent(amount, description);
+      } else {
+        data = await createPixCharge(amount, description);
+      }
       setPaymentData(data);
       setStep('payment');
     } catch (error) {
       console.error("Erro ao gerar Pix", error);
+      setError("Falha ao conectar com o gateway de pagamento.");
       setStep('method');
     }
   };
@@ -104,7 +113,12 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
     setStep('processing');
 
     try {
-      await createCreditCardCharge(amount, cardData, description);
+      // Lógica de seleção do Gateway para Cartão
+      if (gateway === 'stripe') {
+        await createStripeCardPaymentIntent(amount, cardData, description);
+      } else {
+        await createCreditCardCharge(amount, cardData, description);
+      }
       setStep('success');
       setTimeout(() => {
         onSuccess();
@@ -126,7 +140,18 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
         <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
           <div>
             <h3 className="font-bold text-lg text-slate-900 dark:text-white">Checkout Seguro</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{description}</p>
+            <div className="flex items-center gap-1.5 mt-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Processado por:</span>
+                <span className={cn(
+                    "text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1",
+                    gateway === 'stripe' 
+                        ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300" 
+                        : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                )}>
+                    {gateway === 'stripe' ? <Globe size={10} /> : <ShieldCheck size={10} />}
+                    {gateway === 'stripe' ? 'Stripe' : 'Asaas'}
+                </span>
+            </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors">
             <X size={20} />
@@ -142,7 +167,14 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
               <div className="text-center mb-6">
                 <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Valor a pagar</p>
                 <p className="text-3xl font-bold text-slate-900 dark:text-white">{formatCurrency(amount)}</p>
+                <p className="text-xs text-slate-400 mt-1">{description}</p>
               </div>
+
+              {error && (
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-xs text-center">
+                    {error}
+                </div>
+              )}
 
               <div className="space-y-3">
                 <button 
@@ -179,7 +211,7 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
               </div>
               
               <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-400">
-                <Lock size={12} /> Pagamento processado por Asaas
+                <Lock size={12} /> Ambiente criptografado
               </div>
             </div>
           )}
@@ -277,7 +309,7 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
             <div className="flex flex-col items-center justify-center py-12 animate-in fade-in">
               <Loader2 size={48} className="text-blue-600 animate-spin mb-4" />
               <p className="font-bold text-slate-900 dark:text-white">Processando pagamento...</p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Validando transação segura.</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Conectando com {gateway === 'stripe' ? 'Stripe' : 'Asaas'}...</p>
             </div>
           )}
 

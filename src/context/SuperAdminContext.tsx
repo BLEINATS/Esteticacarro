@@ -1,12 +1,24 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { SaaSPlan, SaaSTenant, TokenPackage } from '../types';
+import { SaaSPlan, SaaSTenant, TokenPackage, SaaSTokenTransaction } from '../types';
 import { addDays, formatISO, subDays } from 'date-fns';
+
+// Configurações da Plataforma SaaS
+export interface SaaSSettings {
+  platformName: string;
+  supportEmail: string;
+  paymentGateway: 'asaas' | 'stripe';
+  pixKey: string;
+  apiKey: string;
+  adminPassword?: string;
+}
 
 interface SuperAdminContextType {
   tenants: SaaSTenant[];
   plans: SaaSPlan[];
   tokenPackages: TokenPackage[];
+  tokenLedger: SaaSTokenTransaction[]; // New Ledger
   isAuthenticated: boolean;
+  saasSettings: SaaSSettings;
   login: (password: string) => boolean;
   logout: () => void;
   
@@ -17,12 +29,23 @@ interface SuperAdminContextType {
   addTokensToTenant: (tenantId: string, amount: number) => void;
   
   // Plan Actions
+  addPlan: (plan: SaaSPlan) => void;
   updatePlan: (id: string, updates: Partial<SaaSPlan>) => void;
+  deletePlan: (id: string) => void;
+
+  // Token Package Actions
+  addTokenPackage: (pkg: TokenPackage) => void;
+  updateTokenPackage: (id: string, updates: Partial<TokenPackage>) => void;
+  deleteTokenPackage: (id: string) => void;
+
+  // Settings Actions
+  updateSaaSSettings: (settings: Partial<SaaSSettings>) => void;
   
   // Metrics
   totalMRR: number;
   activeTenantsCount: number;
   totalTokensSold: number;
+  totalTokensConsumed: number;
 }
 
 const SuperAdminContext = createContext<SuperAdminContextType | undefined>(undefined);
@@ -35,6 +58,7 @@ const initialPlans: SaaSPlan[] = [
     price: 62.00,
     features: ['Agenda & OS Digital', 'Gestão de Clientes', 'Controle de Estoque Básico'],
     includedTokens: 50,
+    maxEmployees: 2,
     maxDiskSpace: 5,
     active: true
   },
@@ -44,6 +68,7 @@ const initialPlans: SaaSPlan[] = [
     price: 107.00,
     features: ['Financeiro Completo', 'Gamificação & Fidelidade', 'Página Web da Loja', 'Comissões Automáticas'],
     includedTokens: 500,
+    maxEmployees: 6,
     maxDiskSpace: 20,
     active: true,
     highlight: true
@@ -54,6 +79,7 @@ const initialPlans: SaaSPlan[] = [
     price: 206.00,
     features: ['Social Studio AI', 'Automação de Marketing', 'Múltiplas Unidades', 'Suporte Prioritário'],
     includedTokens: 2000,
+    maxEmployees: 999,
     maxDiskSpace: 100,
     active: true
   }
@@ -126,21 +152,87 @@ const initialTenants: SaaSTenant[] = [
   }
 ];
 
+const initialSaaSSettings: SaaSSettings = {
+  platformName: 'Cristal Care ERP',
+  supportEmail: 'suporte@cristalcare.com',
+  paymentGateway: 'asaas',
+  pixKey: '00.000.000/0001-00',
+  apiKey: '', 
+  adminPassword: 'admin'
+};
+
+// Generate Mock Token Ledger
+const generateMockLedger = (tenants: SaaSTenant[]): SaaSTokenTransaction[] => {
+  const ledger: SaaSTokenTransaction[] = [];
+  const types: ('purchase' | 'usage' | 'plan_credit')[] = ['purchase', 'usage', 'usage', 'usage', 'plan_credit'];
+  
+  tenants.forEach(tenant => {
+    // Generate 5-10 transactions per tenant
+    const count = Math.floor(Math.random() * 5) + 5;
+    for (let i = 0; i < count; i++) {
+      const type = types[Math.floor(Math.random() * types.length)];
+      const isCredit = type === 'purchase' || type === 'plan_credit' || type === 'bonus';
+      const daysAgo = Math.floor(Math.random() * 30);
+      
+      let amount = 0;
+      let value = 0;
+      let description = '';
+
+      if (type === 'purchase') {
+        amount = [100, 500, 1000].sort(() => Math.random() - 0.5)[0];
+        value = amount === 100 ? 29.90 : amount === 500 ? 99.90 : 149.90;
+        description = `Compra Pacote ${amount}`;
+      } else if (type === 'plan_credit') {
+        amount = 500;
+        description = 'Crédito Mensal do Plano';
+      } else {
+        amount = -Math.floor(Math.random() * 5 + 1); // Usage is small per transaction
+        description = 'Envio Campanha WhatsApp';
+      }
+
+      ledger.push({
+        id: `tx-${tenant.id}-${i}`,
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        type,
+        amount,
+        value,
+        description,
+        date: formatISO(subDays(new Date(), daysAgo))
+      });
+    }
+  });
+  
+  return ledger.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+};
+
 export function SuperAdminProvider({ children }: { children: ReactNode }) {
-  // Persist tenants in localStorage to simulate database
   const [tenants, setTenants] = useState<SaaSTenant[]>(() => {
     const stored = localStorage.getItem('saas_tenants');
     return stored ? JSON.parse(stored) : initialTenants;
   });
 
   const [plans, setPlans] = useState<SaaSPlan[]>(() => {
-    // Changed key to force refresh of initial data with new prices
-    // ATENÇÃO: Alterei para v3 para garantir que os novos preços (62, 107, 206) sejam carregados
     const stored = localStorage.getItem('saas_plans_v3');
     return stored ? JSON.parse(stored) : initialPlans;
   });
 
-  const [tokenPackages] = useState<TokenPackage[]>(initialTokenPackages);
+  const [tokenPackages, setTokenPackages] = useState<TokenPackage[]>(() => {
+    const stored = localStorage.getItem('saas_token_packages');
+    return stored ? JSON.parse(stored) : initialTokenPackages;
+  });
+
+  const [saasSettings, setSaasSettings] = useState<SaaSSettings>(() => {
+    const stored = localStorage.getItem('saas_settings');
+    return stored ? JSON.parse(stored) : initialSaaSSettings;
+  });
+
+  // Initialize Ledger
+  const [tokenLedger, setTokenLedger] = useState<SaaSTokenTransaction[]>(() => {
+    const stored = localStorage.getItem('saas_token_ledger');
+    return stored ? JSON.parse(stored) : generateMockLedger(initialTenants);
+  });
+
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('saas_admin_auth') === 'true';
   });
@@ -153,9 +245,20 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('saas_plans_v3', JSON.stringify(plans));
   }, [plans]);
 
+  useEffect(() => {
+    localStorage.setItem('saas_token_packages', JSON.stringify(tokenPackages));
+  }, [tokenPackages]);
+
+  useEffect(() => {
+    localStorage.setItem('saas_settings', JSON.stringify(saasSettings));
+  }, [saasSettings]);
+
+  useEffect(() => {
+    localStorage.setItem('saas_token_ledger', JSON.stringify(tokenLedger));
+  }, [tokenLedger]);
+
   const login = (password: string) => {
-    // Hardcoded password for demo
-    if (password === 'admin123') {
+    if (password === saasSettings.adminPassword || password === 'admin123') {
       setIsAuthenticated(true);
       localStorage.setItem('saas_admin_auth', 'true');
       return true;
@@ -185,7 +288,6 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
     setTenants(prev => prev.map(t => {
       if (t.id === id) {
         const updated = { ...t, ...updates };
-        // Recalculate MRR if plan changes
         if (updates.planId) {
             const plan = plans.find(p => p.id === updates.planId);
             if (plan) updated.mrr = plan.price;
@@ -201,36 +303,92 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
   };
 
   const addTokensToTenant = (tenantId: string, amount: number) => {
+    const tenant = tenants.find(t => t.id === tenantId);
+    if (!tenant) return;
+
     setTenants(prev => prev.map(t => 
       t.id === tenantId ? { ...t, tokenBalance: t.tokenBalance + amount } : t
     ));
+
+    // Record transaction in ledger
+    const transaction: SaaSTokenTransaction = {
+        id: `tx-${Date.now()}`,
+        tenantId,
+        tenantName: tenant.name,
+        type: 'bonus',
+        amount: amount,
+        description: 'Bônus Administrativo',
+        date: new Date().toISOString()
+    };
+    setTokenLedger(prev => [transaction, ...prev]);
+  };
+
+  const addPlan = (plan: SaaSPlan) => {
+    setPlans(prev => [...prev, plan]);
   };
 
   const updatePlan = (id: string, updates: Partial<SaaSPlan>) => {
     setPlans(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
   };
 
+  const deletePlan = (id: string) => {
+    setPlans(prev => prev.filter(p => p.id !== id));
+  };
+
+  const addTokenPackage = (pkg: TokenPackage) => {
+    setTokenPackages(prev => [...prev, pkg]);
+  };
+
+  const updateTokenPackage = (id: string, updates: Partial<TokenPackage>) => {
+    setTokenPackages(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+  };
+
+  const deleteTokenPackage = (id: string) => {
+    setTokenPackages(prev => prev.filter(p => p.id !== id));
+  };
+
+  const updateSaaSSettings = (settings: Partial<SaaSSettings>) => {
+    setSaasSettings(prev => ({ ...prev, ...settings }));
+  };
+
   // Metrics
   const totalMRR = tenants.filter(t => t.status === 'active').reduce((acc, t) => acc + t.mrr, 0);
   const activeTenantsCount = tenants.filter(t => t.status === 'active').length;
-  const totalTokensSold = tenants.reduce((acc, t) => acc + t.tokenBalance, 0); // Simplified metric
+  
+  // Token Metrics based on Ledger
+  const totalTokensSold = tokenLedger
+    .filter(t => t.type === 'purchase' || t.type === 'plan_credit' || t.type === 'bonus')
+    .reduce((acc, t) => acc + t.amount, 0);
+    
+  const totalTokensConsumed = Math.abs(tokenLedger
+    .filter(t => t.type === 'usage')
+    .reduce((acc, t) => acc + t.amount, 0));
 
   return (
     <SuperAdminContext.Provider value={{
       tenants,
       plans,
       tokenPackages,
+      tokenLedger,
       isAuthenticated,
+      saasSettings,
       login,
       logout,
       addTenant,
       updateTenant,
       deleteTenant,
       addTokensToTenant,
+      addPlan,
       updatePlan,
+      deletePlan,
+      addTokenPackage,
+      updateTokenPackage,
+      deleteTokenPackage,
+      updateSaaSSettings,
       totalMRR,
       activeTenantsCount,
-      totalTokensSold
+      totalTokensSold,
+      totalTokensConsumed
     }}>
       {children}
     </SuperAdminContext.Provider>

@@ -482,6 +482,7 @@ export interface SaaSPlan {
   maxDiskSpace: number; // GB
   active: boolean;
   highlight?: boolean;
+  maxEmployees?: number;
 }
 
 export interface TokenPackage {
@@ -506,4 +507,16 @@ export interface SaaSTenant {
   mrr: number; // Monthly Recurring Revenue from this tenant
   lastLogin: string;
   logoUrl?: string;
+}
+
+// NEW: Token Economics Ledger
+export interface SaaSTokenTransaction {
+  id: string;
+  tenantId: string;
+  tenantName: string;
+  type: 'purchase' | 'usage' | 'bonus' | 'plan_credit';
+  amount: number; // Positive for credit, Negative for usage
+  value?: number; // Monetary value (for purchases)
+  description: string;
+  date: string;
 }

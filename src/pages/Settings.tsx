@@ -36,7 +36,7 @@ export default function Settings() {
     changePlan
   } = useApp();
   
-  const { plans, tokenPackages } = useSuperAdmin();
+  const { plans, tokenPackages, saasSettings } = useSuperAdmin(); // Added saasSettings
   const { showConfirm, showAlert } = useDialog();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<'general' | 'billing' | 'integrations' | 'preferences' | 'landing'>('general');
@@ -73,6 +73,8 @@ export default function Settings() {
     }
   }, [location.state]);
 
+  // ... (Rest of the component logic remains the same until PaymentModal props) ...
+  
   // --- CEP LOGIC ---
   const fetchAddress = async (cep: string) => {
     const cleanCep = cep.replace(/\D/g, '');
@@ -396,7 +398,7 @@ export default function Settings() {
         />
       )}
 
-      {/* PAYMENT MODAL */}
+      {/* PAYMENT MODAL - Passando o gateway configurado */}
       {isPaymentModalOpen && pendingTransaction && (
         <PaymentModal 
             isOpen={isPaymentModalOpen}
@@ -404,9 +406,11 @@ export default function Settings() {
             amount={pendingTransaction.amount}
             description={pendingTransaction.description}
             onSuccess={handlePaymentSuccess}
+            gateway={saasSettings.paymentGateway} // Passando a configuração do Super Admin
         />
       )}
 
+      {/* ... Rest of the component ... */}
       {/* PLAN SELECTION MODAL */}
       {isPlanModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -481,7 +485,10 @@ export default function Settings() {
                                 <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3 mb-4 space-y-2">
                                     <div className="flex justify-between items-center text-sm">
                                         <span className="text-slate-500 dark:text-slate-400 flex items-center gap-2"><MessageSquare size={14} /> Tokens Mensais</span>
-                                        <span className="font-bold text-slate-900 dark:text-white">{plan.includedTokens}</span>
+                                        <div className="text-right">
+                                            <span className="font-bold text-slate-900 dark:text-white block">{plan.includedTokens}</span>
+                                            <span className="text-[10px] text-slate-400 font-normal">(Não cumulativo)</span>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -513,7 +520,7 @@ export default function Settings() {
         </div>
       )}
 
-      {/* ... (Rest of the Settings page content) ... */}
+      {/* ... Rest of the component (Header, Tabs, Content) ... */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 flex-shrink-0">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Configurações</h2>

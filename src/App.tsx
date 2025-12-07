@@ -29,6 +29,8 @@ import SuperAdminLayout from './pages/super-admin/SuperAdminLayout';
 import SaaSDashboard from './pages/super-admin/SaaSDashboard';
 import Tenants from './pages/super-admin/Tenants';
 import Plans from './pages/super-admin/Plans';
+import SaaSMetrics from './pages/super-admin/SaaSMetrics';
+import SuperAdminSettings from './pages/super-admin/SuperAdminSettings';
 
 function App() {
   return (
@@ -77,6 +79,8 @@ function App() {
                 <Route path="dashboard" element={<SaaSDashboard />} />
                 <Route path="tenants" element={<Tenants />} />
                 <Route path="plans" element={<Plans />} />
+                <Route path="metrics" element={<SaaSMetrics />} />
+                <Route path="settings" element={<SuperAdminSettings />} />
                 <Route index element={<SaaSDashboard />} />
               </Route>
 
