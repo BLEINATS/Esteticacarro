@@ -119,7 +119,7 @@ export default function Dashboard() {
   const ratedOS = workOrders.filter(os => os.npsScore !== undefined);
   const avgNPS = ratedOS.length > 0 
     ? (ratedOS.reduce((acc, os) => acc + (os.npsScore || 0), 0) / ratedOS.length).toFixed(1)
-    : 'N/A';
+    : '0';
 
   // 5. Visitas do Mês (Novas OS criadas este mês)
   const currentMonth = new Date().getMonth();

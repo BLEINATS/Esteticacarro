@@ -3,6 +3,7 @@ import { X, User, Phone, Mail, MapPin, Save, FileText, Car, Plus, Trash2, Search
 import { useApp } from '../context/AppContext';
 import { Client, Vehicle } from '../types';
 import { cn } from '../lib/utils';
+import { useDialog } from '../context/DialogContext';
 
 interface ClientModalProps {
   client?: Client | null;
@@ -19,6 +20,7 @@ interface VehicleForm {
 
 export default function ClientModal({ client, onClose }: ClientModalProps) {
   const { addClient, updateClient, addVehicle } = useApp();
+  const { showAlert } = useDialog();
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -35,6 +37,7 @@ export default function ClientModal({ client, onClose }: ClientModalProps) {
   });
   
   const [isLoadingCep, setIsLoadingCep] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [vehicles, setVehicles] = useState<VehicleForm[]>([]);
   const [newVehicle, setNewVehicle] = useState<VehicleForm>({
     brand: '',
@@ -112,8 +115,9 @@ export default function ClientModal({ client, onClose }: ClientModalProps) {
     setFormData(prev => ({ ...prev, phone: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true);
     
     // Format full address string
     const fullAddress = `${formData.street}, ${formData.number} - ${formData.neighborhood}, ${formData.city} - ${formData.state}, ${formData.cep}`;
@@ -123,37 +127,50 @@ export default function ClientModal({ client, onClose }: ClientModalProps) {
         address: fullAddress
     };
 
-    if (client) {
-        // Edit Mode
-        updateClient(client.id, clientData);
-    } else {
-        // Create Mode
-        const newClientId = `c-${Date.now()}`;
-        const newClientData: Client = {
-            id: newClientId,
-            ...clientData,
-            vehicles: [], 
-            ltv: 0,
-            lastVisit: new Date().toISOString(),
-            visitCount: 0,
-            status: 'active',
-            segment: 'new'
-        };
-        addClient(newClientData);
-
-        // Add vehicles if any were added in the form
-        vehicles.forEach(v => {
-            addVehicle(newClientId, {
-                id: `v-${Date.now()}-${Math.random()}`,
-                model: `${v.brand} ${v.model}`,
-                plate: v.plate,
-                color: v.color,
-                year: v.year,
-                size: 'medium' // Default size
+    try {
+        if (client) {
+            // Edit Mode
+            await updateClient(client.id, clientData);
+            await showAlert({ title: 'Sucesso', message: 'Cliente atualizado!', type: 'success' });
+        } else {
+            // Create Mode
+            const newClient = await addClient({
+                ...clientData,
+                ltv: 0,
+                visitCount: 0,
+                status: 'active',
+                segment: 'new'
             });
+
+            if (!newClient) {
+                throw new Error("Erro ao criar cliente. Verifique sua conexão ou tente recarregar a página.");
+            }
+
+            // Add vehicles if any were added in the form AND we have a valid client ID
+            if (newClient && newClient.id) {
+                for (const v of vehicles) {
+                    await addVehicle(newClient.id, {
+                        model: `${v.brand} ${v.model}`,
+                        plate: v.plate,
+                        color: v.color,
+                        year: v.year,
+                        size: 'medium' // Default size
+                    });
+                }
+            }
+            await showAlert({ title: 'Sucesso', message: 'Cliente cadastrado com sucesso!', type: 'success' });
+        }
+        onClose();
+    } catch (error: any) {
+        console.error("Error saving client:", error);
+        await showAlert({ 
+            title: 'Erro ao Salvar', 
+            message: error.message || 'Não foi possível salvar os dados. Tente novamente.', 
+            type: 'error' 
         });
+    } finally {
+        setIsSaving(false);
     }
-    onClose();
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -477,16 +494,18 @@ export default function ClientModal({ client, onClose }: ClientModalProps) {
             <button 
               type="button" 
               onClick={onClose}
-              className="flex-1 px-4 py-3 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              disabled={isSaving}
+              className="flex-1 px-4 py-3 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
             >
               Cancelar
             </button>
             <button 
               type="submit"
-              className="flex-1 px-4 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 transition-all flex items-center justify-center gap-2"
+              disabled={isSaving}
+              className="flex-1 px-4 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              <Save size={20} />
-              Salvar Cliente
+              {isSaving ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+              {isSaving ? 'Salvando...' : 'Salvar Cliente'}
             </button>
           </div>
 

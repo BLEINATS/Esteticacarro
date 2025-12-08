@@ -6,7 +6,7 @@ import {
   Globe, ExternalLink, Image as ImageIcon,
   Instagram, Facebook, ChevronRight, Moon, Sun, Bell, Globe2,
   Mail, ShieldAlert, DollarSign, Monitor, AlertCircle, MessageSquare, History, MapPin,
-  Eye, EyeOff, Edit2, Plus, Copy, Share2, Check, X, Calendar, Info
+  Eye, EyeOff, Edit2, Plus, Copy, Share2, Check, X, Calendar, Info, Lock, User, Download
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useSuperAdmin } from '../context/SuperAdminContext';
@@ -16,6 +16,8 @@ import { useDialog } from '../context/DialogContext';
 import ServiceModal from '../components/ServiceModal';
 import PaymentModal from '../components/PaymentModal';
 import { ServiceCatalogItem, SaaSPlan } from '../types';
+import { supabase } from '../lib/supabase';
+import QRCode from 'qrcode';
 
 export default function Settings() {
   const { 
@@ -33,19 +35,25 @@ export default function Settings() {
     clients,
     workOrders,
     updateClient,
-    changePlan
+    changePlan,
+    ownerUser
   } = useApp();
   
-  const { plans, tokenPackages, saasSettings } = useSuperAdmin(); // Added saasSettings
+  const { plans, tokenPackages, saasSettings } = useSuperAdmin();
   const { showConfirm, showAlert } = useDialog();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState<'general' | 'billing' | 'integrations' | 'preferences' | 'landing'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'billing' | 'integrations' | 'preferences' | 'landing' | 'account'>('general');
   
   // Form States
   const [formData, setFormData] = useState(companySettings);
   const [isSaved, setIsSaved] = useState(false);
   const [isLoadingCep, setIsLoadingCep] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
+
+  // Password Change State
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Service Modal State
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
@@ -60,7 +68,7 @@ export default function Settings() {
     type: 'token' | 'plan';
     amount: number;
     description: string;
-    data?: any; // Extra data like token amount or plan ID
+    data?: any;
   } | null>(null);
 
   useEffect(() => {
@@ -73,8 +81,6 @@ export default function Settings() {
     }
   }, [location.state]);
 
-  // ... (Rest of the component logic remains the same until PaymentModal props) ...
-  
   // --- CEP LOGIC ---
   const fetchAddress = async (cep: string) => {
     const cleanCep = cep.replace(/\D/g, '');
@@ -155,6 +161,32 @@ export default function Settings() {
     });
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 3000);
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (newPassword.length < 6) {
+        await showAlert({ title: 'Erro', message: 'A senha deve ter pelo menos 6 caracteres.', type: 'warning' });
+        return;
+    }
+
+    if (newPassword !== confirmPassword) {
+        await showAlert({ title: 'Erro', message: 'As senhas não coincidem.', type: 'warning' });
+        return;
+    }
+
+    setIsChangingPassword(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setIsChangingPassword(false);
+
+    if (error) {
+        await showAlert({ title: 'Erro', message: error.message, type: 'error' });
+    } else {
+        setNewPassword('');
+        setConfirmPassword('');
+        await showAlert({ title: 'Sucesso', message: 'Senha alterada com sucesso!', type: 'success' });
+    }
   };
 
   const handleTemplateChange = (key: string, value: string) => {
@@ -305,15 +337,14 @@ export default function Settings() {
     const plan = plans.find(p => p.id === planId);
     if (!plan) return;
 
-    // Open Payment Modal instead of immediate change
     setPendingTransaction({
         type: 'plan',
         amount: plan.price,
         description: `Assinatura Plano ${plan.name} (Mensal)`,
         data: { planId: plan.id }
     });
-    setIsPlanModalOpen(false); // Close plan selection
-    setIsPaymentModalOpen(true); // Open payment
+    setIsPlanModalOpen(false);
+    setIsPaymentModalOpen(true);
   };
 
   const handlePaymentSuccess = () => {
@@ -373,6 +404,22 @@ export default function Settings() {
     }
   };
 
+  const handleDownloadQRCode = async () => {
+    try {
+      const url = await QRCode.toDataURL(shopLink, { width: 500, margin: 2 });
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `qrcode-loja-${formData.slug || 'loja'}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showAlert({ title: 'Sucesso', message: 'QR Code baixado com sucesso!', type: 'success' });
+    } catch (err) {
+      console.error(err);
+      showAlert({ title: 'Erro', message: 'Não foi possível gerar o QR Code.', type: 'error' });
+    }
+  };
+
   const toggleServiceVisibility = (id: string, currentStatus: boolean) => {
     updateService(id, { showOnLandingPage: !currentStatus });
   };
@@ -398,7 +445,6 @@ export default function Settings() {
         />
       )}
 
-      {/* PAYMENT MODAL - Passando o gateway configurado */}
       {isPaymentModalOpen && pendingTransaction && (
         <PaymentModal 
             isOpen={isPaymentModalOpen}
@@ -406,12 +452,10 @@ export default function Settings() {
             amount={pendingTransaction.amount}
             description={pendingTransaction.description}
             onSuccess={handlePaymentSuccess}
-            gateway={saasSettings.paymentGateway} // Passando a configuração do Super Admin
+            gateway={saasSettings.paymentGateway}
         />
       )}
 
-      {/* ... Rest of the component ... */}
-      {/* PLAN SELECTION MODAL */}
       {isPlanModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-6xl shadow-2xl border border-slate-200 dark:border-slate-800 max-h-[95vh] flex flex-col overflow-hidden">
@@ -424,7 +468,6 @@ export default function Settings() {
                 
                 <div className="p-6 overflow-y-auto">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                        {/* TRIAL CARD */}
                         <div className="rounded-xl border-2 border-purple-500 bg-purple-50 dark:bg-purple-900/10 p-6 flex flex-col transition-all relative hover:shadow-lg">
                             <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-purple-600 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide whitespace-nowrap">
                                 Grátis por 7 dias
@@ -460,7 +503,6 @@ export default function Settings() {
                             </button>
                         </div>
 
-                        {/* PAID PLANS */}
                         {plans.filter(p => p.active).map(plan => (
                             <div 
                                 key={plan.id} 
@@ -487,7 +529,7 @@ export default function Settings() {
                                         <span className="text-slate-500 dark:text-slate-400 flex items-center gap-2"><MessageSquare size={14} /> Tokens Mensais</span>
                                         <div className="text-right">
                                             <span className="font-bold text-slate-900 dark:text-white block">{plan.includedTokens}</span>
-                                            <span className="text-[10px] text-slate-400 font-normal">(Não cumulativo)</span>
+                                            <span className="text-xs text-slate-400 font-normal">(Não cumulativo)</span>
                                         </div>
                                     </div>
                                 </div>
@@ -520,7 +562,6 @@ export default function Settings() {
         </div>
       )}
 
-      {/* ... Rest of the component (Header, Tabs, Content) ... */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 flex-shrink-0">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Configurações</h2>
@@ -540,6 +581,7 @@ export default function Settings() {
               { id: 'integrations', label: 'WhatsApp', icon: QrCode },
               { id: 'billing', label: 'Assinatura & Tokens', icon: CreditCard },
               { id: 'preferences', label: 'Preferências', icon: Layout },
+              { id: 'account', label: 'Conta & Segurança', icon: Lock },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -791,6 +833,79 @@ export default function Settings() {
             </div>
           )}
 
+          {/* TAB: ACCOUNT & SECURITY */}
+          {activeTab === 'account' && (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden animate-in fade-in slide-in-from-right">
+              <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800">
+                <h3 className="font-bold text-lg text-slate-900 dark:text-white">Conta & Segurança</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Gerencie suas credenciais de acesso.</p>
+              </div>
+              
+              <div className="p-4 sm:p-6 space-y-8">
+                {/* Dados de Acesso */}
+                <div className="space-y-4">
+                    <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase flex items-center gap-2">
+                        <User size={16} /> Dados de Acesso
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Email de Login</label>
+                            <div className="relative">
+                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                <input 
+                                    type="email" 
+                                    value={ownerUser?.email || ''}
+                                    disabled
+                                    className="w-full pl-10 pr-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                                />
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-1">O email de login não pode ser alterado.</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Alterar Senha */}
+                <form onSubmit={handleChangePassword} className="space-y-4 pt-6 border-t border-slate-100 dark:border-slate-800">
+                    <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase flex items-center gap-2">
+                        <Lock size={16} /> Alterar Senha
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Nova Senha</label>
+                            <input 
+                                type="password" 
+                                value={newPassword}
+                                onChange={e => setNewPassword(e.target.value)}
+                                placeholder="Mínimo 6 caracteres"
+                                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Confirmar Nova Senha</label>
+                            <input 
+                                type="password" 
+                                value={confirmPassword}
+                                onChange={e => setConfirmPassword(e.target.value)}
+                                placeholder="Repita a nova senha"
+                                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex justify-end">
+                        <button 
+                            type="submit" 
+                            disabled={!newPassword || !confirmPassword || isChangingPassword}
+                            className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 dark:disabled:text-slate-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                        >
+                            {isChangingPassword ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                            Atualizar Senha
+                        </button>
+                    </div>
+                </form>
+              </div>
+            </div>
+          )}
+
           {/* TAB: LANDING PAGE */}
           {activeTab === 'landing' && (
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden animate-in fade-in slide-in-from-right">
@@ -838,6 +953,14 @@ export default function Settings() {
                                         className="flex items-center justify-center gap-2 px-4 py-3 bg-blue-500/50 text-white rounded-lg font-bold text-xs sm:text-sm hover:bg-blue-500/70 transition-colors flex-1 sm:flex-none"
                                     >
                                         <Share2 size={16} />
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        onClick={handleDownloadQRCode}
+                                        className="flex items-center justify-center gap-2 px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-lg font-bold text-xs sm:text-sm transition-colors flex-1 sm:flex-none"
+                                        title="Baixar QR Code para imprimir"
+                                    >
+                                        <Download size={16} /> <span className="hidden sm:inline">Baixar QR</span>
                                     </button>
                                 </div>
                             </div>
@@ -1028,156 +1151,6 @@ export default function Settings() {
                   </button>
                 </div>
               </form>
-            </div>
-          )}
-
-          {/* TAB: INTEGRATIONS */}
-          {activeTab === 'integrations' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-right">
-              {/* ... (Same as before) ... */}
-              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg text-green-600 dark:text-green-400">
-                      <QrCode size={24} />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-lg text-slate-900 dark:text-white">Conexão WhatsApp</h3>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">Escaneie o QR Code para conectar seu número.</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 dark:bg-slate-950 rounded-xl p-4 sm:p-8 flex flex-col items-center justify-center min-h-[300px]">
-                  {/* ... (Connection States) ... */}
-                  {companySettings.whatsapp.session.status === 'disconnected' && (
-                    <div className="text-center animate-in fade-in">
-                        <div className="w-20 h-20 bg-slate-200 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
-                            <Smartphone size={32} />
-                        </div>
-                        <h4 className="text-lg font-bold text-slate-900 dark:text-white mb-2">Nenhum dispositivo conectado</h4>
-                        <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-6">
-                            Clique abaixo para gerar o QR Code e conecte seu WhatsApp Business para enviar mensagens automáticas.
-                        </p>
-                        <button 
-                            onClick={connectWhatsapp}
-                            className="px-6 py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 shadow-lg shadow-green-900/20 transition-all flex items-center gap-2 mx-auto"
-                        >
-                            <QrCode size={20} /> Gerar QR Code
-                        </button>
-                    </div>
-                  )}
-
-                  {companySettings.whatsapp.session.status === 'scanning' && (
-                    <div className="text-center animate-in fade-in">
-                        <div className="relative w-64 h-64 bg-white p-4 rounded-xl shadow-sm mx-auto mb-4 border border-slate-200">
-                            <img 
-                                src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=CristalCareAuth" 
-                                alt="Scan Me" 
-                                className="w-full h-full object-contain opacity-90"
-                            />
-                            <div className="absolute inset-0 border-4 border-green-500/30 rounded-xl animate-pulse"></div>
-                        </div>
-                        <h4 className="text-lg font-bold text-slate-900 dark:text-white mb-1">Escaneie com seu WhatsApp</h4>
-                        <p className="text-slate-500 dark:text-slate-400 text-sm flex items-center justify-center gap-2">
-                            <Loader2 size={14} className="animate-spin" /> Aguardando leitura...
-                        </p>
-                    </div>
-                  )}
-
-                  {companySettings.whatsapp.session.status === 'connected' && (
-                    <div className="w-full max-w-md animate-in zoom-in duration-300">
-                        <div className="bg-white dark:bg-slate-900 border border-green-200 dark:border-green-900/30 rounded-2xl p-6 shadow-sm relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-full h-1 bg-green-500"></div>
-                            
-                            <div className="flex items-center gap-4 mb-6">
-                                <img 
-                                    src={companySettings.whatsapp.session.device?.avatarUrl} 
-                                    alt="Avatar" 
-                                    className="w-16 h-16 rounded-full border-2 border-green-500 p-0.5"
-                                />
-                                <div>
-                                    <h4 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-                                        {companySettings.whatsapp.session.device?.name}
-                                        <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse"></span>
-                                    </h4>
-                                    <p className="text-slate-500 dark:text-slate-400 text-sm">{companySettings.whatsapp.session.device?.number}</p>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4 mb-6">
-                                <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg flex items-center gap-3">
-                                    <Wifi size={18} className="text-green-600 dark:text-green-400" />
-                                    <div>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Status</p>
-                                        <p className="text-sm font-bold text-slate-900 dark:text-white">Online</p>
-                                    </div>
-                                </div>
-                                <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg flex items-center gap-3">
-                                    <Battery size={18} className="text-green-600 dark:text-green-400" />
-                                    <div>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Bateria</p>
-                                        <p className="text-sm font-bold text-slate-900 dark:text-white">{companySettings.whatsapp.session.device?.battery}%</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <button 
-                                onClick={disconnectWhatsapp}
-                                className="w-full py-3 border border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400 font-bold rounded-xl hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors flex items-center justify-center gap-2"
-                            >
-                                <LogOut size={18} /> Desconectar
-                            </button>
-                        </div>
-                        
-                        <div className="mt-4 text-center">
-                            <p className="text-xs text-green-600 dark:text-green-400 font-medium flex items-center justify-center gap-1">
-                                <CheckCircle2 size={14} /> Mensagens automáticas ativas
-                            </p>
-                        </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Templates Section */}
-              {companySettings.whatsapp.session.status === 'connected' && (
-                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-6 animate-in slide-in-from-bottom-4">
-                    <div className="mb-6">
-                        <h3 className="font-bold text-lg text-slate-900 dark:text-white">Templates de Mensagem</h3>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Personalize o texto padrão. Use variáveis como <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded text-blue-600">{`{cliente}`}</code>, <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded text-blue-600">{`{veiculo}`}</code> e <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded text-blue-600">{`{valor}`}</code>.</p>
-                    </div>
-
-                    <div className="space-y-6">
-                        {[
-                            { key: 'welcome', label: 'Boas-vindas (Cadastro)', placeholder: 'Olá {cliente}...' },
-                            { key: 'completion', label: 'Serviço Concluído', placeholder: 'Seu carro está pronto...' },
-                            { key: 'nps', label: 'Pesquisa de Satisfação (NPS)', placeholder: 'Avalie nosso serviço...' },
-                            { key: 'recall', label: 'Lembrete de Retorno (Recall)', placeholder: 'Hora de renovar a proteção...' },
-                        ].map(template => (
-                            <div key={template.key}>
-                                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">{template.label}</label>
-                                <textarea 
-                                    value={(formData.whatsapp.templates as any)[template.key]}
-                                    onChange={(e) => handleTemplateChange(template.key, e.target.value)}
-                                    rows={3}
-                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                                    placeholder={template.placeholder}
-                                />
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-                        <button 
-                            onClick={handleSave}
-                            className="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2"
-                        >
-                            <Save size={20} /> Salvar Configurações
-                        </button>
-                    </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -1644,6 +1617,79 @@ export default function Settings() {
                   </button>
                 </div>
              </div>
+          )}
+
+          {/* TAB: ACCOUNT & SECURITY */}
+          {activeTab === 'account' && (
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden animate-in fade-in slide-in-from-right">
+              <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800">
+                <h3 className="font-bold text-lg text-slate-900 dark:text-white">Conta & Segurança</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Gerencie suas credenciais de acesso.</p>
+              </div>
+              
+              <div className="p-4 sm:p-6 space-y-8">
+                {/* Dados de Acesso */}
+                <div className="space-y-4">
+                    <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase flex items-center gap-2">
+                        <User size={16} /> Dados de Acesso
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Email de Login</label>
+                            <div className="relative">
+                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                <input 
+                                    type="email" 
+                                    value={ownerUser?.email || ''}
+                                    disabled
+                                    className="w-full pl-10 pr-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                                />
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-1">O email de login não pode ser alterado.</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Alterar Senha */}
+                <form onSubmit={handleChangePassword} className="space-y-4 pt-6 border-t border-slate-100 dark:border-slate-800">
+                    <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase flex items-center gap-2">
+                        <Lock size={16} /> Alterar Senha
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Nova Senha</label>
+                            <input 
+                                type="password" 
+                                value={newPassword}
+                                onChange={e => setNewPassword(e.target.value)}
+                                placeholder="Mínimo 6 caracteres"
+                                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Confirmar Nova Senha</label>
+                            <input 
+                                type="password" 
+                                value={confirmPassword}
+                                onChange={e => setConfirmPassword(e.target.value)}
+                                placeholder="Repita a nova senha"
+                                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex justify-end">
+                        <button 
+                            type="submit" 
+                            disabled={!newPassword || !confirmPassword || isChangingPassword}
+                            className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 dark:disabled:text-slate-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                        >
+                            {isChangingPassword ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                            Atualizar Senha
+                        </button>
+                    </div>
+                </form>
+              </div>
+            </div>
           )}
 
         </div>

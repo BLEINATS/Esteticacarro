@@ -16,32 +16,27 @@ interface SuperAdminContextType {
   tenants: SaaSTenant[];
   plans: SaaSPlan[];
   tokenPackages: TokenPackage[];
-  tokenLedger: SaaSTokenTransaction[]; // New Ledger
+  tokenLedger: SaaSTokenTransaction[];
   isAuthenticated: boolean;
   saasSettings: SaaSSettings;
   login: (password: string) => boolean;
   logout: () => void;
   
-  // Tenant Actions
   addTenant: (tenant: Omit<SaaSTenant, 'id' | 'joinedAt' | 'status' | 'lastLogin'>) => void;
   updateTenant: (id: string, updates: Partial<SaaSTenant>) => void;
   deleteTenant: (id: string) => void;
   addTokensToTenant: (tenantId: string, amount: number) => void;
   
-  // Plan Actions
   addPlan: (plan: SaaSPlan) => void;
   updatePlan: (id: string, updates: Partial<SaaSPlan>) => void;
   deletePlan: (id: string) => void;
 
-  // Token Package Actions
   addTokenPackage: (pkg: TokenPackage) => void;
   updateTokenPackage: (id: string, updates: Partial<TokenPackage>) => void;
   deleteTokenPackage: (id: string) => void;
 
-  // Settings Actions
   updateSaaSSettings: (settings: Partial<SaaSSettings>) => void;
   
-  // Metrics
   totalMRR: number;
   activeTenantsCount: number;
   totalTokensSold: number;
@@ -107,48 +102,6 @@ const initialTenants: SaaSTenant[] = [
     mrr: 107.00,
     lastLogin: new Date().toISOString(),
     logoUrl: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=150&q=80'
-  },
-  {
-    id: 'tenant-2',
-    name: 'Lava Rápido do Zé',
-    responsibleName: 'José Santos',
-    email: 'ze@lavarapido.com',
-    phone: '(11) 98888-7777',
-    planId: 'starter',
-    status: 'active',
-    joinedAt: '2024-03-10T14:30:00Z',
-    nextBilling: formatISO(addDays(new Date(), 5)),
-    tokenBalance: 0,
-    mrr: 62.00,
-    lastLogin: formatISO(subDays(new Date(), 2))
-  },
-  {
-    id: 'tenant-3',
-    name: 'Elite Detail Studio',
-    responsibleName: 'Marcos Oliveira',
-    email: 'marcos@elitedetail.com',
-    phone: '(21) 97777-6666',
-    planId: 'enterprise',
-    status: 'trial',
-    joinedAt: formatISO(subDays(new Date(), 5)),
-    nextBilling: formatISO(addDays(new Date(), 25)),
-    tokenBalance: 500,
-    mrr: 0, // Trial doesn't generate MRR yet
-    lastLogin: new Date().toISOString()
-  },
-  {
-    id: 'tenant-4',
-    name: 'Brilho Car',
-    responsibleName: 'Ana Costa',
-    email: 'ana@brilhocar.com',
-    phone: '(31) 96666-5555',
-    planId: 'starter',
-    status: 'suspended', // Inadimplente
-    joinedAt: '2023-11-20T09:00:00Z',
-    nextBilling: formatISO(subDays(new Date(), 10)), // Overdue
-    tokenBalance: 10,
-    mrr: 62.00,
-    lastLogin: formatISO(subDays(new Date(), 15))
   }
 ];
 
@@ -161,76 +114,45 @@ const initialSaaSSettings: SaaSSettings = {
   adminPassword: 'admin'
 };
 
-// Generate Mock Token Ledger
 const generateMockLedger = (tenants: SaaSTenant[]): SaaSTokenTransaction[] => {
-  const ledger: SaaSTokenTransaction[] = [];
-  const types: ('purchase' | 'usage' | 'plan_credit')[] = ['purchase', 'usage', 'usage', 'usage', 'plan_credit'];
-  
-  tenants.forEach(tenant => {
-    // Generate 5-10 transactions per tenant
-    const count = Math.floor(Math.random() * 5) + 5;
-    for (let i = 0; i < count; i++) {
-      const type = types[Math.floor(Math.random() * types.length)];
-      const isCredit = type === 'purchase' || type === 'plan_credit' || type === 'bonus';
-      const daysAgo = Math.floor(Math.random() * 30);
-      
-      let amount = 0;
-      let value = 0;
-      let description = '';
-
-      if (type === 'purchase') {
-        amount = [100, 500, 1000].sort(() => Math.random() - 0.5)[0];
-        value = amount === 100 ? 29.90 : amount === 500 ? 99.90 : 149.90;
-        description = `Compra Pacote ${amount}`;
-      } else if (type === 'plan_credit') {
-        amount = 500;
-        description = 'Crédito Mensal do Plano';
-      } else {
-        amount = -Math.floor(Math.random() * 5 + 1); // Usage is small per transaction
-        description = 'Envio Campanha WhatsApp';
-      }
-
-      ledger.push({
-        id: `tx-${tenant.id}-${i}`,
-        tenantId: tenant.id,
-        tenantName: tenant.name,
-        type,
-        amount,
-        value,
-        description,
-        date: formatISO(subDays(new Date(), daysAgo))
-      });
-    }
-  });
-  
-  return ledger.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  return [];
 };
 
 export function SuperAdminProvider({ children }: { children: ReactNode }) {
+  // Safe Storage Wrappers
   const [tenants, setTenants] = useState<SaaSTenant[]>(() => {
-    const stored = localStorage.getItem('saas_tenants');
-    return stored ? JSON.parse(stored) : initialTenants;
+    try {
+        const stored = localStorage.getItem('saas_tenants');
+        return stored ? JSON.parse(stored) : initialTenants;
+    } catch (e) { return initialTenants; }
   });
 
   const [plans, setPlans] = useState<SaaSPlan[]>(() => {
-    const stored = localStorage.getItem('saas_plans_v3');
-    return stored ? JSON.parse(stored) : initialPlans;
+    try {
+        const stored = localStorage.getItem('saas_plans_v3');
+        return stored ? JSON.parse(stored) : initialPlans;
+    } catch (e) { return initialPlans; }
   });
 
   const [tokenPackages, setTokenPackages] = useState<TokenPackage[]>(() => {
-    const stored = localStorage.getItem('saas_token_packages');
-    return stored ? JSON.parse(stored) : initialTokenPackages;
+    try {
+        const stored = localStorage.getItem('saas_token_packages');
+        return stored ? JSON.parse(stored) : initialTokenPackages;
+    } catch (e) { return initialTokenPackages; }
   });
 
   const [saasSettings, setSaasSettings] = useState<SaaSSettings>(() => {
-    const stored = localStorage.getItem('saas_settings');
-    return stored ? JSON.parse(stored) : initialSaaSSettings;
+    try {
+        const stored = localStorage.getItem('saas_settings');
+        return stored ? JSON.parse(stored) : initialSaaSSettings;
+    } catch (e) { return initialSaaSSettings; }
   });
 
-  // Initialize Ledger
   const [tokenLedger, setTokenLedger] = useState<SaaSTokenTransaction[]>(() => {
-    const stored = localStorage.getItem('saas_token_ledger');
-    return stored ? JSON.parse(stored) : generateMockLedger(initialTenants);
+    try {
+        const stored = localStorage.getItem('saas_token_ledger');
+        return stored ? JSON.parse(stored) : generateMockLedger(initialTenants);
+    } catch (e) { return []; }
   });
 
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -310,7 +232,6 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
       t.id === tenantId ? { ...t, tokenBalance: t.tokenBalance + amount } : t
     ));
 
-    // Record transaction in ledger
     const transaction: SaaSTokenTransaction = {
         id: `tx-${Date.now()}`,
         tenantId,
@@ -351,11 +272,9 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
     setSaasSettings(prev => ({ ...prev, ...settings }));
   };
 
-  // Metrics
   const totalMRR = tenants.filter(t => t.status === 'active').reduce((acc, t) => acc + t.mrr, 0);
   const activeTenantsCount = tenants.filter(t => t.status === 'active').length;
   
-  // Token Metrics based on Ledger
   const totalTokensSold = tokenLedger
     .filter(t => t.type === 'purchase' || t.type === 'plan_credit' || t.type === 'bonus')
     .reduce((acc, t) => acc + t.amount, 0);
