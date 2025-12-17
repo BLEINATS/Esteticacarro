@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Plus, Trash2, Beaker, AlertCircle } from 'lucide-react';
+import { X, Save, Plus, Trash2, Beaker, AlertCircle, Loader2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ServiceCatalogItem, ServiceConsumptionItem } from '../types';
 import { formatCurrency, cn } from '../lib/utils';
+import { useDialog } from '../context/DialogContext';
 
 interface ServiceConsumptionModalProps {
   service: ServiceCatalogItem;
@@ -10,12 +11,14 @@ interface ServiceConsumptionModalProps {
 }
 
 export default function ServiceConsumptionModal({ service, onClose }: ServiceConsumptionModalProps) {
-  const { inventory, updateServiceConsumption, getServiceConsumption, calculateServiceCost } = useApp();
+  const { inventory, updateServiceConsumption, getServiceConsumption } = useApp();
+  const { showAlert } = useDialog();
   
   const [items, setItems] = useState<ServiceConsumptionItem[]>([]);
   const [selectedInventoryId, setSelectedInventoryId] = useState<number | ''>('');
   const [quantity, setQuantity] = useState('');
   const [unit, setUnit] = useState<'ml' | 'g' | 'un' | 'L' | 'kg'>('ml');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Load existing consumption on mount
   useEffect(() => {
@@ -53,12 +56,20 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
     setItems(items.filter((_, i) => i !== index));
   };
 
-  const handleSave = () => {
-    updateServiceConsumption({
+  const handleSave = async () => {
+    setIsSaving(true);
+    const success = await updateServiceConsumption({
       serviceId: service.id,
       items: items
     });
-    onClose();
+    setIsSaving(false);
+    
+    if (success) {
+        await showAlert({ title: 'Sucesso', message: 'Ficha técnica salva com sucesso!', type: 'success' });
+        onClose();
+    } else {
+        await showAlert({ title: 'Erro', message: 'Não foi possível salvar a ficha técnica. Tente novamente.', type: 'error' });
+    }
   };
 
   // Helper to get inventory item details
@@ -158,7 +169,7 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
             <button 
               onClick={handleAddItem}
               disabled={!selectedInventoryId || !quantity}
-              className="w-full py-2 bg-blue-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+              className="w-full py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:bg-slate-300 dark:disabled:bg-slate-700 disabled:text-slate-500 dark:disabled:text-slate-500 disabled:cursor-not-allowed"
             >
               <Plus size={16} /> Adicionar à Receita
             </button>
@@ -222,16 +233,18 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
         <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex gap-3 bg-slate-50/50 dark:bg-slate-900/50">
           <button 
             onClick={onClose}
-            className="flex-1 py-3 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+            disabled={isSaving}
+            className="flex-1 py-3 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
             Cancelar
           </button>
           <button 
             onClick={handleSave}
-            className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 transition-all flex items-center justify-center gap-2"
+            disabled={isSaving}
+            className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 transition-all flex items-center justify-center gap-2 disabled:opacity-70"
           >
-            <Save size={20} />
-            Salvar Ficha Técnica
+            {isSaving ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+            {isSaving ? 'Salvando...' : 'Salvar Ficha Técnica'}
           </button>
         </div>
 

@@ -5,11 +5,12 @@ import {
   Package, Settings, LogOut, Menu, X, 
   Bell, Search, Globe, UserCircle,
   Megaphone, DollarSign, Trophy, Tags,
-  Check, Trash2, Info, AlertTriangle, CheckCircle2, Bot
+  Check, Trash2, Info, AlertTriangle, CheckCircle2, Bot, Store, Save, Loader2, RefreshCw
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useDialog } from '../context/DialogContext';
 import { cn } from '../lib/utils';
+import { checkSupabaseConnection } from '../lib/supabase';
 
 export default function Layout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -18,12 +19,17 @@ export default function Layout() {
   
   const location = useLocation();
   const navigate = useNavigate();
-  const { notifications, markNotificationAsRead, clearAllNotifications, ownerUser, logoutOwner, subscription } = useApp();
-  const { showConfirm } = useDialog();
+  const { notifications, markNotificationAsRead, clearAllNotifications, ownerUser, logoutOwner, subscription, tenantId, createTenant } = useApp();
+  const { showConfirm, showAlert } = useDialog();
+
+  // Store Creation State
+  const [storeName, setStoreName] = useState(ownerUser?.shopName || '');
+  const [storePhone, setStorePhone] = useState('');
+  const [isCreatingStore, setIsCreatingStore] = useState(false);
+  const [isCheckingConnection, setIsCheckingConnection] = useState(false);
 
   const unreadNotifications = notifications.filter(n => !n.read).length;
 
-  // Close notifications when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
@@ -48,7 +54,112 @@ export default function Layout() {
     }
   };
 
+  const handleCheckConnection = async () => {
+      setIsCheckingConnection(true);
+      const isConnected = await checkSupabaseConnection();
+      setIsCheckingConnection(false);
+      
+      if (isConnected) {
+          await showAlert({ title: 'Conexão OK', message: 'O sistema está conectado ao banco de dados.', type: 'success' });
+      } else {
+          await showAlert({ title: 'Erro de Conexão', message: 'Falha ao conectar com o banco de dados. Verifique sua internet.', type: 'error' });
+      }
+  };
+
+  const handleCreateStore = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!storeName) return;
+      
+      setIsCreatingStore(true);
+      try {
+          const success = await createTenant(storeName, storePhone);
+          if (success) {
+              await showAlert({ title: 'Sucesso', message: 'Loja criada com sucesso! Bem-vindo.', type: 'success' });
+              // Navigation happens automatically via state change in AppContext (tenantId set)
+          } else {
+              await showAlert({ title: 'Erro', message: 'Não foi possível criar a loja. Verifique sua conexão e tente novamente.', type: 'error' });
+          }
+      } catch (error) {
+          console.error(error);
+          await showAlert({ title: 'Erro', message: 'Erro inesperado.', type: 'error' });
+      } finally {
+          setIsCreatingStore(false);
+      }
+  };
+
   const closeSidebar = () => setIsSidebarOpen(false);
+
+  // --- NO STORE STATE (ONBOARDING) ---
+  if (ownerUser && !tenantId) {
+      return (
+          <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4">
+              <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+                  <div className="p-8 text-center border-b border-slate-100 dark:border-slate-800">
+                      <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center mx-auto mb-4 text-blue-600 dark:text-blue-400">
+                          <Store size={32} />
+                      </div>
+                      <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Bem-vindo, {ownerUser.name}!</h2>
+                      <p className="text-slate-500 dark:text-slate-400 text-sm">
+                          Para começar a usar o sistema, precisamos configurar sua loja.
+                      </p>
+                  </div>
+                  
+                  <form onSubmit={handleCreateStore} className="p-8 space-y-4">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Nome da Loja</label>
+                          <input 
+                              type="text" 
+                              value={storeName}
+                              onChange={e => setStoreName(e.target.value)}
+                              placeholder="Ex: Auto Detail Premium"
+                              required
+                              className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                          />
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Telefone / WhatsApp</label>
+                          <input 
+                              type="text" 
+                              value={storePhone}
+                              onChange={e => setStorePhone(e.target.value)}
+                              placeholder="(00) 00000-0000"
+                              className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                          />
+                      </div>
+                      
+                      <button 
+                          type="submit" 
+                          disabled={isCreatingStore || !storeName}
+                          className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 mt-4"
+                      >
+                          {isCreatingStore ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+                          {isCreatingStore ? 'Criando Loja...' : 'Criar Minha Loja'}
+                      </button>
+
+                      <div className="grid grid-cols-2 gap-3 pt-2">
+                          <button 
+                              type="button"
+                              onClick={handleCheckConnection}
+                              disabled={isCheckingConnection}
+                              className="w-full py-2 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors flex items-center justify-center gap-1"
+                          >
+                              {isCheckingConnection ? <Loader2 className="animate-spin" size={14} /> : <RefreshCw size={14} />}
+                              Testar Conexão
+                          </button>
+                          
+                          <button 
+                              type="button"
+                              onClick={handleLogout}
+                              className="w-full py-2 text-xs font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-800 rounded-lg transition-colors"
+                          >
+                              Sair
+                          </button>
+                      </div>
+                  </form>
+              </div>
+          </div>
+      );
+  }
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },

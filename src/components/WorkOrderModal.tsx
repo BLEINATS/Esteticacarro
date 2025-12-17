@@ -6,11 +6,11 @@ import {
   CreditCard, UploadCloud, Lock, Share2, Plus, Trash2,
   DollarSign, Wrench, Check, Smile, Star, ListTodo,
   Image as ImageIcon, Search, Car, UserPlus, ChevronDown,
-  Printer, Send, Tag, Ticket, Trophy, Gift, Sparkles, Bot
+  Printer, Send, Tag, Ticket, Trophy, Gift, Sparkles, Bot, Loader2, ImagePlus
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { WorkOrder, DamagePoint, VehicleInventory, DailyLogEntry, AdditionalItem, QualityChecklistItem, ScopeItem, Vehicle, VehicleSize, VEHICLE_SIZES, FinancialTransaction } from '../types';
-import { cn, formatCurrency } from '../lib/utils';
+import { cn, formatCurrency, formatId } from '../lib/utils';
 import VehicleDamageMap from './VehicleDamageMap';
 import ClientModal from './ClientModal';
 import WorkOrderPrintTemplate from './WorkOrderPrintTemplate';
@@ -34,6 +34,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const { showConfirm, showAlert } = useDialog();
 
   const [activeTab, setActiveTab] = useState<'reception' | 'execution' | 'quality' | 'finance'>('reception');
+  const [isSaving, setIsSaving] = useState(false);
 
   // --- CLIENT & VEHICLE SELECTION STATE ---
   const [selectedClientId, setSelectedClientId] = useState<string>(workOrder.clientId || '');
@@ -55,6 +56,8 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   });
   const [dailyLog, setDailyLog] = useState<DailyLogEntry[]>(workOrder.dailyLog || []);
   const [newLogText, setNewLogText] = useState('');
+  const [newLogPhoto, setNewLogPhoto] = useState<string | null>(null); // NEW: State for log photo
+
   const [insurance, setInsurance] = useState(workOrder.insuranceDetails || { isInsurance: false });
   const [qaList, setQaList] = useState<QualityChecklistItem[]>(workOrder.qaChecklist || []);
   const [additionalItems, setAdditionalItems] = useState<AdditionalItem[]>(workOrder.additionalItems || []);
@@ -91,26 +94,21 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const [appliedVoucher, setAppliedVoucher] = useState<string | null>(null);
 
   // --- PRICE STATE (EDITABLE) ---
-  // CORREÇÃO: Inicialização inteligente do preço para evitar "duplo desconto" ao editar
   const [servicePrice, setServicePrice] = useState<number>(() => {
     const extras = workOrder.additionalItems?.reduce((acc, item) => acc + item.value, 0) || 0;
     let baseValue = workOrder.totalValue;
 
-    // Se houver desconto salvo, tentamos reverter para achar o preço base original
     if (workOrder.discount && workOrder.discount.amount > 0) {
         if (workOrder.discount.type === 'percentage') {
-            // total = base * (1 - rate/100) => base = total / (1 - rate/100)
             const rate = workOrder.discount.amount / 100;
             if (rate < 1) {
                 baseValue = baseValue / (1 - rate);
             }
         } else {
-            // value ou service (valor fixo)
             baseValue = baseValue + workOrder.discount.amount;
         }
     }
 
-    // Se o valor total for 0 (nova OS), começa com 0. Se não, usa o valor calculado menos extras.
     return baseValue > 0 ? Math.max(0, baseValue - extras) : 0;
   });
 
@@ -126,15 +124,12 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const defaultTierConfig = { id: 'bronze', name: 'Bronze', minPoints: 0, color: 'from-amber-500 to-amber-600', benefits: [] };
   const clientTierConfig = (companySettings.gamification.tiers || []).find(t => t.id === currentTierId) || defaultTierConfig;
 
-  // WhatsApp Status
   const isWhatsAppConnected = companySettings.whatsapp.session.status === 'connected';
 
-  // Filter Clients for Search
   const filteredClients = clientSearch.length > 0 
     ? clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.phone.includes(clientSearch))
     : [];
 
-  // Initialize or Update when props change
   useEffect(() => {
     if (workOrder.clientId && workOrder.clientId !== 'c1' && workOrder.clientId !== '') {
         const c = clients.find(cl => cl.id === workOrder.clientId);
@@ -145,7 +140,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
   }, [workOrder.clientId, clients]);
 
-  // Initialize Services from WorkOrder
   useEffect(() => {
     if (workOrder.serviceIds && workOrder.serviceIds.length > 0) {
         setSelectedServiceIds(workOrder.serviceIds);
@@ -154,18 +148,15 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
   }, [workOrder]);
 
-  // Update Price when Services or Vehicle changes
   useEffect(() => {
     if (selectedVehicleObj && selectedServiceIds.length > 0) {
         const total = selectedServiceIds.reduce((acc, id) => acc + getPrice(id, selectedVehicleObj.size), 0);
-        // Only update price if it hasn't been manually edited (logic simplified for now: if totalValue is 0 or services changed)
         if (workOrder.totalValue === 0 || selectedServiceIds.join(',') !== (workOrder.serviceIds || [workOrder.serviceId]).join(',')) {
              setServicePrice(total);
         }
     }
   }, [selectedServiceIds, selectedVehicleObj]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -176,7 +167,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Initialize Scope Checklist
   useEffect(() => {
     if (scopeList.length === 0) {
         const items: ScopeItem[] = [];
@@ -190,7 +180,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
   }, [workOrder.service, workOrder.additionalItems]);
 
-  // Initialize QA Checklist
   useEffect(() => {
     if (qaList.length === 0) {
       const defaultQA: QualityChecklistItem[] = [
@@ -259,12 +248,10 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
   };
 
-  // --- HELPER TO BUILD UPDATED ORDER DATA ---
   const getUpdatedOrderData = (): Partial<WorkOrder> => {
     const extrasTotal = additionalItems.reduce((acc, item) => acc + item.value, 0);
     const subtotal = servicePrice + extrasTotal;
     
-    // Calculate Discount
     let discountValue = 0;
     if (discountType === 'percentage') {
         discountValue = subtotal * (discountAmount / 100);
@@ -272,7 +259,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         discountValue = discountAmount;
     }
 
-    // Calculate Final Total
     const finalTotal = insurance.isInsurance 
       ? (insurance.deductibleAmount || 0) + (insurance.insuranceCoveredAmount || 0) + extrasTotal 
       : Math.max(0, subtotal - discountValue);
@@ -293,7 +279,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       qaChecklist: qaList,
       scopeChecklist: scopeList,
       additionalItems,
-      totalValue: finalTotal, // This is the correct final value to use
+      totalValue: finalTotal,
       service: serviceName,
       serviceId: selectedServiceIds[0],
       serviceIds: selectedServiceIds,
@@ -321,17 +307,21 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         return;
     }
 
+    setIsSaving(true);
+
     if (appliedVoucher) {
       useVoucher(appliedVoucher, workOrder.id);
     }
 
     const updatedData = getUpdatedOrderData();
-
     const exists = workOrders.some(o => o.id === workOrder.id);
+    
+    let success = false;
+
     if (exists) {
-        updateWorkOrder(workOrder.id, updatedData);
+        success = await updateWorkOrder(workOrder.id, updatedData);
     } else {
-        addWorkOrder({
+        success = await addWorkOrder({
             ...workOrder,
             ...updatedData,
             createdAt: workOrder.createdAt || new Date().toISOString(),
@@ -339,12 +329,23 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             checklist: workOrder.checklist || []
         } as WorkOrder);
     }
-    onClose();
-    await showAlert({
-        title: 'Sucesso',
-        message: 'Ordem de Serviço salva com sucesso.',
-        type: 'success'
-    });
+    
+    setIsSaving(false);
+
+    if (success) {
+        onClose();
+        await showAlert({
+            title: 'Sucesso',
+            message: 'Ordem de Serviço salva com sucesso.',
+            type: 'success'
+        });
+    } else {
+        await showAlert({
+            title: 'Erro ao Salvar',
+            message: 'Não foi possível salvar a OS. Verifique sua conexão e tente novamente.',
+            type: 'error'
+        });
+    }
   };
 
   const handleApprove = async () => {
@@ -357,6 +358,8 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         return;
       }
 
+      setIsSaving(true);
+
       const updatedData = getUpdatedOrderData();
       const approvedData = {
           ...updatedData,
@@ -364,10 +367,12 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       };
 
       const exists = workOrders.some(o => o.id === workOrder.id);
+      let success = false;
+
       if (exists) {
-          updateWorkOrder(workOrder.id, approvedData);
+          success = await updateWorkOrder(workOrder.id, approvedData);
       } else {
-          addWorkOrder({
+          success = await addWorkOrder({
               ...workOrder,
               ...approvedData,
               createdAt: new Date().toISOString(),
@@ -375,17 +380,27 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
               checklist: []
           } as WorkOrder);
       }
-      setCurrentStatus('Aguardando');
-      onClose();
-      await showAlert({
-        title: 'Aprovado',
-        message: 'Ordem de Serviço aprovada e enviada para a fila.',
-        type: 'success'
-      });
+      
+      setIsSaving(false);
+
+      if (success) {
+          setCurrentStatus('Aguardando');
+          onClose();
+          await showAlert({
+            title: 'Aprovado',
+            message: 'Ordem de Serviço aprovada e enviada para a fila.',
+            type: 'success'
+          });
+      } else {
+          await showAlert({
+            title: 'Erro',
+            message: 'Falha ao aprovar OS.',
+            type: 'error'
+          });
+      }
   };
 
   const handleRegisterPayment = async () => {
-    // CORREÇÃO: Usar o valor final calculado, incluindo descontos e extras
     const currentData = getUpdatedOrderData();
     const amountToPay = currentData.totalValue || 0;
 
@@ -403,7 +418,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             desc: `Pagamento OS #${workOrder.id} - ${selectedClient?.name || 'Cliente'}`,
             category: 'Serviços',
             amount: amountToPay,
-            netAmount: amountToPay, // Simplified for now
+            netAmount: amountToPay,
             fee: 0,
             type: 'income',
             date: paymentDate,
@@ -414,15 +429,13 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         
         addFinancialTransaction(transaction);
         
-        // Update local state immediately for UI feedback before save
         updateWorkOrder(workOrder.id, { 
             paymentStatus: 'paid',
             paymentMethod: paymentMethod,
             paidAt: paymentDate,
-            totalValue: amountToPay // Ensure total value is updated in OS
+            totalValue: amountToPay
         });
 
-        // ATUALIZA O LTV DO CLIENTE
         if (selectedClientId) {
             updateClientLTV(selectedClientId, amountToPay);
         }
@@ -435,7 +448,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
   };
 
-  // --- NOVO: DESFAZER PAGAMENTO ---
   const handleUndoPayment = async () => {
     const currentData = getUpdatedOrderData();
     const amountToRefund = currentData.totalValue || 0;
@@ -448,14 +460,12 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     });
 
     if (confirm) {
-        // Find and delete transaction
         const transaction = financialTransactions.find(t => t.desc.includes(`OS #${workOrder.id}`));
         if (transaction) {
             deleteFinancialTransaction(transaction.id);
         }
         
         setIsPaid(false);
-        // Reset payment method is optional, keeping it for convenience
         
         updateWorkOrder(workOrder.id, { 
             paymentStatus: 'pending',
@@ -463,7 +473,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             paidAt: undefined
         });
 
-        // SUBTRAI O LTV DO CLIENTE
         if (selectedClientId) {
             updateClientLTV(selectedClientId, -amountToRefund);
         }
@@ -542,10 +551,43 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
   };
 
+  const handleLogPhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const url = URL.createObjectURL(e.target.files[0]);
+      setNewLogPhoto(url);
+    }
+  };
+
   const handleAddLog = () => {
-    if (!newLogText) return;
-    setDailyLog([{ id: Date.now().toString(), date: new Date().toISOString(), stage: 'Execução', description: newLogText, photos: [], author: 'Técnico' }, ...dailyLog]);
+    if (!newLogText && !newLogPhoto) return;
+    
+    const photos = newLogPhoto ? [newLogPhoto] : [];
+    
+    setDailyLog([{ 
+        id: Date.now().toString(), 
+        date: new Date().toISOString(), 
+        stage: 'Execução', 
+        description: newLogText || 'Foto registrada', 
+        photos: photos, 
+        author: 'Técnico' 
+    }, ...dailyLog]);
+    
     setNewLogText('');
+    setNewLogPhoto(null);
+  };
+
+  const handleQuickAfterPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const url = URL.createObjectURL(e.target.files[0]);
+      setDailyLog([{ 
+        id: Date.now().toString(), 
+        date: new Date().toISOString(), 
+        stage: 'Finalização', 
+        description: 'Resultado Final', 
+        photos: [url], 
+        author: 'Técnico' 
+      }, ...dailyLog]);
+    }
   };
 
   const canComplete = qaList.every(q => !q.required || q.checked);
@@ -573,26 +615,19 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         return;
     }
 
-    // Update status
     updateWorkOrder(workOrder.id, { status: newStatus });
     setCurrentStatus(newStatus);
     
-    // If changing TO Concluído
     if (newStatus === 'Concluído') {
-      // Ensure we use the latest calculated values for point generation
       const currentData = getUpdatedOrderData();
       const fullOrderSnapshot = { ...workOrder, ...currentData, status: 'Concluído' } as WorkOrder;
       
-      // Update order data first to ensure consistency
       updateWorkOrder(workOrder.id, currentData);
-      
-      // Complete order passing the snapshot to ensure points are calculated on correct values
       completeWorkOrder(workOrder.id, fullOrderSnapshot);
       
       if (selectedClient) {
         const msg = `Olá ${selectedClient.name}! O serviço no seu ${selectedVehicleObj?.model || 'veículo'} foi concluído com sucesso. Valor Total: ${formatCurrency(fullOrderSnapshot.totalValue)}. Aguardamos sua retirada!`;
         
-        // Check if whatsapp is connected to send via bot or manual
         if (isWhatsAppConnected) {
             if (consumeTokens(1, `Aviso Conclusão OS #${workOrder.id}`)) {
                 showAlert({ title: 'Aviso Enviado', message: 'Mensagem de conclusão enviada via Robô.', type: 'success' });
@@ -627,19 +662,17 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       return;
     }
 
-    // Use current state for print preview
     const currentData = getUpdatedOrderData();
     const printOrder = { ...workOrder, ...currentData } as WorkOrder;
 
     const htmlContent = WorkOrderPrintTemplate({ workOrder: printOrder, client: selectedClient });
     
-    // Re-using logic from previous artifact for print content generation (simplified here for brevity, ideally imported)
     const printContent = `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="UTF-8" />
-        <title>OS #${workOrder.id}</title>
+        <title>OS ${formatId(workOrder.id)}</title>
         <style>
           body { font-family: Arial, sans-serif; color: #000; background: #fff; margin: 0; }
           @page { size: A4; margin: 10mm; }
@@ -675,7 +708,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                 <div><strong>Telefone:</strong> ${companySettings.phone}</div>
               </div>
               <div style="text-align: right;">
-                <div class="os-title">OS #${workOrder.id}</div>
+                <div class="os-title">OS ${formatId(workOrder.id)}</div>
                 <div style="font-size: 12px; color: #666; text-transform: uppercase;">${currentStatus}</div>
                 <div style="font-size: 12px; color: #666;">Data: ${new Date().toLocaleDateString('pt-BR')}</div>
               </div>
@@ -741,17 +774,15 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       return;
     }
 
-    // Use current state values
     const currentData = getUpdatedOrderData();
     
     const itemsText = currentData.additionalItems && currentData.additionalItems.length > 0 
       ? currentData.additionalItems.map(item => `\n• ${item.description}: R$ ${item.value.toFixed(2)}`).join('')
       : '';
 
-    const message = `Olá ${selectedClient.name}! 👋\n\nSua Ordem de Serviço foi registrada:\n\n📋 *OS #${workOrder.id}*\n🚗 ${currentData.vehicle} - ${currentData.plate}\n🔧 Serviço: ${currentData.service}\n💰 Valor: ${formatCurrency(currentData.totalValue || 0)}${itemsText}\n⏱️ Prazo: ${workOrder.deadline}\n\nStatus: ${currentStatus}\n\nAguardamos sua confirmação!\n\n${companySettings.name}`;
+    const message = `Olá ${selectedClient.name}! 👋\n\nSua Ordem de Serviço foi registrada:\n\n📋 *OS ${formatId(workOrder.id)}*\n🚗 ${currentData.vehicle} - ${currentData.plate}\n🔧 Serviço: ${currentData.service}\n💰 Valor: ${formatCurrency(currentData.totalValue || 0)}${itemsText}\n⏱️ Prazo: ${workOrder.deadline}\n\nStatus: ${currentStatus}\n\nAguardamos sua confirmação!\n\n${companySettings.name}`;
     
     if (isWhatsAppConnected) {
-        // Bot Flow - Enforce Token Usage
         if ((subscription.tokenBalance || 0) < 1) {
             await showAlert({
                 title: 'Saldo Insuficiente',
@@ -776,7 +807,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             }
         }
     } else {
-        // Manual Flow (Free)
         window.open(getWhatsappLink(selectedClient.phone, message), '_blank');
     }
   };
@@ -786,13 +816,9 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     setIsSignaturePadOpen(false);
   };
 
-  // Calculations for Display
   const currentExtrasTotal = additionalItems.reduce((acc, item) => acc + item.value, 0);
-  // Calculate current total for display purposes only (does NOT include discounts yet)
-  // For final payment, we use getUpdatedOrderData()
   const displaySubtotal = servicePrice + currentExtrasTotal;
   
-  // Calculate display discount
   let displayDiscount = 0;
   if (discountType === 'percentage') {
       displayDiscount = displaySubtotal * (discountAmount / 100);
@@ -809,7 +835,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       {isClientModalOpen && <ClientModal onClose={() => setIsClientModalOpen(false)} />}
       {isSignaturePadOpen && <SignaturePad onSave={handleSignatureSave} onClose={() => setIsSignaturePadOpen(false)} />}
       
-      {/* ADDED: Damage Registration Modal */}
       {isDamageModalOpen && (
         <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
@@ -832,7 +857,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                 />
              </div>
 
-             {/* Camera Input */}
              <label className="block w-full p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors mb-4">
                 <input 
                     type="file" 
@@ -872,7 +896,8 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         <div className="p-3 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start gap-2 sm:gap-0 bg-slate-50/50 dark:bg-slate-900/50">
           <div className="w-full sm:w-auto">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-3 mb-1">
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">{workOrder.id}</h2>
+              {/* UPDATED: Use formatId for the OS Number in Header */}
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">{formatId(workOrder.id)}</h2>
               <select 
                 value={currentStatus}
                 onChange={(e) => handleStatusChange(e.target.value as any)}
@@ -892,7 +917,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                 <option value="Entregue">Entregue ao Cliente</option>
               </select>
 
-              {/* GAMIFICATION BADGE IN HEADER */}
               {selectedClientId && companySettings.gamification?.enabled && (
                 <span className={cn(
                   "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wide text-white",
@@ -910,12 +934,22 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
           <div className="flex gap-1 sm:gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
             {currentStatus === 'Aguardando Aprovação' ? (
-                <button onClick={handleApprove} className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-green-600 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-green-700 transition-colors shadow-lg shadow-green-900/20 animate-pulse">
-                    <Check size={14} /> <span className="hidden sm:inline">Aprovar & Definir Preço</span><span className="sm:hidden">Aprovar</span>
+                <button 
+                    onClick={handleApprove} 
+                    disabled={isSaving}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-green-600 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-green-700 transition-colors shadow-lg shadow-green-900/20 animate-pulse disabled:opacity-50"
+                >
+                    {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} 
+                    <span className="hidden sm:inline">Aprovar & Definir Preço</span><span className="sm:hidden">Aprovar</span>
                 </button>
             ) : (
-                <button onClick={handleSave} className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-blue-700 transition-colors">
-                    <Save size={14} /> <span className="hidden sm:inline">Salvar Tudo</span><span className="sm:hidden">Salvar</span>
+                <button 
+                    onClick={handleSave} 
+                    disabled={isSaving}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                    {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} 
+                    <span className="hidden sm:inline">Salvar Tudo</span><span className="sm:hidden">Salvar</span>
                 </button>
             )}
             <button onClick={handlePrint} className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-slate-600 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-slate-700 transition-colors">
@@ -938,7 +972,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* ... (rest of the component content) ... */}
         <div className="flex border-b border-slate-100 dark:border-slate-800 px-2 sm:px-6 overflow-x-auto">
           {[
             { id: 'reception', label: 'Recepção & Vistoria', mobileLabel: 'Recepção', icon: ClipboardCheck },
@@ -970,9 +1004,9 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           {/* TAB: RECEPTION */}
           {activeTab === 'reception' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-8">
-              
-              {/* COL 1: CLIENT & VEHICLE */}
+              {/* ... (reception content) ... */}
               <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm mb-2">
+                 {/* ... (Client & Vehicle Selection - No changes needed here) ... */}
                  <h3 className="font-bold text-slate-900 dark:text-white mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
                     <User size={18} className="text-blue-600" />
                     Dados do Cliente & Veículo
@@ -1163,6 +1197,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                   </div>
                 </div>
 
+                {/* Other panels (Inventory, Signature, etc.) remain the same */}
                 <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                   <h3 className="font-bold text-slate-900 dark:text-white mb-2 sm:mb-4 text-sm sm:text-base">O que ficou no carro? (Inventário)</h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 sm:gap-4">
@@ -1223,7 +1258,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           {/* TAB: EXECUTION (DIÁRIO DE OBRA + ESCOPO) */}
           {activeTab === 'execution' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              
+              {/* ... (execution content remains the same) ... */}
               {/* COL 1: CHECKLIST DE ESCOPO (O que fazer) */}
               <div className="lg:col-span-1 space-y-6">
                  <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -1289,7 +1324,19 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                             </div>
                         </div>
                         <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase mb-2">Depois (Resultado)</p>
+                            <div className="flex justify-between items-center mb-2">
+                                <p className="text-xs font-bold text-slate-500 uppercase">Depois (Resultado)</p>
+                                <label className="cursor-pointer text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                                    <Plus size={12} /> Adicionar Foto
+                                    <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        capture="environment"
+                                        className="hidden" 
+                                        onChange={handleQuickAfterPhoto}
+                                    />
+                                </label>
+                            </div>
                             <div className="flex gap-2 overflow-x-auto pb-2">
                                 {afterPhotos.length > 0 ? afterPhotos.map((p, i) => (
                                     <img key={i} src={p.url} className="w-20 h-20 rounded-lg object-cover border border-slate-200 dark:border-slate-700" alt="Depois" />
@@ -1308,17 +1355,42 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     Diário de Bordo (Timeline)
                   </h3>
                   
-                  <div className="flex gap-2 mb-6">
-                    <input 
-                      type="text"
-                      value={newLogText}
-                      onChange={(e) => setNewLogText(e.target.value)}
-                      placeholder="O que foi feito agora? (Ex: Lixamento concluído)"
-                      className="flex-1 px-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
-                    />
+                  <div className="flex gap-2 mb-6 items-start">
+                    <div className="flex-1 space-y-2">
+                        <input 
+                        type="text"
+                        value={newLogText}
+                        onChange={(e) => setNewLogText(e.target.value)}
+                        placeholder="O que foi feito agora? (Ex: Lixamento concluído)"
+                        className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
+                        />
+                        {newLogPhoto && (
+                            <div className="relative w-20 h-20 group">
+                                <img src={newLogPhoto} alt="Preview" className="w-full h-full object-cover rounded-lg border border-slate-200 dark:border-slate-700" />
+                                <button 
+                                    onClick={() => setNewLogPhoto(null)}
+                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600 transition-colors"
+                                >
+                                    <X size={12} />
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    
+                    <label className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-colors h-10 w-10 flex items-center justify-center">
+                        <Camera size={20} />
+                        <input 
+                            type="file" 
+                            accept="image/*" 
+                            capture="environment"
+                            className="hidden" 
+                            onChange={handleLogPhotoSelect}
+                        />
+                    </label>
+
                     <button 
                       onClick={handleAddLog}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 h-10"
                     >
                       Registrar
                     </button>
@@ -1367,6 +1439,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           {/* TAB: QUALITY (QA) */}
           {activeTab === 'quality' && (
             <div className="max-w-2xl mx-auto">
+              {/* ... (quality content remains the same) ... */}
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                 <div className="text-center mb-8">
                   <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4 text-green-600 dark:text-green-400">
@@ -1462,6 +1535,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           {/* TAB: FINANCE */}
           {activeTab === 'finance' && (
             <div className="space-y-6">
+              {/* ... (finance content remains the same) ... */}
               <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                 <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                   <DollarSign size={20} className="text-green-600" />

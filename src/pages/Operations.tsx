@@ -5,7 +5,7 @@ import {
   UserPlus, AlertCircle, CheckCircle2, 
   Hammer, ShieldCheck, PackageX
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, formatId } from '../lib/utils';
 import { useApp } from '../context/AppContext';
 import WorkOrderModal from '../components/WorkOrderModal';
 import ClientModal from '../components/ClientModal';
@@ -182,7 +182,7 @@ export default function Operations() {
                         </div>
                         <div className="min-w-0">
                           <p className="font-medium text-slate-900 dark:text-white text-xs sm:text-sm truncate">{os.vehicle}</p>
-                          <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">#{os.id} • {getClientName(os.clientId)}</p>
+                          <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">{formatId(os.id)} • {getClientName(os.clientId)}</p>
                         </div>
                       </div>
                     </td>
@@ -240,7 +240,7 @@ export default function Operations() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-slate-900 dark:text-white text-sm truncate">{os.vehicle}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">#{os.id}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{formatId(os.id)}</p>
                   </div>
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-300 mb-2">{os.service}</p>
@@ -306,7 +306,7 @@ export default function Operations() {
                             <div className="flex items-start justify-between gap-1.5">
                               <div className="flex-1 min-w-0">
                                 <p className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm truncate">{os.vehicle}</p>
-                                <p className="text-[9px] sm:text-xs text-slate-500 dark:text-slate-400">#{os.id}</p>
+                                <p className="text-[9px] sm:text-xs text-slate-500 dark:text-slate-400">{formatId(os.id)}</p>
                                 <p className="text-[9px] sm:text-xs text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-2">{os.service}</p>
                               </div>
                               <div className="text-[9px] sm:text-xs font-bold text-blue-600 dark:text-blue-400 flex-shrink-0 text-right whitespace-nowrap">

@@ -1,14 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { Shield, Lock, Mail, User, Store, ArrowRight, Loader2, CheckCircle2, Eye, EyeOff, AlertCircle, RefreshCw, Wrench, LogOut } from 'lucide-react';
-import { cn, withTimeout } from '../lib/utils';
-import { supabase } from '../lib/supabase';
+import { Shield, Lock, Mail, User, Store, ArrowRight, Loader2, CheckCircle2, Eye, EyeOff, AlertCircle, RefreshCw, LogOut, Wifi, WifiOff, Send, HelpCircle } from 'lucide-react';
+import { checkSupabaseConnection, supabase } from '../lib/supabase';
+
+interface DataLoadErrorState {
+  hasError: boolean;
+  message: string;
+  technicalDetails?: string;
+  retryCount: number;
+}
 
 export default function OwnerLogin() {
-  const { loginOwner, registerOwner, ownerUser, isAppLoading, logoutOwner, createTenantViaRPC, reloadUserData } = useApp();
+  const { loginOwner, registerOwner, ownerUser, isAppLoading, reloadUserData, logoutOwner } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
+  const passwordInputRef = useRef<HTMLInputElement>(null);
   
   const [viewState, setViewState] = useState<'login' | 'register' | 'forgot_password'>('login');
   
@@ -16,182 +23,229 @@ export default function OwnerLogin() {
     name: '',
     email: '',
     password: '',
+    confirmPassword: '', 
     shopName: ''
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [debugError, setDebugError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
-  const [sessionStatus, setSessionStatus] = useState<'checking' | 'authenticated' | 'no-session'>('checking');
-  const [hasTenant, setHasTenant] = useState<boolean | null>(null);
+  const [loadingText, setLoadingText] = useState('Processando...'); 
+  const [isConnected, setIsConnected] = useState<boolean | null>(null);
+  const [showResend, setShowResend] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+
+  const [dataLoadError, setDataLoadError] = useState<DataLoadErrorState>({
+    hasError: false,
+    message: '',
+    retryCount: 0
+  });
 
   const from = (location.state as any)?.from?.pathname || '/';
 
-  // 1. Diagnóstico de Sessão
   useEffect(() => {
-    const checkStatus = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          setSessionStatus('authenticated');
-          setFormData(prev => ({ ...prev, email: session.user.email || '' }));
-          
-          if (ownerUser) {
-              setHasTenant(true);
-          } else {
-              // Use limit(1) to avoid single() error on duplicates
-              const { data } = await supabase.from('tenants').select('id').eq('owner_id', session.user.id).limit(1);
-              setHasTenant(data && data.length > 0);
-          }
-        } else {
-          setSessionStatus('no-session');
-          setHasTenant(false);
+    const checkConn = async () => {
+        const connected = await checkSupabaseConnection();
+        setIsConnected(connected);
+        if (!connected) {
+            setError('Sem conexão com o servidor. Verifique sua internet.');
         }
-      } catch (err) {
-        console.error("Error checking session:", err);
-        setSessionStatus('no-session');
-      }
     };
-    
-    if (!isAppLoading) {
-        checkStatus();
-    }
-  }, [ownerUser, isAppLoading]);
+    checkConn();
+  }, []);
 
-  // 2. Redirecionamento MANUAL (Evita loop)
-  const handleEnterPanel = () => {
-      if (ownerUser) {
-          navigate(from, { replace: true });
+  useEffect(() => {
+    if (ownerUser && !isAppLoading && !dataLoadError.hasError) {
+      navigate(from, { replace: true });
+    }
+  }, [ownerUser, isAppLoading, navigate, from, dataLoadError.hasError]);
+
+  const handleRetryLoad = async () => {
+    setIsLoading(true);
+    setLoadingText('Tentando reconectar...');
+    setError('');
+    setDebugError('');
+    
+    try {
+      const success = await reloadUserData();
+      if (success) {
+        setDataLoadError({ hasError: false, message: '', retryCount: 0 });
+        navigate(from, { replace: true });
       } else {
-          // Try to reload data without full page reload first
-          setIsLoading(true);
-          reloadUserData().then((success) => {
-             setIsLoading(false);
-             if (success) {
-                 navigate(from, { replace: true });
-             } else {
-                 setError("Não foi possível carregar os dados da loja. Tente criar a loja novamente abaixo.");
-                 setHasTenant(false); // Allow creating store
-             }
-          }).catch(() => {
-             setIsLoading(false);
-             setError("Erro ao conectar com o servidor.");
-          });
+        setDataLoadError(prev => ({
+          ...prev,
+          hasError: true,
+          message: 'Não foi possível carregar os dados. O banco de dados pode estar reiniciando.',
+          retryCount: prev.retryCount + 1
+        }));
       }
+    } catch (err: any) {
+      console.error("Retry error:", err);
+      setDebugError(err.message || JSON.stringify(err));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogoutAndReset = async () => {
+    await logoutOwner();
+    setDataLoadError({ hasError: false, message: '', retryCount: 0 });
+    setFormData(prev => ({ ...prev, password: '', confirmPassword: '' }));
+    setError('');
+    setDebugError('');
+  };
+
+  const handleResendEmail = async () => {
+    if (!formData.email) return;
+    setIsLoading(true);
+    setLoadingText('Enviando email...');
+    setError('');
+    setSuccessMsg('');
+    
+    try {
+        const { error } = await supabase.auth.resend({
+            type: 'signup',
+            email: formData.email.trim(),
+            options: {
+                emailRedirectTo: window.location.origin
+            }
+        });
+        
+        if (error) throw error;
+        
+        setSuccessMsg(`Email de confirmação reenviado para ${formData.email}. Verifique sua caixa de entrada e SPAM.`);
+        setShowResend(false);
+    } catch (err: any) {
+        setError('Erro ao reenviar: ' + (err.message || 'Tente novamente mais tarde.'));
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setDebugError('');
     setSuccessMsg('');
+    setShowResend(false);
+    setShowForgotPassword(false);
     setIsLoading(true);
 
     try {
+      // Normalize email here instead of onChange
+      const normalizedEmail = formData.email.replace(/\s+/g, '').toLowerCase();
+      console.log("Submitting with email:", normalizedEmail); // Debug log
+
       if (viewState === 'register') {
-        if (!formData.name || !formData.email || !formData.password || !formData.shopName) {
+        setLoadingText('Criando sua conta...');
+        
+        if (!formData.name || !normalizedEmail || !formData.password || !formData.shopName) {
           throw new Error('Por favor, preencha todos os campos.');
         }
         if (formData.password.length < 6) {
           throw new Error('A senha deve ter pelo menos 6 caracteres.');
         }
+        if (formData.password !== formData.confirmPassword) {
+          throw new Error('As senhas não coincidem.');
+        }
 
-        // 60s Timeout for Registration (Cold Start)
-        const result = await withTimeout(
-            registerOwner(formData.name, formData.email, formData.shopName, formData.password),
-            60000,
-            "O cadastro demorou muito. O banco de dados pode estar inicializando. Tente novamente em alguns segundos."
-        );
+        // 1. Tenta Criar o Usuário no Supabase Auth
+        const result = await registerOwner(formData.name, normalizedEmail, formData.shopName, formData.password);
         
         if (result.success) {
+          setLoadingText('Verificando acesso...');
+          
+          // 2. Verifica se entrou direto (Email confirm off) ou precisa confirmar
           const { data: { session } } = await supabase.auth.getSession();
+          
           if (session) {
-              const success = await reloadUserData();
-              if (success) {
-                  navigate(from, { replace: true });
+              setLoadingText('Preparando seu painel...');
+              // Se já tem sessão, tenta carregar (vai falhar pois não tem loja, mas o AppContext lida com isso)
+              const loadSuccess = await reloadUserData();
+              
+              // Se carregou (mesmo sem loja), redireciona
+              if (loadSuccess) {
+                navigate(from, { replace: true });
               } else {
-                  setHasTenant(false);
+                // Fallback: Se falhar o load, força a ida para o dashboard onde o Layout vai tratar a falta de loja
+                console.warn("Load failed but session exists, forcing navigation.");
+                navigate('/', { replace: true });
               }
           } else {
-              setSuccessMsg("Cadastro realizado! Verifique seu email para confirmar.");
+              // Fluxo padrão: Precisa confirmar email
+              setSuccessMsg("Cadastro realizado com sucesso! Verifique seu email (e a pasta de SPAM) para confirmar a conta antes de entrar.");
               setViewState('login');
-              setFormData(prev => ({ ...prev, password: '' })); 
+              setFormData(prev => ({ ...prev, password: '', confirmPassword: '' })); 
           }
         } else {
-          if (result.error?.includes('User already registered')) {
+          // Tratamento de erros específicos de registro
+          // FIX: registerOwner returns error as a string, not an object with message
+          const errorMsg = typeof result.error === 'string' ? result.error : (result.error as any)?.message || '';
+          
+          if (errorMsg.includes('User already registered')) {
              setViewState('login');
-             throw new Error('Este email já está cadastrado. Tente fazer login.');
+             setError('Este email já está cadastrado. Tente fazer login.');
+             return;
           }
-          throw new Error(result.error || 'Não foi possível criar a conta.');
+          throw new Error(errorMsg || 'Não foi possível criar a conta.');
         }
 
       } else if (viewState === 'login') {
-        if (!formData.email || !formData.password) {
-            throw new Error('Informe email e senha.');
-        }
+        setLoadingText('Autenticando...');
+        if (!normalizedEmail) throw new Error('Informe o email.');
+        if (!formData.password) throw new Error('Informe a senha.');
 
-        let loginError = null;
-        
-        // Lógica de Retry para Login (3 tentativas para Cold Start)
-        // Aumentado para suportar cold starts lentos
-        for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-                // 30s -> 60s -> 60s
-                const timeoutMs = attempt === 1 ? 30000 : 60000;
-                
-                const { error } = await withTimeout(
-                    supabase.auth.signInWithPassword({ 
-                        email: formData.email, 
-                        password: formData.password 
-                    }),
-                    timeoutMs,
-                    "O servidor demorou para responder."
-                );
+        const result = await loginOwner(normalizedEmail, formData.password);
 
-                if (error) {
-                    // Se for erro de credencial, para imediatamente (não é problema de rede)
-                    if (error.message.includes('Invalid login') || error.code === 'invalid_credentials' || error.message.includes('Email not confirmed')) {
-                        loginError = error;
-                        break;
-                    }
-                    // Se for outro erro (ex: rede), armazena e tenta novamente se não for a última
-                    if (attempt === 3) loginError = error;
-                    else await new Promise(r => setTimeout(r, 2000)); // Espera 2s
-                } else {
-                    // Sucesso! Limpa erro e sai do loop
-                    loginError = null;
-                    break;
-                }
-            } catch (err) {
-                console.warn(`Login attempt ${attempt} timeout/failed`);
-                if (attempt === 3) {
-                    loginError = { message: "O servidor demorou muito para responder. Verifique sua conexão e tente novamente." } as any;
-                }
+        if (!result.success) {
+            console.error("LOGIN FAILED:", result.error);
+            setDebugError(JSON.stringify(result.error, null, 2));
+
+            // Limpa a senha para forçar redigitação correta
+            setFormData(prev => ({ ...prev, password: '' }));
+            if (passwordInputRef.current) {
+                passwordInputRef.current.focus();
             }
-        }
 
-        if (loginError) {
-            if (loginError.message.includes('Email not confirmed')) {
-                 throw new Error('Email não confirmado. Verifique sua caixa de entrada.');
-            } else if (loginError.message.includes('Invalid login') || loginError.code === 'invalid_credentials') {
-                 throw new Error('Email ou senha incorretos.');
+            const msg = result.error?.message || '';
+            const code = result.error?.code || '';
+
+            if (msg.includes('Email not confirmed') || code === 'email_not_confirmed') {
+                 setShowResend(true);
+                 throw new Error('Seu email ainda não foi confirmado. Verifique sua caixa de entrada (e SPAM) e clique no link de ativação.');
+            } else if (msg.includes('Invalid login') || code === 'invalid_credentials') {
+                 setShowForgotPassword(true);
+                 throw new Error('Email ou senha incorretos. Verifique se não há espaços em branco ou tente recuperar a senha.');
+            } else if (msg.includes('Failed to fetch') || msg.includes('Network request failed')) {
+                 throw new Error('Erro de conexão. Verifique sua internet ou se o servidor está acessível.');
+            } else if (msg.includes('Login timed out')) {
+                 throw new Error('O servidor demorou para responder. Pode ser uma inicialização a frio. Tente novamente em alguns segundos.');
             } else {
-                throw new Error(loginError.message);
+                throw new Error(`Erro ao entrar: ${msg || 'Tente novamente.'}`);
             }
         }
         
-        // Successful login, try loading data
-        const success = await reloadUserData();
-        if (success) {
+        setLoadingText('Carregando seus dados...');
+        const loadSuccess = await reloadUserData();
+        
+        if (loadSuccess) {
              navigate(from, { replace: true });
         } else {
-             setHasTenant(false); // Fallback to store creation UI
+             // Se falhar o load mas logou, pode ser timeout do banco.
+             setDataLoadError({
+               hasError: true,
+               message: 'Login realizado, mas o sistema demorou para responder.',
+               technicalDetails: 'Timeout ou falha em reloadUserData().',
+               retryCount: 0
+             });
         }
 
       } else if (viewState === 'forgot_password') {
-        if (!formData.email) throw new Error('Informe seu email.');
+        setLoadingText('Enviando solicitação...');
+        if (!normalizedEmail) throw new Error('Informe seu email.');
         
-        const { error: resetError } = await supabase.auth.resetPasswordForEmail(formData.email, {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
             redirectTo: `${window.location.origin}/reset-password`,
         });
         if (resetError) throw resetError;
@@ -201,42 +255,23 @@ export default function OwnerLogin() {
       }
     } catch (err: any) {
       console.error("Erro no formulário:", err);
-      setError(err.message || 'Ocorreu um erro inesperado.');
-    } finally {
-      // CRITICAL: Always turn off loading, regardless of success or failure
-      setIsLoading(false);
-    }
-  };
+      let msg = err.message || 'Ocorreu um erro inesperado.';
 
-  const handleForceCreateStore = async () => {
-      setIsLoading(true);
-      try {
-          const shopName = formData.shopName || "Minha Oficina";
-          // 90s Timeout for Store Creation (Includes retries in loadTenantData)
-          const success = await withTimeout(
-              createTenantViaRPC(shopName),
-              90000,
-              "A criação da loja demorou muito. Verifique se ela foi criada recarregando a página."
-          );
-
-          if (success) {
-              navigate(from, { replace: true });
-          } else {
-              throw new Error("Falha ao criar loja. Tente novamente.");
-          }
-
-      } catch (err: any) {
-          setError("Erro: " + err.message);
-      } finally {
-          setIsLoading(false);
+      if (msg.includes('Email signups are disabled')) {
+        msg = 'O cadastro de novos usuários está desativado nas configurações do sistema. Entre em contato com o suporte.';
+      } else if (msg.includes('Signups not allowed')) {
+        msg = 'O cadastro não é permitido neste momento.';
+      } else if (msg.includes('Email logins are disabled') || msg.includes('email_provider_disabled')) {
+        msg = 'O login por email está desativado. Ative o provedor "Email" no painel do Supabase.';
+      } else if (msg.includes('Email not confirmed')) {
+        setShowResend(true);
+        msg = 'Email não confirmado. Verifique sua caixa de entrada.';
       }
-  };
 
-  const handleFullReset = async () => {
-    if (window.confirm('Isso fará logout e limpará dados locais. Continuar?')) {
-        await logoutOwner();
-        localStorage.clear();
-        window.location.reload();
+      setError(msg);
+      if (!debugError) setDebugError(err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -255,104 +290,82 @@ export default function OwnerLogin() {
           </div>
           <h1 className="text-3xl font-bold text-white mb-2">Cristal Care ERP</h1>
           <p className="text-slate-400">Gestão inteligente para sua estética automotiva.</p>
+          
+          <div className="mt-4 flex justify-center">
+            {isConnected === null ? (
+                <span className="text-xs text-slate-500 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Verificando conexão...</span>
+            ) : isConnected ? (
+                <span className="text-xs text-green-500 flex items-center gap-1"><Wifi size={12} /> Servidor Online</span>
+            ) : (
+                <span className="text-xs text-red-500 flex items-center gap-1"><WifiOff size={12} /> Servidor Offline</span>
+            )}
+          </div>
         </div>
 
-        <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-8 shadow-2xl">
-          
-          {/* PAINEL DE DIAGNÓSTICO / RECUPERAÇÃO */}
-          {sessionStatus === 'authenticated' && hasTenant === false ? (
-              <div className="space-y-4 animate-in fade-in">
-                  <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl text-center">
-                      <AlertCircle className="w-10 h-10 text-amber-500 mx-auto mb-2" />
-                      <h3 className="text-white font-bold text-lg">Falta Pouco!</h3>
-                      <p className="text-slate-400 text-sm mt-1">
-                          Sua conta foi criada, mas precisamos configurar sua loja no banco de dados.
-                      </p>
+        <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl p-8 shadow-2xl transition-all duration-300">
+            
+            {dataLoadError.hasError ? (
+              <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-5 text-center">
+                  <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-3 text-red-400">
+                    <AlertCircle size={24} />
                   </div>
-                  
-                  <div>
-                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">Nome da Loja</label>
-                      <input 
-                          type="text" 
-                          value={formData.shopName}
-                          onChange={e => setFormData({...formData, shopName: e.target.value})}
-                          className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:border-blue-500 outline-none"
-                          placeholder="Digite o nome da sua oficina"
-                      />
-                  </div>
-
-                  {error && (
-                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center">
-                        {error}
-                    </div>
+                  <h3 className="text-lg font-bold text-red-400 mb-2">Erro de Carregamento</h3>
+                  <p className="text-sm text-red-300/80 leading-relaxed">
+                    {dataLoadError.message}
+                  </p>
+                  {dataLoadError.technicalDetails && (
+                    <details className="mt-2 text-left">
+                        <summary className="text-xs text-red-400/60 cursor-pointer hover:text-red-400">Ver detalhes técnicos</summary>
+                        <pre className="mt-2 p-2 bg-black/30 rounded text-[10px] text-red-300 overflow-x-auto">
+                            {dataLoadError.technicalDetails}
+                        </pre>
+                    </details>
                   )}
+                </div>
 
+                <div className="space-y-3">
                   <button 
-                      onClick={handleForceCreateStore}
-                      disabled={isLoading || !formData.shopName}
-                      className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={handleRetryLoad}
+                    disabled={isLoading}
+                    className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2 disabled:opacity-70"
                   >
-                      {isLoading ? <Loader2 className="animate-spin" /> : <Wrench size={18} />}
-                      Criar Loja e Acessar
+                    {isLoading ? <Loader2 className="animate-spin" size={20} /> : <RefreshCw size={20} />}
+                    {isLoading ? loadingText : 'Tentar Novamente'}
                   </button>
                   
-                  <button onClick={handleFullReset} className="w-full py-2 text-slate-500 hover:text-white text-sm flex items-center justify-center gap-2">
-                      <LogOut size={14} /> Sair e tentar outra conta
-                  </button>
-              </div>
-          ) : sessionStatus === 'authenticated' && hasTenant === true ? (
-              <div className="text-center space-y-4 animate-in fade-in">
-                  <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto text-green-500">
-                      <CheckCircle2 size={32} />
-                  </div>
-                  <h3 className="text-white font-bold text-xl">Você está conectado!</h3>
-                  <p className="text-slate-400 text-sm">Seus dados foram carregados com sucesso.</p>
-                  
-                  {error && (
-                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center">
-                        {error}
-                    </div>
-                  )}
-
                   <button 
-                      onClick={handleEnterPanel}
-                      disabled={isLoading}
-                      className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                    onClick={handleLogoutAndReset}
+                    className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl border border-slate-700 transition-all flex items-center justify-center gap-2"
                   >
-                      {isLoading ? <Loader2 className="animate-spin" /> : <ArrowRight size={18} />}
-                      {isLoading ? 'Carregando...' : 'Entrar no Painel'}
+                    <LogOut size={18} />
+                    Sair e Tentar Login
                   </button>
-
-                  <button onClick={handleFullReset} className="text-slate-500 hover:text-red-400 text-sm underline">
-                      Não é você? Sair
-                  </button>
+                </div>
               </div>
-          ) : (
-            /* TELA DE LOGIN/REGISTRO NORMAL */
-            <>
+            ) : (
+              <>
                 {viewState !== 'forgot_password' && (
                     <div className="flex gap-2 p-1 bg-slate-800/50 rounded-lg mb-6">
                         <button
                         type="button"
-                        onClick={() => { setViewState('login'); setError(''); setSuccessMsg(''); }}
-                        className={cn(
-                            "flex-1 py-2.5 text-sm font-bold rounded-md transition-all",
+                        onClick={() => { setViewState('login'); setError(''); setSuccessMsg(''); setDebugError(''); setShowResend(false); setShowForgotPassword(false); }}
+                        className={`flex-1 py-2.5 text-sm font-bold rounded-md transition-all ${
                             viewState === 'login' 
                             ? "bg-blue-600 text-white shadow-lg" 
                             : "text-slate-400 hover:text-white hover:bg-slate-800"
-                        )}
+                        }`}
                         >
                         Entrar
                         </button>
                         <button
                         type="button"
-                        onClick={() => { setViewState('register'); setError(''); setSuccessMsg(''); }}
-                        className={cn(
-                            "flex-1 py-2.5 text-sm font-bold rounded-md transition-all",
+                        onClick={() => { setViewState('register'); setError(''); setSuccessMsg(''); setDebugError(''); setShowResend(false); setShowForgotPassword(false); }}
+                        className={`flex-1 py-2.5 text-sm font-bold rounded-md transition-all ${
                             viewState === 'register' 
                             ? "bg-blue-600 text-white shadow-lg" 
                             : "text-slate-400 hover:text-white hover:bg-slate-800"
-                        )}
+                        }`}
                         >
                         Criar Conta
                         </button>
@@ -411,22 +424,25 @@ export default function OwnerLogin() {
                         onChange={e => setFormData({...formData, email: e.target.value})}
                         className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                         placeholder="seu@email.com"
+                        autoComplete="email"
                         />
                     </div>
                     </div>
 
                     {viewState !== 'forgot_password' && (
+                        <>
                         <div>
                         <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">Senha</label>
                         <div className="relative">
                             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
                             <input 
+                            ref={passwordInputRef}
                             type={showPassword ? "text" : "password"} 
-                            required
                             value={formData.password}
                             onChange={e => setFormData({...formData, password: e.target.value})}
                             className="w-full pl-10 pr-10 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                             placeholder="••••••••"
+                            autoComplete="current-password"
                             />
                             <button
                             type="button"
@@ -438,13 +454,31 @@ export default function OwnerLogin() {
                             </button>
                         </div>
                         </div>
+
+                        {viewState === 'register' && (
+                            <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">Confirmar Senha</label>
+                            <div className="relative">
+                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                                <input 
+                                type={showPassword ? "text" : "password"} 
+                                value={formData.confirmPassword}
+                                onChange={e => setFormData({...formData, confirmPassword: e.target.value})}
+                                className="w-full pl-10 pr-10 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                                placeholder="••••••••"
+                                autoComplete="new-password"
+                                />
+                            </div>
+                            </div>
+                        )}
+                        </>
                     )}
 
                     {viewState === 'login' && (
                         <div className="flex justify-end">
                             <button 
                                 type="button"
-                                onClick={() => { setViewState('forgot_password'); setError(''); setSuccessMsg(''); }}
+                                onClick={() => { setViewState('forgot_password'); setError(''); setSuccessMsg(''); setDebugError(''); setShowResend(false); setShowForgotPassword(false); }}
                                 className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
                             >
                                 Esqueceu a senha?
@@ -454,10 +488,39 @@ export default function OwnerLogin() {
 
                     {error && (
                     <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center animate-in fade-in flex flex-col items-center justify-center gap-2">
-                        <div className="flex items-center gap-2">
-                            <AlertCircle size={16} className="flex-shrink-0" />
-                            <span>{error}</span>
+                        <div className="flex items-start gap-2">
+                            <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+                            <span className="text-left">{error}</span>
                         </div>
+                        {showResend && (
+                            <button
+                                type="button"
+                                onClick={handleResendEmail}
+                                disabled={isLoading}
+                                className="mt-1 text-xs bg-red-500/20 hover:bg-red-500/30 text-red-300 px-3 py-1.5 rounded flex items-center gap-1 transition-colors w-full justify-center font-bold border border-red-500/30"
+                            >
+                                {isLoading ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                                Reenviar Email de Confirmação
+                            </button>
+                        )}
+                        {showForgotPassword && (
+                            <button
+                                type="button"
+                                onClick={() => { setViewState('forgot_password'); setError(''); setSuccessMsg(''); setDebugError(''); setShowResend(false); setShowForgotPassword(false); }}
+                                className="mt-1 text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 px-3 py-1.5 rounded flex items-center gap-1 transition-colors w-full justify-center font-bold border border-blue-500/30"
+                            >
+                                <HelpCircle size={12} />
+                                Recuperar Minha Senha
+                            </button>
+                        )}
+                        {debugError && (
+                            <details className="w-full text-left mt-2">
+                                <summary className="text-xs opacity-70 cursor-pointer">Ver erro técnico</summary>
+                                <pre className="text-[10px] bg-black/30 p-2 rounded mt-1 overflow-x-auto whitespace-pre-wrap">
+                                    {debugError}
+                                </pre>
+                            </details>
+                        )}
                     </div>
                     )}
 
@@ -474,7 +537,10 @@ export default function OwnerLogin() {
                     className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-2"
                     >
                     {isLoading ? (
-                        <Loader2 className="animate-spin" size={20} />
+                        <>
+                            <Loader2 className="animate-spin" size={20} />
+                            <span>{loadingText}</span>
+                        </>
                     ) : (
                         <>
                         {viewState === 'register' ? 'Começar Agora' : viewState === 'forgot_password' ? 'Enviar Link' : 'Acessar Painel'}
@@ -486,7 +552,7 @@ export default function OwnerLogin() {
                     {viewState === 'forgot_password' && (
                         <button 
                             type="button"
-                            onClick={() => { setViewState('login'); setError(''); setSuccessMsg(''); }}
+                            onClick={() => { setViewState('login'); setError(''); setSuccessMsg(''); setDebugError(''); setShowResend(false); setShowForgotPassword(false); }}
                             className="w-full py-2 text-slate-500 hover:text-slate-300 text-sm font-medium transition-colors"
                         >
                             Voltar para Login
@@ -499,22 +565,7 @@ export default function OwnerLogin() {
                     Ao continuar, você concorda com nossos <Link to="/terms" className="text-blue-400 hover:underline">Termos de Uso</Link> e <Link to="/privacy" className="text-blue-400 hover:underline">Política de Privacidade</Link>.
                     </p>
                 </div>
-            </>
-          )}
-        </div>
-        
-        <div className="mt-8 flex flex-col items-center gap-2">
-            <p className="text-slate-500 text-sm">
-                É um técnico? <Link to="/tech-portal" className="text-blue-400 font-bold hover:underline">Acesse o Portal do Técnico</Link>
-            </p>
-            
-            {sessionStatus !== 'authenticated' && (
-                <button 
-                    onClick={handleFullReset}
-                    className="flex items-center gap-1 text-xs text-slate-600 hover:text-red-400 transition-colors mt-2"
-                >
-                    <RefreshCw size={12} /> Problemas no acesso? Limpar Cache
-                </button>
+              </>
             )}
         </div>
       </div>

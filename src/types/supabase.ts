@@ -322,6 +322,135 @@ export interface Database {
           created_at?: string
         }
       }
+      // GAMIFICATION TABLES
+      rewards: {
+        Row: {
+          id: string
+          tenant_id: string
+          name: string
+          description: string
+          required_points: number
+          required_level: string
+          reward_type: string
+          config: Json // stores percentage, gift name, etc
+          active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          name: string
+          description: string
+          required_points: number
+          required_level: string
+          reward_type: string
+          config?: Json
+          active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          name?: string
+          description?: string
+          required_points?: number
+          required_level?: string
+          reward_type?: string
+          config?: Json
+          active?: boolean
+          created_at?: string
+        }
+      }
+      redemptions: {
+        Row: {
+          id: string
+          tenant_id: string
+          client_id: string
+          reward_id: string
+          reward_name: string
+          code: string
+          points_cost: number
+          status: string
+          redeemed_at: string
+          used_at: string | null
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          client_id: string
+          reward_id: string
+          reward_name: string
+          code: string
+          points_cost: number
+          status: string
+          redeemed_at?: string
+          used_at?: string | null
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          client_id?: string
+          reward_id?: string
+          reward_name?: string
+          code?: string
+          points_cost?: number
+          status?: string
+          redeemed_at?: string
+          used_at?: string | null
+        }
+      }
+      fidelity_cards: {
+        Row: {
+          id: string
+          tenant_id: string
+          client_id: string
+          card_number: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          client_id: string
+          card_number: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          client_id?: string
+          card_number?: string
+          created_at?: string
+        }
+      }
+      points_history: {
+        Row: {
+          id: string
+          tenant_id: string
+          client_id: string
+          points: number
+          description: string
+          type: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          client_id: string
+          points: number
+          description: string
+          type: string // 'manual', 'service', 'redemption'
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          client_id?: string
+          points?: number
+          description?: string
+          type?: string
+          created_at?: string
+        }
+      }
     }
   }
 }

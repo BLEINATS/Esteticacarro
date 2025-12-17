@@ -3,7 +3,7 @@ import {
   Camera, Search, CheckCircle2, ChevronRight, 
   ArrowLeft, Save, Smile, MapPin, X, ImagePlus,
   Wrench, LogOut, Clock, Play, Pause, CheckSquare, 
-  DollarSign, Box, FileText, ShieldCheck
+  DollarSign, Box, FileText, ShieldCheck, Loader2
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { cn, formatCurrency } from '../lib/utils';
@@ -37,6 +37,7 @@ export default function TechPortal() {
   });
 
   const [techNotes, setTechNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Modal State for Editing Existing OS
   const [selectedOSForModal, setSelectedOSForModal] = useState<WorkOrder | null>(null);
@@ -99,9 +100,11 @@ export default function TechPortal() {
     );
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selectedClient || !selectedVehicle || selectedServiceIds.length === 0) return;
     
+    setIsSubmitting(true);
+
     // Combine service names
     const selectedServicesList = services.filter(s => selectedServiceIds.includes(s.id));
     const serviceNameCombined = selectedServicesList.map(s => s.name).join(' + ');
@@ -128,8 +131,14 @@ export default function TechPortal() {
       checklist: []
     };
 
-    addWorkOrder(newOS);
-    setStep('success');
+    const success = await addWorkOrder(newOS);
+    setIsSubmitting(false);
+
+    if (success) {
+        setStep('success');
+    } else {
+        alert("Erro ao salvar OS. Verifique sua conexão e tente novamente.");
+    }
   };
 
   const reset = () => {
@@ -395,8 +404,12 @@ export default function TechPortal() {
               
               <div className="flex gap-3 pt-4">
                  <button onClick={() => setStep('inventory')} className="flex-1 py-4 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-bold">Voltar</button>
-                 <button onClick={handleSubmit} disabled={selectedServiceIds.length === 0} className="flex-[2] py-4 bg-green-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl font-bold shadow-lg shadow-green-900/20">
-                    Finalizar Vistoria
+                 <button 
+                    onClick={handleSubmit} 
+                    disabled={selectedServiceIds.length === 0 || isSubmitting} 
+                    className="flex-[2] py-4 bg-green-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl font-bold shadow-lg shadow-green-900/20 flex items-center justify-center gap-2"
+                 >
+                    {isSubmitting ? <Loader2 className="animate-spin" /> : 'Finalizar Vistoria'}
                  </button>
               </div>
              </div>

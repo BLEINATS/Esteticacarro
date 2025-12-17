@@ -28,7 +28,7 @@ import {
   YAxis,
   CartesianGrid
 } from 'recharts';
-import { formatCurrency, cn } from '../lib/utils';
+import { formatCurrency, cn, formatId } from '../lib/utils';
 import { useApp } from '../context/AppContext';
 import WorkOrderModal from '../components/WorkOrderModal';
 import { WorkOrder } from '../types';
@@ -385,7 +385,7 @@ export default function Dashboard() {
                         </div>
                         <p className="text-[9px] font-bold text-slate-900 dark:text-white text-center line-clamp-1">{os.vehicle}</p>
                         <p className="text-[8px] text-slate-500 dark:text-slate-400 line-clamp-1">{os.service.substring(0, 10)}</p>
-                        <p className={`text-[7px] font-bold ${color.text} mt-1`}>{os.plate || os.id}</p>
+                        <p className={`text-[7px] font-bold ${color.text} mt-1`}>{formatId(os.plate || os.id)}</p>
                       </div>
                     );
                   })}

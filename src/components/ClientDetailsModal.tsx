@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, User, Phone, Mail, MapPin, Calendar, Car, 
   History, TrendingUp, MessageCircle, Plus, Zap, Gift, Copy, DollarSign, Save, Loader2,
-  Edit2, Trash2, StickyNote, Calculator, Bot
+  Edit2, Trash2, StickyNote, Calculator, Bot, RefreshCw
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useApp } from '../context/AppContext';
@@ -54,6 +54,10 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
   const [manualSpend, setManualSpend] = useState('');
   const [manualDesc, setManualDesc] = useState('');
 
+  // Card Generation State
+  const [isGeneratingCard, setIsGeneratingCard] = useState(false);
+  const [cardGenerationError, setCardGenerationError] = useState(false);
+
   // WhatsApp Status
   const isWhatsAppConnected = companySettings.whatsapp.session.status === 'connected';
 
@@ -73,16 +77,31 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
   const redemptions = getClientRedemptions(client.id);
   
   useEffect(() => {
-    if (!card && companySettings.gamification?.enabled) {
-      createFidelityCard(client.id);
+    let mounted = true;
+    if (!card && companySettings.gamification?.enabled && !isGeneratingCard && !cardGenerationError) {
+      setIsGeneratingCard(true);
+      createFidelityCard(client.id)
+        .then(newCard => {
+            if (mounted && !newCard.cardNumber) {
+                setCardGenerationError(true);
+            }
+        })
+        .catch(() => {
+            if (mounted) setCardGenerationError(true);
+        })
+        .finally(() => {
+            if (mounted) setIsGeneratingCard(false);
+        });
     }
-  }, [card, client.id, companySettings.gamification?.enabled, createFidelityCard]);
+    return () => { mounted = false; };
+  }, [card, client.id, companySettings.gamification?.enabled]);
 
   useEffect(() => {
     const baseUrl = window.location.origin;
     setShareLink(`${baseUrl}/client-profile/${client.id}`);
   }, [client.id]);
 
+  // ... (rest of component logic remains same) ...
   // Sync edit form data when client prop updates
   useEffect(() => {
     setEditFormData({
@@ -172,6 +191,7 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
         updateVehicle(client.id, editVehicleData as Vehicle);
         setEditingVehicleId(null);
         setEditVehicleData({});
+        showAlert({ title: 'Sucesso', message: 'Veículo atualizado.', type: 'success' });
     }
   };
 
@@ -287,6 +307,17 @@ Podemos agendar para esta semana?`;
     }
   };
 
+  const handleRetryCard = () => {
+      setCardGenerationError(false);
+      setIsGeneratingCard(true);
+      createFidelityCard(client.id)
+        .then(newCard => {
+            if (!newCard.cardNumber) setCardGenerationError(true);
+        })
+        .catch(() => setCardGenerationError(true))
+        .finally(() => setIsGeneratingCard(false));
+  };
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
       <div className="bg-white dark:bg-slate-900 rounded-lg sm:rounded-2xl w-full h-full sm:max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
@@ -352,6 +383,7 @@ Podemos agendar para esta semana?`;
           
           {/* TAB: OVERVIEW (EDITABLE) */}
           {activeTab === 'overview' && (
+            // ... (keep existing overview code) ...
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
               <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 sm:space-y-4 relative">
                 <div className="flex justify-between items-center mb-2">
@@ -525,9 +557,9 @@ Podemos agendar para esta semana?`;
             </div>
           )}
 
-          {/* ... (Rest of the file remains the same) ... */}
           {/* TAB: VEHICLES (EDITABLE) */}
           {activeTab === 'vehicles' && (
+            // ... (keep existing vehicles code) ...
             <div className="space-y-3 sm:space-y-4">
               <div className="flex justify-between items-center gap-2">
                 <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Veículos</h3>
@@ -581,50 +613,140 @@ Podemos agendar para esta semana?`;
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                 {client.vehicles.length > 0 ? client.vehicles.map((vehicle) => (
-                  <div key={vehicle.id} className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3 sm:gap-4 relative group">
-                    <div className="p-2 sm:p-3 bg-slate-100 dark:bg-slate-800 rounded-lg flex-shrink-0">
-                      <Car size={18} className="text-slate-500 dark:text-slate-400" />
-                    </div>
-                    
+                  <div key={vehicle.id} className={cn(
+                    "transition-all duration-300",
+                    editingVehicleId === vehicle.id ? "col-span-1 sm:col-span-2" : "col-span-1"
+                  )}>
                     {editingVehicleId === vehicle.id ? (
-                        <div className="flex-1 grid grid-cols-2 gap-2">
-                            <input 
-                                type="text" 
-                                value={editVehicleData.model} 
-                                onChange={e => setEditVehicleData({...editVehicleData, model: e.target.value})}
-                                className="px-2 py-1 text-xs border rounded bg-slate-50 dark:bg-slate-950 dark:border-slate-700 text-slate-900 dark:text-white"
-                                placeholder="Modelo"
-                            />
-                            <input 
-                                type="text" 
-                                value={editVehicleData.plate} 
-                                onChange={e => setEditVehicleData({...editVehicleData, plate: e.target.value})}
-                                className="px-2 py-1 text-xs border rounded bg-slate-50 dark:bg-slate-950 dark:border-slate-700 text-slate-900 dark:text-white"
-                                placeholder="Placa"
-                            />
-                            <div className="col-span-2 flex justify-end gap-2 mt-1">
-                                <button onClick={() => setEditingVehicleId(null)} className="text-xs text-slate-500">Cancelar</button>
-                                <button onClick={saveEditVehicle} className="text-xs text-green-600 font-bold">Salvar</button>
+                        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg p-6 ring-2 ring-blue-500/20 animate-in fade-in zoom-in-95">
+                            <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-100 dark:border-slate-800">
+                                <Car size={18} className="text-blue-600" />
+                                <h4 className="font-bold text-slate-900 dark:text-white">Editar Veículo</h4>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Modelo</label>
+                                    <input 
+                                        type="text" 
+                                        value={editVehicleData.model} 
+                                        onChange={e => setEditVehicleData({...editVehicleData, model: e.target.value})}
+                                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        placeholder="Ex: Toyota Corolla"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Placa</label>
+                                    <input 
+                                        type="text" 
+                                        value={editVehicleData.plate} 
+                                        onChange={e => setEditVehicleData({...editVehicleData, plate: e.target.value})}
+                                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none uppercase"
+                                        placeholder="ABC-1234"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Cor</label>
+                                    <input 
+                                        type="text" 
+                                        value={editVehicleData.color} 
+                                        onChange={e => setEditVehicleData({...editVehicleData, color: e.target.value})}
+                                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        placeholder="Ex: Preto"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Ano</label>
+                                    <input 
+                                        type="text" 
+                                        value={editVehicleData.year} 
+                                        onChange={e => setEditVehicleData({...editVehicleData, year: e.target.value})}
+                                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        placeholder="Ex: 2024"
+                                    />
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Tamanho (Categoria)</label>
+                                    <select
+                                        value={editVehicleData.size}
+                                        onChange={e => setEditVehicleData({...editVehicleData, size: e.target.value as any})}
+                                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                    >
+                                        {Object.entries(VEHICLE_SIZES).map(([key, label]) => (
+                                            <option key={key} value={key}>{label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
+                                <button 
+                                    onClick={() => setEditingVehicleId(null)} 
+                                    className="px-4 py-2 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button 
+                                    onClick={saveEditVehicle} 
+                                    className="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                                >
+                                    Salvar Alterações
+                                </button>
                             </div>
                         </div>
                     ) : (
-                        <div className="min-w-0 flex-1">
-                            <h4 className="font-bold text-slate-900 dark:text-white text-sm truncate">{vehicle.model}</h4>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{vehicle.plate} • {vehicle.color}</p>
-                            <span className="text-xs font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded mt-1 inline-block">
-                                {VEHICLE_SIZES[vehicle.size]}
-                            </span>
-                        </div>
-                    )}
+                        // DISPLAY CARD
+                        <div className="group relative h-full bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden">
+                            {/* Gradient Background Effect */}
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none transition-transform group-hover:scale-150 duration-500" />
+                            
+                            <div className="flex justify-between items-start mb-4 relative z-10">
+                                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 transition-colors duration-300">
+                                    <Car size={24} strokeWidth={1.5} />
+                                </div>
+                                
+                                {/* Actions - Slide in from right or fade in */}
+                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
+                                    <button 
+                                        onClick={() => startEditVehicle(vehicle)} 
+                                        className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-blue-600 hover:text-white transition-colors shadow-sm"
+                                        title="Editar"
+                                    >
+                                        <Edit2 size={14} />
+                                    </button>
+                                    <button 
+                                        onClick={() => handleDeleteVehicle(vehicle.id)} 
+                                        className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-red-600 hover:text-white transition-colors shadow-sm"
+                                        title="Excluir"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                </div>
+                            </div>
 
-                    {!editingVehicleId && (
-                        <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => startEditVehicle(vehicle)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded">
-                                <Edit2 size={14} />
-                            </button>
-                            <button onClick={() => handleDeleteVehicle(vehicle.id)} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">
-                                <Trash2 size={14} />
-                            </button>
+                            <div className="relative z-10">
+                                <h4 className="text-lg font-bold text-slate-900 dark:text-white mb-1 truncate">{vehicle.model}</h4>
+                                
+                                <div className="flex items-center gap-2 mb-4">
+                                    <div className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs font-mono font-bold text-slate-700 dark:text-slate-300 tracking-wider">
+                                        {vehicle.plate.toUpperCase()}
+                                    </div>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase border border-slate-100 dark:border-slate-800 px-1.5 py-0.5 rounded">
+                                        {VEHICLE_SIZES[vehicle.size]?.split(' ')[0]}
+                                    </span>
+                                </div>
+                                
+                                <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400 pt-3 border-t border-slate-100 dark:border-slate-800">
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600" />
+                                        <span>{vehicle.color || 'Cor N/A'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600" />
+                                        <span>{vehicle.year || 'Ano N/A'}</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
                   </div>
@@ -639,6 +761,7 @@ Podemos agendar para esta semana?`;
 
           {/* TAB: HISTORY */}
           {activeTab === 'history' && (
+            // ... (keep existing history code) ...
             <div className="space-y-3 sm:space-y-4">
               <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Histórico de Serviços</h3>
               
@@ -710,6 +833,7 @@ Podemos agendar para esta semana?`;
 
           {/* TAB: CRM / RETENTION */}
           {activeTab === 'crm' && (
+            // ... (keep existing crm code) ...
             <div className="space-y-3 sm:space-y-6">
               <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-3 sm:p-6 rounded-lg sm:rounded-xl text-white shadow-lg">
                 <h3 className="font-bold text-sm sm:text-lg mb-1 sm:mb-2">Gestão de Ciclo de Vida</h3>
@@ -905,8 +1029,22 @@ Podemos agendar para esta semana?`;
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                  <Loader2 size={32} className="animate-spin mb-2" />
-                  <p className="text-sm">Gerando cartão de fidelidade...</p>
+                  {cardGenerationError ? (
+                      <div className="text-center">
+                          <p className="text-sm text-red-500 mb-3">Erro ao carregar cartão.</p>
+                          <button 
+                            onClick={handleRetryCard}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-sm font-bold hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors mx-auto"
+                          >
+                              <RefreshCw size={16} /> Tentar Novamente
+                          </button>
+                      </div>
+                  ) : (
+                      <>
+                        <Loader2 size={32} className="animate-spin mb-2" />
+                        <p className="text-sm">Gerando cartão de fidelidade...</p>
+                      </>
+                  )}
                 </div>
               )}
             </div>

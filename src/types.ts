@@ -520,3 +520,12 @@ export interface SaaSTokenTransaction {
   description: string;
   date: string;
 }
+
+// Auth Types
+export interface AuthResponse {
+  success: boolean;
+  error?: {
+    message: string;
+    code?: string;
+  } | null;
+}

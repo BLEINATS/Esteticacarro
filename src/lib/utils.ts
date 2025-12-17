@@ -12,6 +12,13 @@ export function formatCurrency(value: number) {
   }).format(value);
 }
 
+// NOVO: Formatador de ID de OS (Padrão: #8CHARS)
+export function formatId(id: string) {
+  if (!id) return '';
+  // Pega os primeiros 8 caracteres e coloca em maiúsculo
+  return id.length > 8 ? `#${id.substring(0, 8).toUpperCase()}` : `#${id.toUpperCase()}`;
+}
+
 export function formatDate(date: Date) {
   return new Intl.DateTimeFormat('pt-BR').format(date);
 }
@@ -40,7 +47,6 @@ export function formatDateToLocalInput(dateStr: string) {
   return `${year}-${month}-${day}`;
 }
 
-// NOVO: Utilitário para Timeout de Requisições
 export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 10000, errorMessage = 'A requisição demorou muito para responder.'): Promise<T> {
   let timeoutHandle: NodeJS.Timeout;
   
