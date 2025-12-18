@@ -1,3 +1,16 @@
+// ... existing types ...
+export interface SystemAlert {
+  id: string;
+  type: 'agenda' | 'financeiro' | 'cliente' | 'profissional';
+  message: string;
+  level: 'info' | 'atencao' | 'critico';
+  actionLink?: string;
+  actionLabel?: string;
+  resolved: boolean;
+  createdAt: string;
+}
+
+// ... rest of the file (keep existing types)
 export type VehicleSize = 'small' | 'medium' | 'large' | 'xl';
 
 export const VEHICLE_SIZES: Record<VehicleSize, string> = {

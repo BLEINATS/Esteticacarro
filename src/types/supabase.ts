@@ -9,6 +9,43 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      // ... (existing tables)
+      alerts: {
+        Row: {
+          id: string
+          tenant_id: string
+          type: 'agenda' | 'financeiro' | 'cliente' | 'profissional'
+          message: string
+          level: 'info' | 'atencao' | 'critico'
+          action_link: string | null
+          action_label: string | null
+          resolved: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          type: 'agenda' | 'financeiro' | 'cliente' | 'profissional'
+          message: string
+          level: 'info' | 'atencao' | 'critico'
+          action_link?: string | null
+          action_label?: string | null
+          resolved?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          type?: 'agenda' | 'financeiro' | 'cliente' | 'profissional'
+          message?: string
+          level?: 'info' | 'atencao' | 'critico'
+          action_link?: string | null
+          action_label?: string | null
+          resolved?: boolean
+          created_at?: string
+        }
+      }
+      // ... (rest of existing tables)
       tenants: {
         Row: {
           id: string
@@ -322,7 +359,6 @@ export interface Database {
           created_at?: string
         }
       }
-      // GAMIFICATION TABLES
       rewards: {
         Row: {
           id: string
@@ -332,7 +368,7 @@ export interface Database {
           required_points: number
           required_level: string
           reward_type: string
-          config: Json // stores percentage, gift name, etc
+          config: Json 
           active: boolean
           created_at: string
         }
@@ -438,7 +474,7 @@ export interface Database {
           client_id: string
           points: number
           description: string
-          type: string // 'manual', 'service', 'redemption'
+          type: string
           created_at?: string
         }
         Update: {
@@ -448,6 +484,50 @@ export interface Database {
           points?: number
           description?: string
           type?: string
+          created_at?: string
+        }
+      }
+      marketing_campaigns: {
+        Row: {
+          id: string
+          tenant_id: string
+          name: string
+          target_segment: string
+          message_template: string | null
+          sent_count: number
+          conversion_count: number
+          revenue_generated: number
+          cost_in_tokens: number
+          status: string
+          date: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          name: string
+          target_segment: string
+          message_template?: string | null
+          sent_count?: number
+          conversion_count?: number
+          revenue_generated?: number
+          cost_in_tokens?: number
+          status?: string
+          date?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          name?: string
+          target_segment?: string
+          message_template?: string | null
+          sent_count?: number
+          conversion_count?: number
+          revenue_generated?: number
+          cost_in_tokens?: number
+          status?: string
+          date?: string
           created_at?: string
         }
       }

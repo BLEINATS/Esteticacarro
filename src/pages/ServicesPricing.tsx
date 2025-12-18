@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Tags, Filter, Plus, ArrowUpRight, Calculator, Info,
   CheckCircle2, Clock, RotateCcw, ToggleLeft, ToggleRight, Image as ImageIcon, Upload,
-  Search, Trash2, Beaker, DollarSign
+  Search, Trash2, Beaker, DollarSign, TrendingUp, TrendingDown, BarChart3, AlertTriangle, Timer
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatCurrency, cn } from '../lib/utils';
@@ -12,9 +12,9 @@ import ServiceConsumptionModal from '../components/ServiceConsumptionModal';
 import { useDialog } from '../context/DialogContext';
 
 export default function ServicesPricing() {
-  const { services, priceMatrix, updatePrice, bulkUpdatePrices, updateServiceInterval, deleteService, calculateServiceCost } = useApp();
+  const { services, priceMatrix, updatePrice, bulkUpdatePrices, updateServiceInterval, deleteService, calculateServiceCost, workOrders } = useApp();
   const { showConfirm, showAlert } = useDialog();
-  const [activeTab, setActiveTab] = useState<'matrix' | 'catalog'>('matrix');
+  const [activeTab, setActiveTab] = useState<'matrix' | 'catalog' | 'profitability'>('matrix');
   const [bulkPercentage, setBulkPercentage] = useState<number>(10);
   const [bulkTarget, setBulkTarget] = useState<VehicleSize | 'all'>('large');
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
@@ -31,6 +31,61 @@ export default function ServicesPricing() {
     s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     s.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // --- PROFITABILITY ANALYSIS LOGIC ---
+  const profitabilityData = useMemo(() => {
+    return services.map(service => {
+        // 1. Revenue (Use Medium size as baseline reference)
+        const price = priceMatrix.find(p => p.serviceId === service.id && p.size === 'medium')?.price || 0;
+        
+        // 2. Cost (CMV from Consumption)
+        const cost = calculateServiceCost(service.id);
+        
+        // 3. Margin
+        const margin = price - cost;
+        const marginPercent = price > 0 ? (margin / price) * 100 : 0;
+        
+        // 4. Efficiency (Profit per Hour)
+        const timeHours = (service.standardTimeMinutes || 60) / 60;
+        const profitPerHour = timeHours > 0 ? margin / timeHours : 0;
+
+        // 5. Volume (Real usage from WorkOrders)
+        const usageCount = workOrders.filter(os => 
+            os.serviceId === service.id || (os.serviceIds && os.serviceIds.includes(service.id))
+        ).length;
+
+        // 6. Classification
+        let status: 'star' | 'cash_cow' | 'question' | 'dog' = 'question';
+        
+        // Simple BCG-like Logic
+        if (marginPercent > 50 && usageCount > 5) status = 'star'; // High Margin, High Vol
+        else if (marginPercent > 50 && usageCount <= 5) status = 'question'; // High Margin, Low Vol (Potential)
+        else if (marginPercent <= 50 && usageCount > 5) status = 'cash_cow'; // Low Margin, High Vol
+        else status = 'dog'; // Low Margin, Low Vol
+
+        // Schedule Hog Check (Low Profit/Hour + High Time)
+        const isScheduleHog = profitPerHour < 50 && service.standardTimeMinutes > 120;
+
+        return {
+            ...service,
+            metrics: {
+                price,
+                cost,
+                margin,
+                marginPercent,
+                timeHours,
+                profitPerHour,
+                usageCount,
+                status,
+                isScheduleHog
+            }
+        };
+    }).sort((a, b) => b.metrics.margin - a.metrics.margin); // Default sort by margin
+  }, [services, priceMatrix, workOrders, calculateServiceCost]);
+
+  const topProfitable = [...profitabilityData].sort((a, b) => b.metrics.profitPerHour - a.metrics.profitPerHour).slice(0, 3);
+  const scheduleHogs = profitabilityData.filter(s => s.metrics.isScheduleHog).sort((a, b) => a.metrics.profitPerHour - b.metrics.profitPerHour).slice(0, 3);
+
 
   const handleBulkUpdate = () => {
     bulkUpdatePrices(bulkTarget, bulkPercentage);
@@ -102,7 +157,7 @@ export default function ServicesPricing() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Catálogo & Precificação</h2>
-          <p className="text-slate-500 dark:text-slate-400">Gerencie serviços, preços e regras de recorrência.</p>
+          <p className="text-slate-500 dark:text-slate-400">Gerencie serviços, preços e análise de lucro.</p>
         </div>
         <div className="flex gap-2">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-1 flex">
@@ -126,13 +181,25 @@ export default function ServicesPricing() {
                   : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               )}
             >
-              Catálogo de Serviços
+              Catálogo
+            </button>
+            <button 
+              onClick={() => setActiveTab('profitability')}
+              className={cn(
+                "px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1", 
+                activeTab === 'profitability' 
+                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300" 
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              )}
+            >
+              <TrendingUp size={14} />
+              Rentabilidade
             </button>
           </div>
         </div>
       </div>
 
-      {/* Search & Filter Bar (Visible on both tabs for convenience) */}
+      {/* Search & Filter Bar (Visible on all tabs for convenience) */}
       <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row gap-2 sm:gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -154,6 +221,136 @@ export default function ServicesPricing() {
             </button>
         )}
       </div>
+
+      {/* TAB: PROFITABILITY ANALYSIS */}
+      {activeTab === 'profitability' && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-right duration-300">
+            
+            {/* Insights Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Top Performers */}
+                <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/20 dark:to-emerald-900/10 rounded-xl p-6 border border-emerald-200 dark:border-emerald-800">
+                    <h3 className="text-emerald-800 dark:text-emerald-300 font-bold flex items-center gap-2 mb-4">
+                        <TrendingUp size={20} /> Campeões de Lucro (Por Hora)
+                    </h3>
+                    <div className="space-y-3">
+                        {topProfitable.length > 0 ? topProfitable.map((s, idx) => (
+                            <div key={s.id} className="bg-white/60 dark:bg-slate-900/60 p-3 rounded-lg flex justify-between items-center shadow-sm">
+                                <div className="flex items-center gap-3">
+                                    <span className="w-6 h-6 rounded-full bg-emerald-200 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-200 flex items-center justify-center text-xs font-bold">
+                                        {idx + 1}
+                                    </span>
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-900 dark:text-white">{s.name}</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">{s.standardTimeMinutes} min • Margem: {s.metrics.marginPercent.toFixed(0)}%</p>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(s.metrics.profitPerHour)}/h</p>
+                                </div>
+                            </div>
+                        )) : (
+                            <p className="text-sm text-emerald-700/60 italic">Sem dados suficientes.</p>
+                        )}
+                    </div>
+                </div>
+
+                {/* Schedule Hogs */}
+                <div className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-900/10 rounded-xl p-6 border border-red-200 dark:border-red-800">
+                    <h3 className="text-red-800 dark:text-red-300 font-bold flex items-center gap-2 mb-4">
+                        <Timer size={20} /> Gargalos de Agenda (Baixo Lucro/Hora)
+                    </h3>
+                    <div className="space-y-3">
+                        {scheduleHogs.length > 0 ? scheduleHogs.map((s, idx) => (
+                            <div key={s.id} className="bg-white/60 dark:bg-slate-900/60 p-3 rounded-lg flex justify-between items-center shadow-sm">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-1.5 bg-red-100 dark:bg-red-900/30 rounded text-red-600 dark:text-red-400">
+                                        <AlertTriangle size={14} />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-900 dark:text-white">{s.name}</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">{s.standardTimeMinutes} min • Margem: {s.metrics.marginPercent.toFixed(0)}%</p>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-sm font-bold text-red-600 dark:text-red-400">{formatCurrency(s.metrics.profitPerHour)}/h</p>
+                                </div>
+                            </div>
+                        )) : (
+                            <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                                <CheckCircle2 size={18} />
+                                <p className="text-sm font-medium">Sua agenda está otimizada!</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Detailed Table */}
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-slate-200 dark:border-slate-800">
+                    <h3 className="font-bold text-slate-900 dark:text-white">Detalhamento Financeiro por Serviço</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Baseado no preço médio e custo de insumos cadastrados.</p>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+                            <tr>
+                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Serviço</th>
+                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Preço Médio</th>
+                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Custo (CMV)</th>
+                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Margem R$</th>
+                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-center">Margem %</th>
+                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Lucro/Hora</th>
+                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-center">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {profitabilityData.filter(s => 
+                                s.name.toLowerCase().includes(searchTerm.toLowerCase())
+                            ).map((s) => (
+                                <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">
+                                        {s.name}
+                                        <div className="flex gap-1 mt-1">
+                                            {s.metrics.status === 'star' && <span className="text-[9px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded font-bold">Estrela</span>}
+                                            {s.metrics.status === 'cash_cow' && <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold">Volume</span>}
+                                            {s.metrics.isScheduleHog && <span className="text-[9px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold">Lento</span>}
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-300">{formatCurrency(s.metrics.price)}</td>
+                                    <td className="px-4 py-3 text-right text-slate-500 dark:text-slate-400">{formatCurrency(s.metrics.cost)}</td>
+                                    <td className="px-4 py-3 text-right font-bold text-green-600 dark:text-green-400">{formatCurrency(s.metrics.margin)}</td>
+                                    <td className="px-4 py-3 text-center">
+                                        <div className="flex items-center justify-center gap-2">
+                                            <div className="w-16 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                <div 
+                                                    className={cn("h-full rounded-full", s.metrics.marginPercent > 50 ? "bg-green-500" : s.metrics.marginPercent > 30 ? "bg-yellow-500" : "bg-red-500")} 
+                                                    style={{ width: `${Math.min(s.metrics.marginPercent, 100)}%` }}
+                                                />
+                                            </div>
+                                            <span className="text-xs font-medium">{s.metrics.marginPercent.toFixed(0)}%</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-bold text-blue-600 dark:text-blue-400">
+                                        {formatCurrency(s.metrics.profitPerHour)}
+                                    </td>
+                                    <td className="px-4 py-3 text-center">
+                                        <button 
+                                            onClick={() => handleConsumption(s)}
+                                            className="text-xs font-bold text-purple-600 hover:text-purple-700 hover:underline"
+                                        >
+                                            Ajustar Custo
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+      )}
 
       {/* TAB: MATRIX */}
       {activeTab === 'matrix' && (

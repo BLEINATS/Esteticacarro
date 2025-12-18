@@ -29,7 +29,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     workOrders, addVehicle, useVoucher, getVoucherDetails,
     getClientPoints, companySettings, getRewardsByLevel, claimReward,
     addFinancialTransaction, deleteFinancialTransaction, financialTransactions,
-    updateClientLTV, subscription, consumeTokens
+    updateClientLTV, subscription, consumeTokens, employees
   } = useApp();
   const { showConfirm, showAlert } = useDialog();
 
@@ -65,6 +65,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   
   // STATUS STATE (Fix for status not updating)
   const [currentStatus, setCurrentStatus] = useState<WorkOrder['status']>(workOrder.status);
+  const [assignedTechnician, setAssignedTechnician] = useState<string>(workOrder.technician || 'A Definir');
 
   // MULTI-SERVICE SELECTION
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
@@ -284,6 +285,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       serviceId: selectedServiceIds[0],
       serviceIds: selectedServiceIds,
       status: currentStatus,
+      technician: assignedTechnician,
       clientSignature: clientSignature,
       discount: {
         type: discountType,
@@ -544,17 +546,27 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
   };
 
+  // UPDATED: Convert to Base64 for persistence
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const url = URL.createObjectURL(e.target.files[0]);
-      setDamagePhoto(url);
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setDamagePhoto(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
+  // UPDATED: Convert to Base64 for persistence
   const handleLogPhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const url = URL.createObjectURL(e.target.files[0]);
-      setNewLogPhoto(url);
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewLogPhoto(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -576,17 +588,23 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     setNewLogPhoto(null);
   };
 
+  // UPDATED: Convert to Base64 for persistence
   const handleQuickAfterPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const url = URL.createObjectURL(e.target.files[0]);
-      setDailyLog([{ 
-        id: Date.now().toString(), 
-        date: new Date().toISOString(), 
-        stage: 'Finalização', 
-        description: 'Resultado Final', 
-        photos: [url], 
-        author: 'Técnico' 
-      }, ...dailyLog]);
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const url = reader.result as string;
+        setDailyLog([{ 
+            id: Date.now().toString(), 
+            date: new Date().toISOString(), 
+            stage: 'Finalização', 
+            description: 'Resultado Final', 
+            photos: [url], 
+            author: 'Técnico' 
+        }, ...dailyLog]);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -640,7 +658,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       }
       await showAlert({
         title: 'Serviço Concluído!',
-        message: 'Pontos creditados, cliente notificado e estoque atualizado.',
+        message: 'Pontos creditados, comissão lançada e estoque atualizado.',
         type: 'success'
       });
     } 
@@ -729,6 +747,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
               <div class="info-row"><span class="info-label">Modelo:</span> ${printOrder.vehicle}</div>
               <div class="info-row"><span class="info-label">Placa:</span> ${printOrder.plate}</div>
               <div class="info-row"><span class="info-label">Status:</span> ${printOrder.status}</div>
+              <div class="info-row"><span class="info-label">Técnico:</span> ${printOrder.technician}</div>
             </div>
           </div>
 
@@ -896,7 +915,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         <div className="p-3 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start gap-2 sm:gap-0 bg-slate-50/50 dark:bg-slate-900/50">
           <div className="w-full sm:w-auto">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-3 mb-1">
-              {/* UPDATED: Use formatId for the OS Number in Header */}
               <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">{formatId(workOrder.id)}</h2>
               <select 
                 value={currentStatus}
@@ -927,9 +945,25 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                 </span>
               )}
             </div>
-            <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm line-clamp-2">
-                {selectedVehicleObj ? selectedVehicleObj.model : 'Veículo não selecionado'} • {selectedVehiclePlate || 'Placa?'} • {selectedClient ? selectedClient.name : 'Cliente?'}
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+                <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm line-clamp-1">
+                    {selectedVehicleObj ? selectedVehicleObj.model : 'Veículo não selecionado'} • {selectedVehiclePlate || 'Placa?'}
+                </p>
+                <span className="text-slate-300 dark:text-slate-600">|</span>
+                <div className="flex items-center gap-1">
+                    <User size={12} className="text-slate-400" />
+                    <select 
+                        value={assignedTechnician}
+                        onChange={(e) => setAssignedTechnician(e.target.value)}
+                        className="bg-transparent border-none text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-medium focus:ring-0 cursor-pointer hover:text-blue-600"
+                    >
+                        <option value="A Definir">Técnico: A Definir</option>
+                        {employees.filter(e => e.active).map(emp => (
+                            <option key={emp.id} value={emp.name}>{emp.name}</option>
+                        ))}
+                    </select>
+                </div>
+            </div>
           </div>
 
           <div className="flex gap-1 sm:gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
@@ -1255,6 +1289,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             </div>
           )}
 
+          {/* ... (Other tabs remain the same) ... */}
           {/* TAB: EXECUTION (DIÁRIO DE OBRA + ESCOPO) */}
           {activeTab === 'execution' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

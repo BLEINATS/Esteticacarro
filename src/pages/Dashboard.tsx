@@ -14,7 +14,10 @@ import {
   CheckCircle2,
   AlertCircle,
   Car,
-  MapPin
+  MapPin,
+  BrainCircuit,
+  Lightbulb,
+  X
 } from 'lucide-react';
 import { 
   PieChart, 
@@ -70,7 +73,7 @@ const StatCard = ({ title, value, subtext, icon: Icon, color, decorationColor, t
 );
 
 export default function Dashboard() {
-  const { theme, workOrders, clients, inventory, financialTransactions, companySettings } = useApp();
+  const { theme, workOrders, clients, inventory, financialTransactions, companySettings, systemAlerts, markAlertResolved } = useApp();
   const isDark = theme === 'dark';
   const [selectedOS, setSelectedOS] = useState<WorkOrder | null>(null);
   const navigate = useNavigate();
@@ -186,7 +189,89 @@ export default function Dashboard() {
 
       {/* Scrollable Content Area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        <div className="space-y-4">
+        <div className="space-y-6">
+          
+          {/* --- VISÃO DO DONO (INTELLIGENCE LAYER) --- */}
+          <div className="bg-gradient-to-r from-slate-900 to-slate-800 dark:from-slate-800 dark:to-slate-900 rounded-2xl p-6 text-white shadow-xl border border-slate-700">
+             <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
+                    <BrainCircuit size={24} className="text-purple-400" />
+                </div>
+                <div>
+                    <h3 className="text-lg font-bold">Visão do Dono</h3>
+                    <p className="text-xs text-slate-400">Insights automáticos para decisão rápida.</p>
+                </div>
+             </div>
+
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Active Alerts List */}
+                <div className="space-y-3">
+                    {systemAlerts.length > 0 ? (
+                        systemAlerts.map(alert => (
+                            <div key={alert.id} className={cn(
+                                "flex items-start gap-3 p-3 rounded-xl border transition-all",
+                                alert.level === 'critico' ? "bg-red-500/10 border-red-500/30" :
+                                alert.level === 'atencao' ? "bg-amber-500/10 border-amber-500/30" :
+                                "bg-blue-500/10 border-blue-500/30"
+                            )}>
+                                <div className={cn(
+                                    "p-2 rounded-lg flex-shrink-0",
+                                    alert.level === 'critico' ? "bg-red-500/20 text-red-400" :
+                                    alert.level === 'atencao' ? "bg-amber-500/20 text-amber-400" :
+                                    "bg-blue-500/20 text-blue-400"
+                                )}>
+                                    <Lightbulb size={18} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-slate-200">{alert.message}</p>
+                                    {alert.actionLink && (
+                                        <button 
+                                            onClick={() => navigate(alert.actionLink!)}
+                                            className="text-xs font-bold text-white hover:underline mt-1 flex items-center gap-1"
+                                        >
+                                            {alert.actionLabel || 'Ver Detalhes'} <ArrowRight size={10} />
+                                        </button>
+                                    )}
+                                </div>
+                                <button 
+                                    onClick={() => markAlertResolved(alert.id)}
+                                    className="text-slate-500 hover:text-white transition-colors p-1"
+                                    title="Dispensar"
+                                >
+                                    <X size={14} />
+                                </button>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="flex flex-col items-center justify-center h-full py-6 text-slate-500 border border-dashed border-slate-700 rounded-xl">
+                            <CheckCircle2 size={32} className="mb-2 opacity-50" />
+                            <p className="text-sm">Tudo certo! Sem alertas pendentes.</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* Quick Stats Summary */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                        <p className="text-xs text-slate-400 uppercase font-bold mb-1">Faturamento Mês</p>
+                        <p className="text-2xl font-bold text-emerald-400">{formatCurrency(totalIncome)}</p>
+                    </div>
+                    <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                        <p className="text-xs text-slate-400 uppercase font-bold mb-1">Margem de Lucro</p>
+                        <p className="text-2xl font-bold text-blue-400">{profitMargin.toFixed(1)}%</p>
+                    </div>
+                    <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                        <p className="text-xs text-slate-400 uppercase font-bold mb-1">Ticket Médio</p>
+                        <p className="text-2xl font-bold text-purple-400">{formatCurrency(totalIncome / (visitsThisMonth || 1))}</p>
+                    </div>
+                    <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                        <p className="text-xs text-slate-400 uppercase font-bold mb-1">Novos Clientes</p>
+                        <p className="text-2xl font-bold text-white">{newClients}</p>
+                    </div>
+                </div>
+             </div>
+          </div>
+
           {/* KPI Grid - Updated to 5 columns for large screens */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 flex-shrink-0">
             <StatCard 

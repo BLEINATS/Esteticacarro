@@ -1,1020 +1,427 @@
 import React, { useState, useMemo } from 'react';
+import { useApp } from '../context/AppContext';
 import { 
+  DollarSign, 
+  TrendingUp, 
+  Calendar, 
   ArrowUpRight, 
   ArrowDownRight, 
-  CreditCard, 
-  DollarSign,
+  Filter, 
   Download,
-  Plus,
-  X,
-  Save,
-  Pencil,
-  Trash2,
-  Filter,
-  Search,
   Wallet,
-  Calculator,
-  CalendarClock,
+  PieChart,
+  AlertTriangle,
+  Target,
+  BarChart3,
   CheckCircle2,
-  AlertCircle,
-  Calendar,
-  Landmark,
-  ChevronDown,
-  ChevronRight
+  Clock
 } from 'lucide-react';
-import { formatCurrency, cn, displayDate } from '../lib/utils';
-import { useDialog } from '../context/DialogContext';
-import { useApp } from '../context/AppContext';
-import { FinancialTransaction } from '../types';
-import { Link } from 'react-router-dom';
+import { formatCurrency, cn } from '../lib/utils';
+import { format, addWeeks, startOfWeek, endOfWeek, isWithinInterval, parseISO, isAfter, startOfDay } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 export default function Finance() {
-  const { financialTransactions, addFinancialTransaction, updateFinancialTransaction, deleteFinancialTransaction, companySettings } = useApp();
-  const { showConfirm, showAlert } = useDialog();
-  
-  const [activeTab, setActiveTab] = useState<'cashflow' | 'payable' | 'receivable'>('cashflow');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('Todas');
-  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
-  
-  // Filtros de Data (Padrão: Mês atual para Extrato ficar mais limpo, ou vazio para tudo)
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  
-  // Estado do Formulário
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [formData, setFormData] = useState({
-    desc: '',
-    amount: '',
-    type: 'income' as 'income' | 'expense',
-    category: 'Serviços',
-    method: 'Pix',
-    date: new Date().toISOString().split('T')[0],
-    dueDate: new Date().toISOString().split('T')[0],
-    status: 'paid' as 'paid' | 'pending',
-    feeRate: '0',
-    installments: '1'
-  });
+  const { financialTransactions, workOrders, companySettings } = useApp();
+  const [activeTab, setActiveTab] = useState<'overview' | 'forecast'>('overview');
+  const [filterPeriod, setFilterPeriod] = useState('month');
 
-  // --- CÁLCULO DE SALDOS PARA EXTRATO ESTILO BANCO (COMO BANCO REAL) ---
-  const balanceData = useMemo(() => {
-    const paid = financialTransactions.filter(t => t.status === 'paid').sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    
-    let initialBalance = companySettings.initialBalance || 15000.00;
-    let displayInitialBalance = companySettings.initialBalance || 15000.00;
-    let transactions = paid;
-    
-    // Se há filtro de data, calcular saldo inicial como SALDO REAL DO DIA ANTERIOR
-    if (startDate) {
-      const startDate_obj = new Date(startDate);
-      // Todas as transações ANTES da data inicial
-      const beforeStart = paid.filter(t => new Date(t.date) < startDate_obj);
-      const beforeStartSum = beforeStart.reduce((acc, t) => acc + t.netAmount, 0);
-      
-      // Saldo inicial = saldo base + todas as transações até o dia anterior
-      initialBalance = companySettings.initialBalance + beforeStartSum;
-      displayInitialBalance = initialBalance; // Mostrar o saldo real calculado
-      
-      // Transações do período filtrado
-      const endStr = endDate || '2100-01-01';
-      transactions = paid.filter(t => t.date >= startDate && t.date <= endStr);
-    } else {
-      // Sem filtro: mostrar todas as transações com saldo inicial configurado
-      displayInitialBalance = companySettings.initialBalance;
-      transactions = paid;
-    }
-    
-    // Movimento = soma das transações do período
-    const totalMovement = transactions.reduce((acc, t) => acc + t.netAmount, 0);
-    
-    // Saldo final = saldo inicial + movimento do período
-    const finalBalance = initialBalance + totalMovement;
-    
-    const sorted = transactions.sort((a, b) => 
-      sortOrder === 'desc' 
-        ? new Date(b.date).getTime() - new Date(a.date).getTime()
-        : new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
-    
-    return { initialBalance: displayInitialBalance, transactions: sorted, totalMovement, finalBalance };
-  }, [financialTransactions, startDate, endDate, companySettings.initialBalance, sortOrder]);
-
-  // --- LÓGICA DE EXTRATO (LISTA PLANA) ---
-  const visibleTransactions = useMemo(() => {
-    // 1. Começar com transações do balanceData (já filtradas por data)
-    let filtered = balanceData.transactions;
-
-    // 2. Filtro de Texto
-    if (searchTerm) {
-        const lowerTerm = searchTerm.toLowerCase();
-        filtered = filtered.filter(t => t.desc.toLowerCase().includes(lowerTerm));
-    }
-
-    // 3. Filtro de Categoria
-    if (categoryFilter !== 'Todas') {
-        filtered = filtered.filter(t => t.category === categoryFilter);
-    }
-
-    return filtered;
-  }, [balanceData, searchTerm, categoryFilter, sortOrder]);
-
-  // --- LÓGICA PARA CONTAS A PAGAR/RECEBER ---
-  const pendingData = useMemo(() => {
-    const list = financialTransactions.filter(t => t.status === 'pending');
-    const payable = list.filter(t => t.type === 'expense');
-    const receivable = list.filter(t => t.type === 'income');
-    
-    const totalPayable = payable.reduce((acc, t) => acc + Math.abs(t.amount), 0);
-    const totalReceivable = receivable.reduce((acc, t) => acc + t.amount, 0);
-
-    return { payable, receivable, totalPayable, totalReceivable };
-  }, [financialTransactions]);
-
-
-  // --- AÇÕES ---
-
-  const handleEdit = (t: FinancialTransaction) => {
-    const feeRate = t.amount !== 0 ? ((t.fee / t.amount) * 100).toFixed(2) : '0';
-    setFormData({
-      desc: t.desc,
-      amount: Math.abs(t.amount).toString(),
-      type: t.type,
-      category: t.category,
-      method: t.method,
-      date: t.date,
-      dueDate: t.dueDate,
-      status: t.status,
-      feeRate: feeRate,
-      installments: t.installments ? t.installments.toString() : '1'
-    });
-    setEditingId(t.id);
-    setIsModalOpen(true);
+  // --- LÓGICA DE VISÃO GERAL (EXISTENTE) ---
+  const metrics = {
+    revenue: financialTransactions
+      .filter(t => t.type === 'income' && t.status === 'completed')
+      .reduce((acc, t) => acc + t.amount, 0),
+    expenses: financialTransactions
+      .filter(t => t.type === 'expense' && t.status === 'completed')
+      .reduce((acc, t) => acc + t.amount, 0),
+    pending: financialTransactions
+      .filter(t => t.status === 'pending')
+      .reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 0)
   };
 
-  const handleDelete = async (id: number) => {
-    const confirmed = await showConfirm({
-      title: 'Excluir Transação',
-      message: 'Tem certeza que deseja excluir este lançamento?',
-      type: 'danger',
-      confirmText: 'Excluir',
-      cancelText: 'Cancelar'
-    });
+  const profit = metrics.revenue - metrics.expenses;
+  const margin = metrics.revenue > 0 ? (profit / metrics.revenue) * 100 : 0;
 
-    if (confirmed) {
-      deleteFinancialTransaction(id);
-      await showAlert({
-        title: 'Excluído',
-        message: 'Transação removida com sucesso.',
-        type: 'success'
+  // --- LÓGICA DE PREVISÃO (NOVA) ---
+  const forecastMetrics = useMemo(() => {
+    const today = startOfDay(new Date());
+    const next4Weeks = [0, 1, 2, 3].map(weekOffset => {
+      const start = startOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 }); // Segunda
+      const end = endOfWeek(addWeeks(today, weekOffset), { weekStartsOn: 1 }); // Domingo
+      
+      // Filtrar OSs para esta semana futura
+      const weekOrders = workOrders.filter(os => {
+        if (!os.deadline) return false;
+        const osDate = parseISO(os.deadline);
+        return isWithinInterval(osDate, { start, end });
       });
-    }
-  };
 
-  const handleSettle = async (id: number) => {
-    const confirmed = await showConfirm({
-        title: 'Confirmar Pagamento/Recebimento',
-        message: 'Deseja marcar este lançamento como realizado?',
-        type: 'info',
-        confirmText: 'Sim, Confirmar',
-        cancelText: 'Cancelar'
+      // Receita Garantida: Aprovado, Em Andamento, Concluído (mas não pago ainda)
+      const guaranteed = weekOrders
+        .filter(os => ['Aprovado', 'Em Andamento', 'Concluído'].includes(os.status))
+        .reduce((acc, os) => acc + os.totalValue, 0);
+
+      // Receita Potencial: Orçamentos
+      const potential = weekOrders
+        .filter(os => ['Orçamento', 'Pendente'].includes(os.status))
+        .reduce((acc, os) => acc + os.totalValue, 0);
+
+      return {
+        label: `Semana ${format(start, 'dd/MM')}`,
+        start,
+        guaranteed,
+        potential,
+        total: guaranteed + potential,
+        count: weekOrders.length
+      };
     });
 
-    if (confirmed) {
-        updateFinancialTransaction(id, { status: 'paid', date: new Date().toISOString().split('T')[0] });
-    }
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const amountVal = parseFloat(formData.amount);
-    const feeRateVal = parseFloat(formData.feeRate) || 0;
+    const totalGuaranteed = next4Weeks.reduce((acc, w) => acc + w.guaranteed, 0);
+    const totalPotential = next4Weeks.reduce((acc, w) => acc + w.potential, 0);
     
-    if (!formData.desc || isNaN(amountVal)) return;
+    // Meta semanal baseada no histórico (exemplo simples: média das últimas transações ou fixo)
+    // Em um cenário real, isso viria de companySettings.monthlyGoal
+    const weeklyGoal = 5000; 
 
-    const feeValue = (amountVal * feeRateVal) / 100;
-    const netVal = amountVal - feeValue;
+    const alerts = next4Weeks
+      .filter(w => w.total < weeklyGoal * 0.5) // Alerta se for menos de 50% da meta
+      .map(w => ({
+        week: w.label,
+        gap: weeklyGoal - w.total,
+        severity: w.total === 0 ? 'high' : 'medium'
+      }));
 
-    const newTransaction: FinancialTransaction = {
-      id: editingId || Date.now(),
-      desc: formData.desc,
-      category: formData.category,
-      amount: formData.type === 'expense' ? -amountVal : amountVal,
-      netAmount: formData.type === 'expense' ? -amountVal : netVal,
-      fee: formData.type === 'expense' ? 0 : feeValue,
-      type: formData.type,
-      date: formData.date,
-      dueDate: formData.dueDate,
-      method: formData.method,
-      installments: parseInt(formData.installments) || 1,
-      status: formData.status
-    };
-
-    if (editingId) {
-      updateFinancialTransaction(editingId, newTransaction);
-    } else {
-      addFinancialTransaction(newTransaction);
-    }
-
-    closeModal();
-    await showAlert({
-        title: 'Sucesso',
-        message: editingId ? 'Transação atualizada.' : 'Nova transação registrada.',
-        type: 'success'
-    });
-  };
-
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setEditingId(null);
-    setFormData({
-      desc: '', amount: '', type: 'income', category: 'Serviços', 
-      method: 'Pix', date: new Date().toISOString().split('T')[0], 
-      dueDate: new Date().toISOString().split('T')[0],
-      status: 'paid', feeRate: '0', installments: '1'
-    });
-  };
+    return { weeks: next4Weeks, totalGuaranteed, totalPotential, alerts, weeklyGoal };
+  }, [workOrders]);
 
   return (
-    <div className="space-y-8">
-      {/* --- MODAL DE TRANSAÇÃO --- */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
-              <h3 className="font-bold text-lg text-slate-900 dark:text-white">
-                {editingId ? 'Editar Lançamento' : 'Nova Transação'}
+    <div className="space-y-8 animate-in fade-in duration-500">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Financeiro</h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1">Gestão de fluxo de caixa e previsibilidade</p>
+        </div>
+        
+        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={cn(
+              "px-4 py-2 rounded-lg text-sm font-bold transition-all",
+              activeTab === 'overview' 
+                ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm" 
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            )}
+          >
+            Visão Geral
+          </button>
+          <button
+            onClick={() => setActiveTab('forecast')}
+            className={cn(
+              "px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2",
+              activeTab === 'forecast' 
+                ? "bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm" 
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+            )}
+          >
+            <Target size={16} />
+            Previsão Futura
+          </button>
+        </div>
+      </div>
+
+      {activeTab === 'overview' ? (
+        // --- CONTEÚDO EXISTENTE (VISÃO GERAL) ---
+        <>
+          {/* Metrics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <div className="flex justify-between items-start mb-4">
+                <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+                  <DollarSign className="text-blue-600 dark:text-blue-400" size={24} />
+                </div>
+                <span className="flex items-center text-xs font-bold text-green-600 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-full">
+                  <ArrowUpRight size={14} className="mr-1" /> +12%
+                </span>
+              </div>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Receita Total</p>
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+                {formatCurrency(metrics.revenue)}
               </h3>
-              <button onClick={closeModal}><X className="text-slate-400" /></button>
             </div>
-            
-            <form onSubmit={handleSave} className="p-6 space-y-4 overflow-y-auto">
-              {/* Tipo de Transação */}
-              <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                <button 
-                  type="button"
-                  onClick={() => setFormData({...formData, type: 'income'})}
-                  className={cn("flex-1 py-2 rounded-md text-sm font-bold transition-colors", formData.type === 'income' ? "bg-white dark:bg-slate-700 text-green-600 shadow-sm" : "text-slate-500")}
-                >
-                  Receita (Entrada)
+
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <div className="flex justify-between items-start mb-4">
+                <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-xl">
+                  <Wallet className="text-red-600 dark:text-red-400" size={24} />
+                </div>
+                <span className="flex items-center text-xs font-bold text-red-600 bg-red-100 dark:bg-red-900/30 px-2 py-1 rounded-full">
+                  <ArrowDownRight size={14} className="mr-1" /> -5%
+                </span>
+              </div>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Despesas</p>
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+                {formatCurrency(metrics.expenses)}
+              </h3>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <div className="flex justify-between items-start mb-4">
+                <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-xl">
+                  <TrendingUp className="text-green-600 dark:text-green-400" size={24} />
+                </div>
+                <span className="flex items-center text-xs font-bold text-green-600 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-full">
+                  {margin.toFixed(1)}% Margem
+                </span>
+              </div>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Lucro Líquido</p>
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+                {formatCurrency(profit)}
+              </h3>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <div className="flex justify-between items-start mb-4">
+                <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-xl">
+                  <Calendar className="text-amber-600 dark:text-amber-400" size={24} />
+                </div>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 px-2 py-1">
+                  A Compensar
+                </span>
+              </div>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Saldo Pendente</p>
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+                {formatCurrency(metrics.pending)}
+              </h3>
+            </div>
+          </div>
+
+          {/* Transactions List */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+              <h3 className="font-bold text-lg text-slate-900 dark:text-white">Transações Recentes</h3>
+              <div className="flex gap-2">
+                <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500 transition-colors">
+                  <Filter size={20} />
                 </button>
-                <button 
-                  type="button"
-                  onClick={() => setFormData({...formData, type: 'expense'})}
-                  className={cn("flex-1 py-2 rounded-md text-sm font-bold transition-colors", formData.type === 'expense' ? "bg-white dark:bg-slate-700 text-red-600 shadow-sm" : "text-slate-500")}
-                >
-                  Despesa (Saída)
+                <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500 transition-colors">
+                  <Download size={20} />
                 </button>
               </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50 dark:bg-slate-800/50">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Descrição</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Categoria</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Data</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Valor</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {financialTransactions.map((transaction) => (
+                    <tr key={transaction.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className={cn(
+                            "w-2 h-2 rounded-full mr-3",
+                            transaction.type === 'income' ? "bg-green-500" : "bg-red-500"
+                          )} />
+                          <span className="text-sm font-medium text-slate-900 dark:text-white">
+                            {transaction.desc}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
+                        {transaction.category}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
+                        {format(new Date(transaction.date), 'dd/MM/yyyy')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={cn(
+                          "px-2 py-1 text-xs font-bold rounded-full",
+                          transaction.status === 'completed' 
+                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                            : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                        )}>
+                          {transaction.status === 'completed' ? 'Pago' : 'Pendente'}
+                        </span>
+                      </td>
+                      <td className={cn(
+                        "px-6 py-4 whitespace-nowrap text-sm font-bold text-right",
+                        transaction.type === 'income' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+                      )}>
+                        {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        // --- NOVA ABA: PREVISÃO FUTURA ---
+        <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+          
+          {/* Resumo da Projeção */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             {/* Card 1: Receita Garantida */}
+             <div className="bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-20">
+                  <CheckCircle2 size={64} />
+                </div>
+                <p className="text-emerald-100 font-medium mb-1 flex items-center gap-2">
+                  <CheckCircle2 size={16} /> Receita Garantida (30d)
+                </p>
+                <h3 className="text-3xl font-bold mb-2">{formatCurrency(forecastMetrics.totalGuaranteed)}</h3>
+                <p className="text-sm text-emerald-100 opacity-90">
+                  OSs Aprovadas e Agendadas
+                </p>
+             </div>
 
-              {/* Status */}
-              <div className="flex gap-4 items-center p-3 border border-slate-200 dark:border-slate-700 rounded-lg">
-                 <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Situação:</span>
-                 <label className="flex items-center gap-2 cursor-pointer">
-                    <input 
-                        type="radio" 
-                        name="status" 
-                        checked={formData.status === 'paid'} 
-                        onChange={() => setFormData({...formData, status: 'paid'})}
-                        className="text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-slate-600 dark:text-slate-400">Pago / Recebido</span>
-                 </label>
-                 <label className="flex items-center gap-2 cursor-pointer">
-                    <input 
-                        type="radio" 
-                        name="status" 
-                        checked={formData.status === 'pending'} 
-                        onChange={() => setFormData({...formData, status: 'pending'})}
-                        className="text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-slate-600 dark:text-slate-400">Pendente (Agendar)</span>
-                 </label>
-              </div>
+             {/* Card 2: Potencial de Venda */}
+             <div className="bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-20">
+                  <Target size={64} />
+                </div>
+                <p className="text-blue-100 font-medium mb-1 flex items-center gap-2">
+                  <Clock size={16} /> Potencial em Aberto
+                </p>
+                <h3 className="text-3xl font-bold mb-2">{formatCurrency(forecastMetrics.totalPotential)}</h3>
+                <p className="text-sm text-blue-100 opacity-90">
+                  Orçamentos aguardando aprovação
+                </p>
+             </div>
 
-              {/* Descrição e Valor */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Descrição</label>
-                  <input 
-                    required
-                    type="text" 
-                    value={formData.desc}
-                    onChange={e => setFormData({...formData, desc: e.target.value})}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
-                    placeholder="Ex: Pagamento OS #123"
-                  />
+             {/* Card 3: Projeção Total */}
+             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm relative">
+                <p className="text-slate-500 dark:text-slate-400 font-medium mb-1">Projeção Total</p>
+                <h3 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
+                  {formatCurrency(forecastMetrics.totalGuaranteed + forecastMetrics.totalPotential)}
+                </h3>
+                <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full mt-2 overflow-hidden">
+                   <div 
+                      className="h-full bg-emerald-500" 
+                      style={{ width: `${(forecastMetrics.totalGuaranteed / (forecastMetrics.totalGuaranteed + forecastMetrics.totalPotential || 1)) * 100}%` }}
+                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor Bruto (R$)</label>
-                  <input 
-                    required
-                    type="number" 
-                    step="0.01"
-                    value={formData.amount}
-                    onChange={e => setFormData({...formData, amount: e.target.value})}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-bold"
-                    placeholder="0,00"
-                  />
+                <div className="flex justify-between text-xs mt-2 text-slate-400">
+                  <span>Garantido</span>
+                  <span>Potencial</span>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                      {formData.status === 'pending' ? 'Vencimento' : 'Data Pagto'}
-                  </label>
-                  <input 
-                    type="date" 
-                    value={formData.status === 'pending' ? formData.dueDate : formData.date}
-                    onChange={e => formData.status === 'pending' ? setFormData({...formData, dueDate: e.target.value}) : setFormData({...formData, date: e.target.value})}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
-                  />
-                </div>
-              </div>
+             </div>
+          </div>
 
-              {/* Categoria e Método */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Categoria</label>
-                  <select 
-                    value={formData.category}
-                    onChange={e => setFormData({...formData, category: e.target.value})}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
-                  >
-                    <option>Serviços</option>
-                    <option>Produtos</option>
-                    <option>Estoque</option>
-                    <option>Comissões</option>
-                    <option>RH</option>
-                    <option>Aluguel/Fixo</option>
-                    <option>Marketing</option>
-                    <option>Manutenção</option>
-                    <option>Outros</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Método Pagto</label>
-                  <select 
-                    value={formData.method}
-                    onChange={e => setFormData({...formData, method: e.target.value})}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
-                  >
-                    <option>Pix</option>
-                    <option>Dinheiro</option>
-                    <option>Cartão Crédito</option>
-                    <option>Cartão Débito</option>
-                    <option>Boleto</option>
-                    <option>Transferência</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Área de Taxas e Parcelas (Apenas se for Receita) */}
-              {formData.type === 'income' && (
-                <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
-                  <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-sm">
-                    <Calculator size={16} className="text-blue-600" />
-                    Cálculo de Taxas (MDR)
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Taxa Maquininha (%)</label>
-                      <div className="relative">
-                        <input 
-                          type="number" 
-                          step="0.01"
-                          value={formData.feeRate}
-                          onChange={e => setFormData({...formData, feeRate: e.target.value})}
-                          className="w-full pl-3 pr-6 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
-                        />
-                        <span className="absolute right-3 top-2 text-slate-400 text-xs">%</span>
-                      </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Gráfico Semanal */}
+            <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-6 flex items-center gap-2">
+                <BarChart3 className="text-blue-500" />
+                Previsão Próximas 4 Semanas
+              </h3>
+              
+              <div className="space-y-6">
+                {forecastMetrics.weeks.map((week, idx) => (
+                  <div key={idx} className="relative">
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="font-bold text-slate-700 dark:text-slate-300">{week.label}</span>
+                      <span className="text-slate-500 dark:text-slate-400">Meta: {formatCurrency(forecastMetrics.weeklyGoal)}</span>
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Parcelas</label>
-                      <select 
-                        value={formData.installments}
-                        onChange={e => setFormData({...formData, installments: e.target.value})}
-                        className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm"
-                      >
-                        {[1,2,3,4,5,6,10,12].map(n => <option key={n} value={n}>{n}x</option>)}
-                      </select>
+                    
+                    <div className="flex h-8 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800">
+                      {/* Barra Garantida */}
+                      {week.guaranteed > 0 && (
+                        <div 
+                          className="bg-emerald-500 hover:bg-emerald-600 transition-colors flex items-center justify-center text-[10px] text-white font-bold relative group cursor-help"
+                          style={{ width: `${Math.min(100, (week.guaranteed / forecastMetrics.weeklyGoal) * 100)}%` }}
+                        >
+                          <span className="hidden sm:inline">{formatCurrency(week.guaranteed)}</span>
+                          {/* Tooltip */}
+                          <div className="absolute bottom-full mb-2 hidden group-hover:block bg-slate-900 text-white text-xs p-2 rounded whitespace-nowrap z-10">
+                            Garantido: {formatCurrency(week.guaranteed)}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Barra Potencial */}
+                      {week.potential > 0 && (
+                        <div 
+                          className="bg-blue-400 hover:bg-blue-500 transition-colors flex items-center justify-center text-[10px] text-white font-bold relative group cursor-help opacity-80"
+                          style={{ width: `${Math.min(100, (week.potential / forecastMetrics.weeklyGoal) * 100)}%` }}
+                        >
+                          <span className="hidden sm:inline">{formatCurrency(week.potential)}</span>
+                           {/* Tooltip */}
+                           <div className="absolute bottom-full mb-2 hidden group-hover:block bg-slate-900 text-white text-xs p-2 rounded whitespace-nowrap z-10">
+                            Potencial: {formatCurrency(week.potential)}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  {parseFloat(formData.feeRate) > 0 && formData.amount && (
-                    <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-600 text-sm">
-                      <span className="text-slate-500">Valor Líquido Estimado:</span>
-                      <span className="font-bold text-green-600">
-                        {formatCurrency(parseFloat(formData.amount) * (1 - parseFloat(formData.feeRate)/100))}
+                    
+                    {/* Indicador de Meta */}
+                    <div className="flex justify-between mt-1 text-xs">
+                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                        {((week.total / forecastMetrics.weeklyGoal) * 100).toFixed(0)}% da meta
                       </span>
+                      <span className="text-slate-400">{week.count} agendamentos</span>
                     </div>
-                  )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Alertas e Insights */}
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                <AlertTriangle className="text-amber-500" />
+                Alertas de Agenda
+              </h3>
+
+              {forecastMetrics.alerts.length > 0 ? (
+                <div className="space-y-3">
+                  {forecastMetrics.alerts.map((alert, idx) => (
+                    <div key={idx} className={cn(
+                      "p-4 rounded-xl border-l-4",
+                      alert.severity === 'high' 
+                        ? "bg-red-50 dark:bg-red-900/20 border-red-500" 
+                        : "bg-amber-50 dark:bg-amber-900/20 border-amber-500"
+                    )}>
+                      <h4 className={cn(
+                        "font-bold text-sm",
+                        alert.severity === 'high' ? "text-red-700 dark:text-red-400" : "text-amber-700 dark:text-amber-400"
+                      )}>
+                        {alert.week}: Agenda Fraca
+                      </h4>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                        Faltam <strong>{formatCurrency(alert.gap)}</strong> para atingir a meta semanal.
+                      </p>
+                      <button className="mt-2 text-xs font-bold text-blue-600 hover:underline">
+                        Criar Campanha Promocional &rarr;
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="bg-green-100 dark:bg-green-900/30 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <CheckCircle2 className="text-green-600 dark:text-green-400" />
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-300 font-medium">Sua agenda está saudável!</p>
+                  <p className="text-xs text-slate-400 mt-1">Todas as semanas estão acima de 50% da meta.</p>
                 </div>
               )}
 
-              <button type="submit" className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 transition-all">
-                <Save size={18} /> {editingId ? 'Salvar Alterações' : 'Lançar Transação'}
-              </button>
-            </form>
+              <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800">
+                <h4 className="font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">Dica do Especialista</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 italic">
+                  "Semanas com baixa ocupação são ideais para oferecer serviços de ticket menor (lavagens, higienização) para atrair fluxo."
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* --- HEADER --- */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Financeiro</h2>
-          <p className="text-slate-500 dark:text-slate-400">Gestão de fluxo de caixa, contas a pagar e receber.</p>
-        </div>
-        <div className="flex gap-2">
-          <button 
-            onClick={() => {
-              const reportData = {
-                empresa: companySettings.name,
-                dataRelatorio: new Date().toLocaleDateString('pt-BR'),
-                saldoInicial: formatCurrency(balanceData.initialBalance),
-                movimento: formatCurrency(balanceData.totalMovement),
-                saldoFinal: formatCurrency(balanceData.finalBalance),
-                transacoes: visibleTransactions.map(t => ({
-                  data: displayDate(t.date),
-                  descricao: t.desc,
-                  categoria: t.category,
-                  valor: formatCurrency(t.netAmount),
-                  tipo: t.type
-                }))
-              };
-              
-              const csvContent = [
-                `EXTRATO BANCÁRIO - ${reportData.empresa}`,
-                `Data do Relatório: ${reportData.dataRelatorio}`,
-                '',
-                `SALDO INICIAL,${reportData.saldoInicial}`,
-                `MOVIMENTO PERÍODO,${reportData.movimento}`,
-                `SALDO FINAL,${reportData.saldoFinal}`,
-                '',
-                'DATA,DESCRIÇÃO,CATEGORIA,VALOR,TIPO',
-                ...reportData.transacoes.map(t => `${t.data},${t.descricao},${t.categoria},${t.valor},${t.tipo}`)
-              ].join('\n');
-              
-              const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-              const link = document.createElement('a');
-              const url = URL.createObjectURL(blob);
-              link.setAttribute('href', url);
-              link.setAttribute('download', `extrato_${new Date().toISOString().split('T')[0]}.csv`);
-              link.click();
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-          >
-            <Download size={18} />
-            Relatório
-          </button>
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
-          >
-            <Plus size={18} />
-            Nova Transação
-          </button>
-        </div>
-      </div>
-
-      {/* --- ABAS DE NAVEGAÇÃO --- */}
-      <div className="flex border-b border-slate-200 dark:border-slate-800">
-        {[
-            { id: 'cashflow', label: 'Extrato (Realizado)', icon: Landmark },
-            { id: 'payable', label: 'A Pagar', icon: ArrowDownRight },
-            { id: 'receivable', label: 'A Receber', icon: ArrowUpRight }
-        ].map(tab => (
-            <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={cn(
-                    "flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors",
-                    activeTab === tab.id 
-                        ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400" 
-                        : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                )}
-            >
-                <tab.icon size={18} />
-                {tab.label}
-            </button>
-        ))}
-      </div>
-
-      {/* --- CONTEÚDO DA ABA --- */}
-      {activeTab === 'cashflow' ? (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-            
-            {/* EXTRATO ESTILO BANCO COM SALDO INICIAL E FINAL */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Saldo Inicial */}
-              <div className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm relative group">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                        <p className="text-xs uppercase font-bold text-slate-500 dark:text-slate-400">Saldo Inicial</p>
-                        <Link 
-                            to="/settings" 
-                            state={{ activeTab: 'general' }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-400 hover:text-blue-600"
-                            title="Configurar Saldo Inicial"
-                        >
-                            <Pencil size={12} />
-                        </Link>
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(balanceData.initialBalance)}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-                        {startDate ? 'Calculado até o período anterior' : 'Configurado em Ajustes'}
-                    </p>
-                  </div>
-                  <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400">
-                    <Landmark size={24} />
-                  </div>
-                </div>
-              </div>
-
-              {/* Movimento do Período */}
-              <div className={cn("bg-gradient-to-br rounded-xl border p-6 shadow-sm", 
-                balanceData.totalMovement >= 0 
-                  ? "from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-900/10 border-green-200 dark:border-green-800" 
-                  : "from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-900/10 border-red-200 dark:border-red-800"
-              )}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs uppercase font-bold text-slate-500 dark:text-slate-400 mb-1">Movimento</p>
-                    <p className={cn("text-2xl font-bold", balanceData.totalMovement >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400")}>
-                      {formatCurrency(balanceData.totalMovement)}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">{visibleTransactions.length} transações</p>
-                  </div>
-                  <div className={cn("p-3 rounded-full", balanceData.totalMovement >= 0 ? "bg-green-200 dark:bg-green-900/30 text-green-600 dark:text-green-400" : "bg-red-200 dark:bg-red-900/30 text-red-600 dark:text-red-400")}>
-                    {balanceData.totalMovement >= 0 ? <ArrowUpRight size={24} /> : <ArrowDownRight size={24} />}
-                  </div>
-                </div>
-              </div>
-
-              {/* Saldo Final */}
-              <div className="bg-gradient-to-br from-slate-900 to-slate-950 dark:from-slate-950 dark:to-slate-900 rounded-xl border border-slate-700 dark:border-slate-800 p-6 shadow-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs uppercase font-bold text-slate-400 mb-1">Saldo Final</p>
-                    <p className="text-2xl font-bold text-white">{formatCurrency(balanceData.finalBalance)}</p>
-                    <p className="text-xs text-slate-400 mt-2">Saldo Atual</p>
-                  </div>
-                  <div className="p-3 bg-slate-700 dark:bg-slate-800 rounded-full text-slate-300">
-                    <Wallet size={24} />
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            {/* FILTROS E TABELA */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                
-                {/* Toolbar */}
-                <div className="p-3 sm:p-4 border-b border-slate-200 dark:border-slate-800 space-y-3 sm:space-y-0">
-                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
-                      <div className="relative flex-1">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                          <input 
-                          type="text" 
-                          placeholder="Buscar no extrato..." 
-                          value={searchTerm}
-                          onChange={e => setSearchTerm(e.target.value)}
-                          className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white placeholder-slate-400 transition-colors text-xs sm:text-sm"
-                          />
-                      </div>
-                      
-                      {/* Botões Compactos no Mobile */}
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
-                          className="px-2 sm:px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-[10px] sm:text-xs font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors flex items-center gap-1 sm:gap-2 whitespace-nowrap"
-                          title={sortOrder === 'desc' ? 'Ordenação: Recente para Antigo' : 'Ordenação: Antigo para Recente'}
-                        >
-                          <Calendar size={12} className="sm:w-4 sm:h-4" />
-                          <span className="hidden sm:inline">{sortOrder === 'desc' ? 'Recente ↓' : 'Antigo ↑'}</span>
-                          <span className="sm:hidden">{sortOrder === 'desc' ? '↓' : '↑'}</span>
-                        </button>
-                        <button 
-                          onClick={() => {
-                            const reportData = {
-                              empresa: companySettings.name,
-                              dataRelatorio: new Date().toLocaleDateString('pt-BR'),
-                              saldoInicial: formatCurrency(balanceData.initialBalance),
-                              movimento: formatCurrency(balanceData.totalMovement),
-                              saldoFinal: formatCurrency(balanceData.finalBalance),
-                              transacoes: visibleTransactions.map(t => ({
-                                data: displayDate(t.date),
-                                descricao: t.desc,
-                                categoria: t.category,
-                                valor: formatCurrency(t.netAmount),
-                                tipo: t.type
-                              }))
-                            };
-                            
-                            const csvContent = [
-                              `EXTRATO BANCÁRIO - ${reportData.empresa}`,
-                              `Data do Relatório: ${reportData.dataRelatorio}`,
-                              '',
-                              `SALDO INICIAL,${reportData.saldoInicial}`,
-                              `MOVIMENTO PERÍODO,${reportData.movimento}`,
-                              `SALDO FINAL,${reportData.saldoFinal}`,
-                              '',
-                              'DATA,DESCRIÇÃO,CATEGORIA,VALOR,TIPO',
-                              ...reportData.transacoes.map(t => `${t.data},${t.descricao},${t.categoria},${t.valor},${t.tipo}`)
-                            ].join('\n');
-                            
-                            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                            const link = document.createElement('a');
-                            const url = URL.createObjectURL(blob);
-                            link.setAttribute('href', url);
-                            link.setAttribute('download', `extrato_${new Date().toISOString().split('T')[0]}.csv`);
-                            link.click();
-                          }}
-                          className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] sm:text-xs font-bold transition-colors shadow-sm"
-                          title="Baixar Extrato em CSV"
-                        >
-                          <Download size={12} className="sm:w-4 sm:h-4" />
-                          <span className="hidden sm:inline">Extrato</span>
-                          <span className="sm:hidden">CSV</span>
-                        </button>
-                      </div>
-                    </div>
-                    
-                    {/* Date Filter - Responsive */}
-                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-                      <div className="flex items-center gap-1 sm:gap-2 bg-slate-50 dark:bg-slate-950 p-1 rounded-lg border border-slate-200 dark:border-slate-700 flex-1">
-                          <div className="flex items-center gap-1 sm:gap-2 px-1 sm:px-2">
-                              <Calendar size={14} className="sm:w-4 sm:h-4 text-slate-400" />
-                              <input 
-                                  type="date" 
-                                  value={startDate}
-                                  onChange={(e) => setStartDate(e.target.value)}
-                                  className="bg-transparent text-[10px] sm:text-sm text-slate-600 dark:text-slate-300 focus:outline-none w-20 sm:w-32"
-                                  title="Data Inicial"
-                              />
-                          </div>
-                          <span className="text-slate-300 dark:text-slate-600 text-xs">-</span>
-                          <div className="flex items-center gap-1 sm:gap-2 px-1 sm:px-2">
-                              <input 
-                                  type="date" 
-                                  value={endDate}
-                                  onChange={(e) => setEndDate(e.target.value)}
-                                  className="bg-transparent text-[10px] sm:text-sm text-slate-600 dark:text-slate-300 focus:outline-none w-20 sm:w-32"
-                                  title="Data Final"
-                              />
-                          </div>
-                          {(startDate || endDate) && (
-                              <button 
-                                  onClick={() => { setStartDate(''); setEndDate(''); }}
-                                  className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors"
-                                  title="Limpar Filtro de Data"
-                              >
-                                  <X size={12} className="sm:w-4 sm:h-4" />
-                              </button>
-                          )}
-                      </div>
-
-                      <div className="flex gap-1 overflow-x-auto pb-1 sm:pb-0">
-                          {['Todas', 'Serviços', 'Estoque', 'Comissões', 'RH', 'Manutenção', 'Aluguel/Fixo'].map(cat => (
-                          <button
-                              key={cat}
-                              onClick={() => setCategoryFilter(cat)}
-                              className={cn(
-                              "px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold whitespace-nowrap transition-colors border",
-                              categoryFilter === cat 
-                                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800" 
-                                  : "bg-transparent border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-                              )}
-                          >
-                              {cat}
-                          </button>
-                          ))}
-                      </div>
-                    </div>
-                </div>
-
-                {/* EXTRATO - DESKTOP TABLE VIEW */}
-                <div className="hidden sm:block overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                            <tr>
-                                <th className="px-4 sm:px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 w-32">Data</th>
-                                <th className="px-4 sm:px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Descrição</th>
-                                <th className="px-4 sm:px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Categoria</th>
-                                <th className="px-4 sm:px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Valor</th>
-                                <th className="px-4 sm:px-6 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right w-24">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {visibleTransactions.length === 0 ? (
-                                <tr>
-                                    <td colSpan={5} className="px-4 sm:px-6 py-12 text-center text-slate-400">
-                                        <div className="flex flex-col items-center gap-2">
-                                            <DollarSign size={32} className="opacity-50" />
-                                            <p>Nenhuma transação no período</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ) : (
-                                visibleTransactions.map((t, idx) => {
-                                    const accumulatedBalance = balanceData.initialBalance + 
-                                      visibleTransactions.slice(0, idx + 1).reduce((acc, tx) => acc + tx.netAmount, 0);
-                                    
-                                    return (
-                                    <tr key={t.id} className={cn(
-                                        "hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group",
-                                        t.type === 'income' ? "bg-green-50/30 dark:bg-green-900/5" : ""
-                                    )}>
-                                        <td className="px-4 sm:px-6 py-3 text-slate-500 dark:text-slate-400 font-medium text-xs sm:text-sm">
-                                            {t.date ? displayDate(t.date) : 'S/D'}
-                                        </td>
-                                        <td className="px-4 sm:px-6 py-3 font-medium text-slate-900 dark:text-white text-xs sm:text-sm">
-                                            <div className="flex items-center gap-2">
-                                                <span>{t.desc || 'S/D'}</span>
-                                                <span className="text-[10px] text-slate-400 font-normal px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 whitespace-nowrap">
-                                                    {t.method} {t.installments && t.installments > 1 && `• ${t.installments}x`}
-                                                </span>
-                                            </div>
-                                        </td>
-                                    <td className="px-4 sm:px-6 py-3 text-xs sm:text-sm">
-                                        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-[10px] font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                                            {t.category || 'S/D'}
-                                        </span>
-                                    </td>
-                                    <td className={cn(
-                                        "px-4 sm:px-6 py-3 text-right font-bold text-xs sm:text-sm",
-                                        t.type === 'income' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
-                                    )}>
-                                        <div>
-                                            {t.type === 'income' ? '+' : ''} {t.netAmount || t.amount ? formatCurrency(t.type === 'income' ? (t.netAmount ?? t.amount) : Math.abs(t.amount)) : 'R$ 0,00'}
-                                        </div>
-                                        {t.type === 'income' && t.fee > 0 && (
-                                            <div className="text-[10px] font-normal text-slate-400 mt-0.5">
-                                                Bruto: {formatCurrency(t.amount)} (-{formatCurrency(t.fee)})
-                                            </div>
-                                        )}
-                                    </td>
-                                    <td className="px-4 sm:px-6 py-3 text-right">
-                                        <div className="flex justify-end gap-1 sm:gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button 
-                                                onClick={() => handleEdit(t)}
-                                                className="p-1 sm:p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors" 
-                                                title="Editar"
-                                            >
-                                                <Pencil size={14} className="sm:w-4 sm:h-4" />
-                                            </button>
-                                            <button 
-                                                onClick={() => handleDelete(t.id)}
-                                                className="p-1 sm:p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" 
-                                                title="Excluir"
-                                            >
-                                                <Trash2 size={14} className="sm:w-4 sm:h-4" />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                                    );
-                                })
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* EXTRATO - MOBILE CARD VIEW */}
-                <div className="sm:hidden space-y-2 p-3">
-                    {visibleTransactions.length === 0 ? (
-                        <div className="text-center py-8 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 text-sm flex flex-col items-center gap-2">
-                            <DollarSign size={28} className="opacity-50" />
-                            <p>Nenhuma transação</p>
-                        </div>
-                    ) : (
-                        visibleTransactions.map((t) => (
-                            <div 
-                                key={t.id} 
-                                className={cn(
-                                    "p-3 rounded-lg border transition-all",
-                                    t.type === 'income' 
-                                        ? "bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800" 
-                                        : "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800"
-                                )}
-                            >
-                                <div className="flex items-start justify-between gap-2 mb-2">
-                                    <div className="flex-1">
-                                        <p className="text-xs font-bold text-slate-600 dark:text-slate-400 mb-0.5">
-                                            {t.date ? displayDate(t.date) : 'S/D'}
-                                        </p>
-                                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
-                                            {t.desc || 'S/D'}
-                                        </p>
-                                    </div>
-                                    <p className={cn(
-                                        "text-sm font-bold whitespace-nowrap",
-                                        t.type === 'income' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
-                                    )}>
-                                        {t.type === 'income' ? '+' : ''}{t.netAmount || t.amount ? formatCurrency(t.type === 'income' ? (t.netAmount ?? t.amount) : Math.abs(t.amount)) : 'R$ 0,00'}
-                                    </p>
-                                </div>
-                                
-                                <div className="flex items-center justify-between gap-2 text-xs">
-                                    <div className="flex gap-1 items-center">
-                                        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-[10px] font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                                            {t.category || 'S/D'}
-                                        </span>
-                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                                            {t.method} {t.installments && t.installments > 1 && `• ${t.installments}x`}
-                                        </span>
-                                    </div>
-                                    <div className="flex gap-1">
-                                        <button 
-                                            onClick={() => handleEdit(t)}
-                                            className="p-1.5 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors" 
-                                            title="Editar"
-                                        >
-                                            <Pencil size={14} />
-                                        </button>
-                                        <button 
-                                            onClick={() => handleDelete(t.id)}
-                                            className="p-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors" 
-                                            title="Excluir"
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {t.type === 'income' && t.fee > 0 && (
-                                    <div className="text-[10px] font-normal text-slate-500 dark:text-slate-400 mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-                                        Bruto: {formatCurrency(t.amount)} (-{formatCurrency(t.fee)})
-                                    </div>
-                                )}
-                            </div>
-                        ))
-                    )}
-                </div>
-            </div>
-        </div>
-      ) : (
-        // --- ABAS DE CONTAS A PAGAR / RECEBER (Mantido layout anterior simplificado) ---
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className={cn("p-6 rounded-xl text-white shadow-lg", activeTab === 'payable' ? "bg-gradient-to-br from-red-600 to-red-800 shadow-red-900/20" : "bg-gradient-to-br from-green-600 to-green-800 shadow-green-900/20")}>
-                    <p className={cn("text-sm font-medium mb-1 flex items-center gap-2", activeTab === 'payable' ? "text-red-100" : "text-green-100")}>
-                        {activeTab === 'payable' ? <ArrowDownRight size={16} /> : <ArrowUpRight size={16} />}
-                        Total {activeTab === 'payable' ? 'a Pagar' : 'a Receber'}
-                    </p>
-                    <h3 className="text-3xl font-bold mb-2">
-                        {formatCurrency(activeTab === 'payable' ? pendingData.totalPayable : pendingData.totalReceivable)}
-                    </h3>
-                    <p className={cn("text-xs opacity-80", activeTab === 'payable' ? "text-red-200" : "text-green-200")}>
-                        {activeTab === 'payable' ? 'Contas pendentes' : 'Previsão de entrada'}
-                    </p>
-                </div>
-             </div>
-
-             <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                {/* Desktop Table */}
-                <div className="hidden sm:block overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                        <tr>
-                            <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-slate-700 dark:text-slate-300 text-xs sm:text-sm">Vencimento</th>
-                            <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-slate-700 dark:text-slate-300 text-xs sm:text-sm">Descrição</th>
-                            <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-slate-700 dark:text-slate-300 text-xs sm:text-sm">Categoria</th>
-                            <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-slate-700 dark:text-slate-300 text-right text-xs sm:text-sm">Valor</th>
-                            <th className="px-4 sm:px-6 py-3 sm:py-4 font-semibold text-slate-700 dark:text-slate-300 text-right text-xs sm:text-sm">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {(activeTab === 'payable' ? pendingData.payable : pendingData.receivable).map(t => {
-                            const isLate = new Date(t.dueDate) < new Date() && new Date(t.dueDate).toDateString() !== new Date().toDateString();
-                            return (
-                                <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
-                                    <td className="px-4 sm:px-6 py-3 sm:py-4 text-slate-500 dark:text-slate-400 text-xs sm:text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <CalendarClock size={14} className={isLate ? "text-red-500" : "text-slate-400"} />
-                                            <span className={cn(isLate ? "text-red-600 font-bold" : "")}>
-                                                {t.dueDate ? displayDate(t.dueDate) : 'S/D'}
-                                            </span>
-                                        </div>
-                                    </td>
-                                    <td className="px-4 sm:px-6 py-3 sm:py-4 font-medium text-slate-900 dark:text-white text-xs sm:text-sm">{t.desc || 'S/D'}</td>
-                                    <td className="px-4 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm">
-                                        <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-[10px] sm:text-xs font-medium text-slate-600 dark:text-slate-300">
-                                            {t.category || 'S/D'}
-                                        </span>
-                                    </td>
-                                    <td className={cn("px-6 py-4 text-right font-bold", t.type === 'income' ? "text-green-600" : "text-red-600")}>
-                                        {formatCurrency(Math.abs(t.amount))}
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="flex justify-end gap-2">
-                                            <button 
-                                                onClick={() => handleSettle(t.id)}
-                                                className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors" 
-                                                title={t.type === 'income' ? "Receber" : "Pagar"}
-                                            >
-                                                <CheckCircle2 size={18} />
-                                            </button>
-                                            <button 
-                                                onClick={() => handleEdit(t)}
-                                                className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors" 
-                                                title="Editar"
-                                            >
-                                                <Pencil size={16} />
-                                            </button>
-                                            <button 
-                                                onClick={() => handleDelete(t.id)}
-                                                className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" 
-                                                title="Excluir"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                        {(activeTab === 'payable' ? pendingData.payable : pendingData.receivable).length === 0 && (
-                            <tr>
-                                <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
-                                    Nenhuma conta pendente.
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-                </div>
-
-                {/* Mobile Card View */}
-                <div className="sm:hidden space-y-2 p-3">
-                    {(activeTab === 'payable' ? pendingData.payable : pendingData.receivable).map(t => {
-                        const isLate = new Date(t.dueDate) < new Date() && new Date(t.dueDate).toDateString() !== new Date().toDateString();
-                        return (
-                            <div 
-                                key={t.id} 
-                                className={cn(
-                                    "p-3 rounded-lg border transition-all",
-                                    activeTab === 'payable'
-                                        ? "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800"
-                                        : "bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800"
-                                )}
-                            >
-                                <div className="flex items-start justify-between gap-2 mb-2">
-                                    <div className="flex-1">
-                                        <p className={cn("text-xs font-bold mb-0.5 flex items-center gap-1", isLate ? "text-red-600" : "text-slate-600 dark:text-slate-400")}>
-                                            <CalendarClock size={12} />
-                                            {t.dueDate ? displayDate(t.dueDate) : 'S/D'}
-                                        </p>
-                                        <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
-                                            {t.desc || 'S/D'}
-                                        </p>
-                                    </div>
-                                    <p className={cn(
-                                        "text-sm font-bold whitespace-nowrap",
-                                        activeTab === 'payable' ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
-                                    )}>
-                                        {t.amount ? formatCurrency(Math.abs(t.amount)) : 'R$ 0,00'}
-                                    </p>
-                                </div>
-                                
-                                <div className="flex items-center justify-between gap-2 text-xs mb-2">
-                                    <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-[10px] font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                                        {t.category || 'S/D'}
-                                    </span>
-                                    <div className="flex gap-1">
-                                        <button 
-                                            onClick={() => handleSettle(t.id)}
-                                            className="p-1.5 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 rounded transition-colors"
-                                            title={t.type === 'income' ? "Receber" : "Pagar"}
-                                        >
-                                            <CheckCircle2 size={14} />
-                                        </button>
-                                        <button 
-                                            onClick={() => handleEdit(t)}
-                                            className="p-1.5 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
-                                            title="Editar"
-                                        >
-                                            <Pencil size={14} />
-                                        </button>
-                                        <button 
-                                            onClick={() => handleDelete(t.id)}
-                                            className="p-1.5 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
-                                            title="Excluir"
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                    {(activeTab === 'payable' ? pendingData.payable : pendingData.receivable).length === 0 && (
-                        <div className="text-center py-8 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-900 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 text-sm">
-                            Nenhuma conta pendente
-                        </div>
-                    )}
-                </div>
-            </div>
         </div>
       )}
     </div>

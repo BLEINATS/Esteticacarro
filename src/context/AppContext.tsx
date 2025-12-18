@@ -4,10 +4,12 @@ import {
   ServiceCatalogItem, PriceMatrixEntry, VehicleSize, Employee, Task, 
   EmployeeTransaction, MarketingCampaign,
   CompanySettings, SubscriptionDetails, FinancialTransaction, ClientPoints, FidelityCard, Reward,
-  Redemption, TierConfig, TierLevel, ShopOwner, Notification, ServiceConsumption, AuthResponse
+  Redemption, TierConfig, TierLevel, ShopOwner, Notification, ServiceConsumption, AuthResponse,
+  SystemAlert
 } from '../types';
-import { addDays, formatISO } from 'date-fns';
+import { addDays, formatISO, differenceInDays, subDays, isAfter } from 'date-fns';
 import { supabase } from '../lib/supabase';
+import { formatId } from '../lib/utils';
 
 // ... (Keeping interfaces implicit to save space, they are imported from types) ...
 interface AppContextType {
@@ -39,6 +41,10 @@ interface AppContextType {
   markNotificationAsRead: (id: string) => void;
   clearAllNotifications: () => void;
   addNotification: (notification: Omit<Notification, 'id' | 'read' | 'createdAt'>) => void;
+  
+  // Intelligence Alerts
+  systemAlerts: SystemAlert[];
+  markAlertResolved: (id: string) => void;
   
   companySettings: CompanySettings;
   subscription: SubscriptionDetails;
@@ -242,6 +248,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [pointsHistory, setPointsHistory] = useState<any[]>([]);
 
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>([]);
+  const [systemAlerts, setSystemAlerts] = useState<SystemAlert[]>([]);
   
   const [currentUser, setCurrentUser] = useState<Employee | null>(null);
   
@@ -259,7 +266,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [ownerUser]);
 
   // --- AUTH & INITIALIZATION ---
-
+  // ... (Keep existing auth logic) ...
   useEffect(() => {
     let mounted = true;
 
@@ -274,15 +281,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const initSession = async () => {
       try {
         setIsAppLoading(true);
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data, error } = await supabase.auth.getSession();
+        
+        if (error) throw error;
+
+        const session = data.session;
         
         if (session?.user && mounted) {
           await loadTenantData(session.user.id, session.user.email || '');
         } else if (mounted) {
           setIsAppLoading(false);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Session initialization error:", error);
+        
+        // Handle invalid refresh token by clearing corrupted local storage
+        if (error?.code === 'refresh_token_not_found' || error?.message?.includes('Invalid Refresh Token')) {
+            console.warn("Refresh token invalid. Clearing session to allow re-login.");
+            await supabase.auth.signOut();
+            setOwnerUser(null);
+            setTenantId(null);
+        }
+
         if (mounted) setIsAppLoading(false);
       }
     };
@@ -305,6 +325,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setServices([]);
         setEmployees([]);
         setFinancialTransactions([]);
+        setSystemAlerts([]);
         setIsAppLoading(false);
       }
     });
@@ -379,8 +400,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
                         fetchServices(tenant.id),
                         fetchEmployees(tenant.id),
                         fetchFinancials(tenant.id),
-                        fetchGamificationData(tenant.id)
+                        fetchGamificationData(tenant.id),
+                        fetchCampaigns(tenant.id),
+                        fetchSystemAlerts(tenant.id) // NEW: Fetch Alerts
                     ]);
+                    
+                    // Run Intelligence Engine after loading data
+                    setTimeout(() => runIntelligenceEngine(tenant.id), 2000);
                     
                     setIsAppLoading(false);
                     return true;
@@ -424,6 +450,159 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // --- INTELLIGENCE ENGINE ---
+  const fetchSystemAlerts = async (tId: string) => {
+      const { data } = await supabase.from('alerts').select('*').eq('tenant_id', tId).eq('resolved', false).order('created_at', { ascending: false });
+      if (data) {
+          setSystemAlerts(data.map(a => ({
+              id: a.id,
+              type: a.type as any,
+              message: a.message,
+              level: a.level as any,
+              actionLink: a.action_link,
+              actionLabel: a.action_label,
+              resolved: a.resolved,
+              createdAt: a.created_at
+          })));
+      }
+  };
+
+  const runIntelligenceEngine = async (tId: string) => {
+      console.log("Running Intelligence Engine...");
+      
+      // 1. Fetch fresh data for calculation (to ensure we have latest)
+      const { data: workOrdersData } = await supabase.from('work_orders').select('*').eq('tenant_id', tId);
+      const { data: clientsData } = await supabase.from('clients').select('id, name, last_visit, status').eq('tenant_id', tId);
+      const { data: servicesData } = await supabase.from('services').select('id, standard_time').eq('tenant_id', tId);
+      
+      if (!workOrdersData || !clientsData || !servicesData) return;
+
+      const newAlerts: Omit<SystemAlert, 'id' | 'createdAt' | 'resolved'>[] = [];
+
+      // --- KPI 1: Occupancy (Next 7 Days) ---
+      // Simple heuristic: Assume 8h/day * 6 days * 2 employees (default) capacity if not set
+      const today = new Date();
+      const nextWeek = addDays(today, 7);
+      
+      const upcomingOrders = workOrdersData.filter(os => {
+          const deadline = os.deadline ? new Date(os.deadline) : null;
+          return deadline && deadline >= today && deadline <= nextWeek && os.status !== 'Cancelado';
+      });
+
+      // Calculate total minutes booked
+      let bookedMinutes = 0;
+      upcomingOrders.forEach(os => {
+          // Try to find service duration
+          const service = servicesData.find(s => s.id === os.serviceId || (os.serviceIds && os.serviceIds.includes(s.id)));
+          bookedMinutes += service?.standard_time || 60; // Default 60 if not found
+      });
+
+      // Capacity: 2 employees * 8h * 60m * 6 working days
+      const estimatedCapacityMinutes = 2 * 8 * 60 * 6; 
+      const occupancyRate = (bookedMinutes / estimatedCapacityMinutes) * 100;
+
+      if (occupancyRate < 50) {
+          newAlerts.push({
+              type: 'agenda',
+              message: `Agenda com baixa ocupação (${occupancyRate.toFixed(0)}%) nos próximos 7 dias.`,
+              level: 'atencao',
+              actionLink: '/marketing',
+              actionLabel: 'Criar Promoção'
+          });
+      }
+
+      // --- KPI 2: Inactive Clients (> 60 days) ---
+      const inactiveClients = clientsData.filter(c => {
+          const lastVisit = c.last_visit ? new Date(c.last_visit) : null;
+          return lastVisit && differenceInDays(today, lastVisit) > 60;
+      });
+
+      if (inactiveClients.length > 5) {
+          newAlerts.push({
+              type: 'cliente',
+              message: `${inactiveClients.length} clientes não retornam há mais de 60 dias.`,
+              level: 'atencao',
+              actionLink: '/clients',
+              actionLabel: 'Ver Lista de Risco'
+          });
+      }
+
+      // --- KPI 3: Revenue per Hour (Efficiency) ---
+      // Check last 30 days
+      const lastMonth = subDays(today, 30);
+      const completedRecent = workOrdersData.filter(os => 
+          os.status === 'Concluído' && new Date(os.created_at) >= lastMonth
+      );
+
+      if (completedRecent.length > 0) {
+          const totalRev = completedRecent.reduce((acc, os) => acc + (os.total_value || 0), 0);
+          let totalTime = 0;
+          completedRecent.forEach(os => {
+             const service = servicesData.find(s => s.id === os.serviceId); // Simplified
+             totalTime += service?.standard_time || 60;
+          });
+          
+          const revPerHour = totalTime > 0 ? totalRev / (totalTime / 60) : 0;
+          
+          // Threshold: Arbitrary 100 BRL/h as "good"
+          if (revPerHour < 80) {
+               newAlerts.push({
+                  type: 'financeiro',
+                  message: `Receita por hora (R$ ${revPerHour.toFixed(0)}) abaixo da meta ideal (R$ 100).`,
+                  level: 'info',
+                  actionLink: '/pricing',
+                  actionLabel: 'Revisar Preços'
+              });
+          }
+      }
+
+      // Persist Alerts (Avoid Duplicates)
+      for (const alert of newAlerts) {
+          // Check if similar active alert exists
+          const exists = systemAlerts.some(a => 
+              a.type === alert.type && 
+              a.message === alert.message && 
+              !a.resolved
+          );
+
+          if (!exists) {
+              const { data, error } = await supabase.from('alerts').insert({
+                  tenant_id: tId,
+                  type: alert.type,
+                  message: alert.message,
+                  level: alert.level,
+                  action_link: alert.actionLink,
+                  action_label: alert.actionLabel,
+                  resolved: false
+              }).select().single();
+
+              if (data) {
+                  setSystemAlerts(prev => [
+                      {
+                          id: data.id,
+                          type: data.type as any,
+                          message: data.message,
+                          level: data.level as any,
+                          actionLink: data.action_link,
+                          actionLabel: data.action_label,
+                          resolved: data.resolved,
+                          createdAt: data.created_at
+                      },
+                      ...prev
+                  ]);
+              }
+          }
+      }
+  };
+
+  const markAlertResolved = async (id: string) => {
+      setSystemAlerts(prev => prev.filter(a => a.id !== id));
+      if (tenantId) {
+          await supabase.from('alerts').update({ resolved: true }).eq('id', id);
+      }
+  };
+
+  // ... (Other functions like createTenant, fetchClients, etc. remain the same) ...
   const createTenant = async (name: string, phone: string): Promise<boolean> => {
       if (!ownerUser) return false;
       
@@ -450,8 +629,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
             subscription: initialSubscription
           };
 
-          // Add timeout to prevent hanging if DB is unresponsive
-          // Increased to 60s for safety
           const insertPromise = supabase.from('tenants').insert(newTenant).select().single();
           const timeoutPromise = new Promise((_, reject) => 
               setTimeout(() => reject(new Error('Timeout creating store (60s)')), 60000)
@@ -465,18 +642,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
           
           if (data) {
-              // Atualização Otimista
               setTenantId(data.id);
               setCompanySettings(newTenant.settings);
               setOwnerUser(prev => prev ? ({ ...prev, shopName: name }) : null);
-              
-              // Limpa estados para garantir
               setClients([]);
               setWorkOrders([]);
-              
-              // Carrega dados em background para garantir consistência
               loadTenantData(ownerUser.id, ownerUser.email);
-              
               return true;
           }
           return false;
@@ -486,37 +657,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
   };
 
-  // ... (Rest of the file remains unchanged) ...
   const fetchClients = async (tId: string) => {
     const { data } = await supabase.from('clients').select(`*, vehicles (*)`).eq('tenant_id', tId);
     if (data) {
-      const mappedClients: Client[] = data.map(c => ({
-        id: c.id,
-        name: c.name,
-        phone: c.phone,
-        email: c.email || '',
-        cep: c.address_data?.cep,
-        street: c.address_data?.street,
-        number: c.address_data?.number,
-        neighborhood: c.address_data?.neighborhood,
-        city: c.address_data?.city,
-        state: c.address_data?.state,
-        address: c.address_data?.formatted,
-        notes: c.notes || '',
-        vehicles: c.vehicles.map((v: any) => ({
-          id: v.id,
-          model: v.model,
-          plate: v.plate,
-          color: v.color,
-          year: v.year,
-          size: v.size as VehicleSize
-        })),
-        ltv: c.ltv,
-        visitCount: c.visit_count,
-        lastVisit: c.last_visit || new Date().toISOString(),
-        status: c.status as any,
-        segment: c.segment as any
-      }));
+      const mappedClients: Client[] = data.map(c => {
+        // Automatic Classification Logic
+        const lastVisitDate = c.last_visit ? new Date(c.last_visit) : new Date(c.created_at);
+        const daysSince = differenceInDays(new Date(), lastVisitDate);
+        
+        let derivedStatus: 'active' | 'inactive' | 'churn_risk' = 'active';
+        if (daysSince > 90) derivedStatus = 'inactive';
+        else if (daysSince > 60) derivedStatus = 'churn_risk';
+
+        let derivedSegment: any = 'standard';
+        if (c.ltv > 2000 || c.visit_count > 10) derivedSegment = 'vip';
+        else if (c.visit_count > 2 && daysSince < 45) derivedSegment = 'recurring';
+        else if (c.visit_count <= 1 && daysSince < 30) derivedSegment = 'new';
+        else if (daysSince > 60) derivedSegment = 'inactive';
+
+        return {
+            id: c.id,
+            name: c.name,
+            phone: c.phone,
+            email: c.email || '',
+            cep: c.address_data?.cep,
+            street: c.address_data?.street,
+            number: c.address_data?.number,
+            neighborhood: c.address_data?.neighborhood,
+            city: c.address_data?.city,
+            state: c.address_data?.state,
+            address: c.address_data?.formatted,
+            notes: c.notes || '',
+            vehicles: c.vehicles.map((v: any) => ({
+            id: v.id,
+            model: v.model,
+            plate: v.plate,
+            color: v.color,
+            year: v.year,
+            size: v.size as VehicleSize
+            })),
+            ltv: c.ltv,
+            visitCount: c.visit_count,
+            lastVisit: c.last_visit || new Date().toISOString(),
+            status: derivedStatus, // Use derived status
+            segment: derivedSegment // Use derived segment
+        };
+      });
       setClients(mappedClients);
     }
   };
@@ -701,20 +887,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const fetchCampaigns = async (tId: string) => {
+    const { data } = await supabase.from('marketing_campaigns').select('*').eq('tenant_id', tId);
+    if (data) {
+        setCampaigns(data.map(c => ({
+            id: c.id,
+            name: c.name,
+            targetSegment: c.target_segment as any,
+            messageTemplate: c.message_template || '',
+            sentCount: c.sent_count,
+            conversionCount: c.conversion_count,
+            revenueGenerated: c.revenue_generated,
+            costInTokens: c.cost_in_tokens,
+            status: c.status as any,
+            date: c.date
+        })));
+    }
+  };
+
   const updateCompanySettings = async (settings: Partial<CompanySettings>) => {
     const newSettings = { ...companySettings, ...settings };
     setCompanySettings(newSettings);
     
-    // Update local ownerUser state if shop name changes
     if (settings.name && ownerUser) {
         setOwnerUser({ ...ownerUser, shopName: settings.name });
     }
     
     if (tenantId) {
-        // Construct payload to update top-level columns as well
         const payload: any = { settings: newSettings };
-        
-        // Sync top-level columns if they are changed
         if (settings.slug) payload.slug = settings.slug;
         if (settings.name) payload.name = settings.name;
 
@@ -791,6 +991,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (updates.paymentStatus) payload.payment_status = updates.paymentStatus;
     if (updates.paymentMethod) payload.payment_method = updates.paymentMethod;
     if (updates.npsScore !== undefined) payload.nps_score = updates.npsScore;
+    if (updates.technician !== undefined) payload.technician = updates.technician; // Ensure technician update persists
+    
     payload.json_data = {
         vehicle: currentOS.vehicle,
         damages: currentOS.damages,
@@ -813,18 +1015,60 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!tenantId) return;
       const os = orderSnapshot || workOrders.find(o => o.id === id);
       if (!os) return;
+      
       updateWorkOrder(id, { status: 'Concluído' });
+      
       if (os.serviceIds) os.serviceIds.forEach(svcId => deductStock(svcId));
       else if (os.serviceId) deductStock(os.serviceId);
+      
       if (os.clientId && companySettings.gamification.enabled) {
           const points = Math.floor(os.totalValue * (companySettings.gamification.pointsMultiplier || 1));
           addPointsToClient(os.clientId, os.id, points, `Serviço: ${os.service}`);
       }
+      
       if (os.clientId) {
           updateClientVisits(os.clientId, 1);
           updateClientLTV(os.clientId, os.totalValue);
       }
+
+      // --- AUTOMATIC COMMISSION LOGIC ---
+      if (os.technician && os.technician !== 'A Definir') {
+          const employee = employees.find(e => e.name === os.technician);
+          
+          if (employee && employee.active && (employee.salaryType === 'commission' || employee.salaryType === 'mixed')) {
+              // Calculate Commission
+              // If commissionBase is 'net', ideally we should subtract costs, but for now we use totalValue as simplified base
+              // or implement cost subtraction if cost data is readily available.
+              // Assuming 'gross' for simplicity unless we have robust cost tracking per OS.
+              
+              const commissionValue = (os.totalValue * employee.commissionRate) / 100;
+              
+              if (commissionValue > 0) {
+                  const newBalance = (employee.balance || 0) + commissionValue;
+                  
+                  // Update Employee Balance in DB
+                  updateEmployee(employee.id, { balance: newBalance });
+                  
+                  // Log Transaction (In-memory for now as we don't have employee_transactions table, 
+                  // but we update the balance which is persistent)
+                  const transaction: EmployeeTransaction = {
+                      id: `comm-${Date.now()}`,
+                      employeeId: employee.id,
+                      type: 'commission',
+                      amount: commissionValue,
+                      description: `Comissão OS #${formatId(os.id)}`,
+                      date: new Date().toISOString(),
+                      relatedWorkOrderId: os.id
+                  };
+                  addEmployeeTransaction(transaction);
+                  
+                  console.log(`Commission of ${commissionValue} credited to ${employee.name}`);
+              }
+          }
+      }
   };
+
+  // ... (Other CRUD functions remain the same) ...
   const addClient = async (client: Partial<Client>): Promise<Client | null> => {
     if (!tenantId) return null;
     const addressData = { cep: client.cep, street: client.street, number: client.number, neighborhood: client.neighborhood, city: client.city, state: client.state, formatted: client.address };
@@ -884,7 +1128,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addReward = async (reward: Omit<Reward, 'id' | 'createdAt'>) => { if (!tenantId) return; const config = { percentage: reward.percentage, gift: reward.gift, value: reward.value }; const { data } = await supabase.from('rewards').insert({ tenant_id: tenantId, name: reward.name, description: reward.description, required_points: reward.requiredPoints, required_level: reward.requiredLevel, reward_type: reward.rewardType, config, active: reward.active }).select().single(); if (data) { setRewards(prev => [...prev, { ...reward, id: data.id, createdAt: data.created_at }]); } };
   const updateReward = async (id: string, updates: Partial<Reward>) => { if (!tenantId) return; const { percentage, gift, value, ...rest } = updates; await supabase.from('rewards').update({ name: rest.name, description: rest.description, required_points: rest.requiredPoints, required_level: rest.requiredLevel, reward_type: rest.rewardType, active: rest.active, }).eq('id', id); setRewards(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r)); };
   const deleteReward = async (id: string) => { if (!tenantId) return; await supabase.from('rewards').delete().eq('id', id); setRewards(prev => prev.filter(r => r.id !== id)); };
-  
+  const recalculateClientMetrics = (clientId: string) => {
+      // Placeholder for manual recalculation if needed
+      // Logic is already embedded in fetchClients for dynamic updates
+  };
+
   const createFidelityCard = async (clientId: string): Promise<FidelityCard> => {
     const dummyCard: FidelityCard = { clientId, cardNumber: '', cardHolder: '', cardColor: 'blue', qrCode: '', expiresAt: '', issueDate: '' };
     if (!tenantId) return dummyCard;
@@ -893,8 +1141,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (existing) return existing;
 
     const cardNumber = Math.random().toString().slice(2, 18);
-    
-    // 2. Try Insert
     const { data, error } = await supabase.from('fidelity_cards').insert({
         tenant_id: tenantId,
         client_id: clientId,
@@ -915,9 +1161,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return newCard;
     }
 
-    // 3. Handle Duplicate (Robust Fetch)
-    if (error && error.code === '23505') { // Unique violation
-         console.log("Card already exists in DB, fetching...");
+    if (error && error.code === '23505') { 
          const { data: existingData } = await supabase.from('fidelity_cards').select('*').eq('client_id', clientId).single();
          if (existingData) {
              const recoveredCard: FidelityCard = {
@@ -936,8 +1180,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
             return recoveredCard;
          }
     }
-
-    console.error("Failed to create card:", error);
     return dummyCard;
   };
 
@@ -951,16 +1193,60 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const useVoucher = (code: string, workOrderId: string) => { const redemption = redemptions.find(r => r.code === code && r.status === 'active'); if (redemption) { setRedemptions(prev => prev.map(r => r.id === redemption.id ? { ...r, status: 'used', usedAt: new Date().toISOString(), usedInWorkOrderId: workOrderId } : r)); if (tenantId) { supabase.from('redemptions').update({ status: 'used', used_at: new Date().toISOString() }).eq('id', redemption.id); } return true; } return false; };
   const getVoucherDetails = (code: string) => { const redemption = redemptions.find(r => r.code === code); if (!redemption) return null; const reward = rewards.find(r => r.id === redemption.rewardId); return { redemption, reward }; };
   const addEmployee = (employee: Omit<Employee, 'id' | 'balance'>) => { if (!tenantId) return; const { name, role, pin, salaryType, fixedSalary, commissionRate, commissionBase, active } = employee; const salaryData = { salaryType, fixedSalary, commissionRate, commissionBase }; supabase.from('employees').insert({ tenant_id: tenantId, name, role, pin, salary_data: salaryData, active, balance: 0 }).then(({ data, error }) => { if (!error) fetchEmployees(tenantId); }); };
-  const updateEmployee = (id: string, updates: Partial<Employee>) => { if (!tenantId) return; const { name, role, pin, salaryType, fixedSalary, commissionRate, commissionBase, active } = updates; const payload: any = {}; if (name) payload.name = name; if (role) payload.role = role; if (pin) payload.pin = pin; if (active !== undefined) payload.active = active; if (salaryType || fixedSalary !== undefined || commissionRate !== undefined || commissionBase) { const current = employees.find(e => e.id === id); const salaryData = { salaryType: salaryType || current?.salaryType, fixedSalary: fixedSalary !== undefined ? fixedSalary : current?.fixedSalary, commissionRate: commissionRate !== undefined ? commissionRate : current?.commissionRate, commissionBase: commissionBase || current?.commissionBase }; payload.salary_data = salaryData; } supabase.from('employees').update(payload).eq('id', id).then(({ error }) => { if (!error) fetchEmployees(tenantId); }); };
+  const updateEmployee = (id: string, updates: Partial<Employee>) => { if (!tenantId) return; const { name, role, pin, salaryType, fixedSalary, commissionRate, commissionBase, active, balance } = updates; const payload: any = {}; if (name) payload.name = name; if (role) payload.role = role; if (pin) payload.pin = pin; if (active !== undefined) payload.active = active; if (balance !== undefined) payload.balance = balance; if (salaryType || fixedSalary !== undefined || commissionRate !== undefined || commissionBase) { const current = employees.find(e => e.id === id); const salaryData = { salaryType: salaryType || current?.salaryType, fixedSalary: fixedSalary !== undefined ? fixedSalary : current?.fixedSalary, commissionRate: commissionRate !== undefined ? commissionRate : current?.commissionRate, commissionBase: commissionBase || current?.commissionBase }; payload.salary_data = salaryData; } supabase.from('employees').update(payload).eq('id', id).then(({ error }) => { if (!error) fetchEmployees(tenantId); }); };
   const deleteEmployee = (id: string) => { if (!tenantId) return; supabase.from('employees').delete().eq('id', id).then(({ error }) => { if (!error) setEmployees(prev => prev.filter(e => e.id !== id)); }); };
-  const addEmployeeTransaction = (trans: EmployeeTransaction) => { if (!tenantId) return; /* ... implement DB logic ... */ };
-  const updateEmployeeTransaction = (id: string, updates: Partial<EmployeeTransaction>) => { if (!tenantId) return; /* ... implement DB logic ... */ };
-  const deleteEmployeeTransaction = (id: string) => { if (!tenantId) return; /* ... implement DB logic ... */ };
+  const addEmployeeTransaction = (trans: EmployeeTransaction) => { setEmployeeTransactions(prev => [...prev, trans]); };
+  const updateEmployeeTransaction = (id: string, updates: Partial<EmployeeTransaction>) => { setEmployeeTransactions(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t)); };
+  const deleteEmployeeTransaction = (id: string) => { setEmployeeTransactions(prev => prev.filter(t => t.id !== id)); };
   const addFinancialTransaction = (trans: FinancialTransaction) => { if (!tenantId) return; supabase.from('financial_transactions').insert({ tenant_id: tenantId, description: trans.desc, category: trans.category, amount: trans.amount, type: trans.type, date: trans.date, method: trans.method, status: trans.status }).then(({ error }) => { if (!error) fetchFinancials(tenantId); }); };
   const updateFinancialTransaction = (id: number, updates: Partial<FinancialTransaction>) => { if (!tenantId) return; const payload: any = {}; if (updates.desc) payload.description = updates.desc; if (updates.category) payload.category = updates.category; if (updates.amount !== undefined) payload.amount = updates.amount; if (updates.type) payload.type = updates.type; if (updates.date) payload.date = updates.date; if (updates.method) payload.method = updates.method; if (updates.status) payload.status = updates.status; supabase.from('financial_transactions').update(payload).eq('id', id).then(({ error }) => { if (!error) fetchFinancials(tenantId); }); };
   const deleteFinancialTransaction = (id: number) => { if (!tenantId) return; supabase.from('financial_transactions').delete().eq('id', id).then(({ error }) => { if (!error) fetchFinancials(tenantId); }); };
-  const createCampaign = (campaign: MarketingCampaign) => { if (!tenantId) return; setCampaigns(prev => [...prev, campaign]); };
-  const updateCampaign = (id: string, updates: Partial<MarketingCampaign>) => { if (!tenantId) return; setCampaigns(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c)); };
+  
+  // --- MARKETING PERSISTENCE ---
+  const createCampaign = async (campaign: MarketingCampaign) => { 
+      if (!tenantId) return; 
+      const { data, error } = await supabase.from('marketing_campaigns').insert({
+          tenant_id: tenantId,
+          name: campaign.name,
+          target_segment: campaign.targetSegment,
+          message_template: campaign.messageTemplate,
+          sent_count: campaign.sentCount,
+          conversion_count: 0,
+          revenue_generated: 0,
+          cost_in_tokens: campaign.costInTokens,
+          status: 'sent',
+          date: new Date().toISOString()
+      }).select().single();
+
+      if (data) {
+          setCampaigns(prev => [...prev, {
+              id: data.id,
+              name: data.name,
+              targetSegment: data.target_segment as any,
+              messageTemplate: data.message_template || '',
+              sentCount: data.sent_count,
+              conversionCount: data.conversion_count,
+              revenueGenerated: data.revenue_generated,
+              costInTokens: data.cost_in_tokens,
+              status: data.status as any,
+              date: data.date
+          }]);
+      }
+  };
+  
+  const updateCampaign = async (id: string, updates: Partial<MarketingCampaign>) => { 
+      if (!tenantId) return; 
+      
+      const payload: any = {};
+      if (updates.conversionCount !== undefined) payload.conversion_count = updates.conversionCount;
+      if (updates.revenueGenerated !== undefined) payload.revenue_generated = updates.revenueGenerated;
+      
+      const { error } = await supabase.from('marketing_campaigns').update(payload).eq('id', id);
+      
+      if (!error) {
+          setCampaigns(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c)); 
+      }
+  };
 
   return (
     <AppContext.Provider value={{ 
@@ -969,29 +1255,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
       employees, employeeTransactions, currentUser, ownerUser, campaigns, clientPoints, fidelityCards, rewards, redemptions,
       companySettings, subscription, updateCompanySettings,
       financialTransactions,
+      
+      // NEW: Alerts
+      systemAlerts,
+      markAlertResolved,
+
       login: (pin) => { const e = employees.find(emp => emp.pin === pin && emp.active); if(e) { setCurrentUser(e); return true; } return false; }, 
       logout: () => setCurrentUser(null),
       
       loginOwner: async (e, p) => { 
-        // Remove ALL whitespace (including internal/non-breaking)
         const email = e.replace(/\s+/g, '').toLowerCase();
         const password = p; 
         
         console.log(`Attempting loginOwner for: '${email}' (Pass len: ${password.length})`);
         
         try {
-          // Attempt 1: Raw password (as typed)
-          // Removed Promise.race timeout wrapper to let Supabase client handle connection time
           let { error } = await supabase.auth.signInWithPassword({ email, password });
 
-          // Attempt 2: Trimmed password (if raw failed and password has spaces)
           if (error && error.code === 'invalid_credentials' && password.trim() !== password) {
              console.log("Login failed with raw password, trying trimmed...");
              const retryResult = await supabase.auth.signInWithPassword({ email, password: password.trim() });
-             
-             if (!retryResult.error) {
-                 error = null; // Success on retry
-             }
+             if (!retryResult.error) error = null;
           }
 
           if (error) {
@@ -1010,7 +1294,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       registerOwner: async (n, e, s, p) => { 
         const { error } = await supabase.auth.signUp({ 
             email: e.replace(/\s+/g, '').toLowerCase(), 
-            password: p.trim(), // Enforce trim to prevent accidental spaces
+            password: p.trim(),
             options: { data: { name: n.trim(), shop_name: s.trim() } } 
         }); 
         return { success: !error, error: error?.message }; 
@@ -1023,29 +1307,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
           setOwnerUser(null); 
           setTenantId(null); 
-          // localStorage.clear(); // Optional: hard reset
       },
-      createTenant, // EXPORTED FUNCTION
+      createTenant, 
       createTenantViaRPC: async (name: string) => { return true; }, 
       reloadUserData: async () => { 
         console.log("Reloading user data...");
-        if (ownerUser?.id) {
-          return await loadTenantData(ownerUser.id, ownerUser.email);
-        }
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-            return await loadTenantData(session.user.id, session.user.email || '');
+        try {
+          if (ownerUser?.id) {
+            return await loadTenantData(ownerUser.id, ownerUser.email);
+          }
+          const { data: { session }, error } = await supabase.auth.getSession();
+          if (error) throw error;
+
+          if (session?.user) {
+              return await loadTenantData(session.user.id, session.user.email || '');
+          }
+        } catch (error: any) {
+          console.error("Reload data error:", error);
+          if (error?.code === 'refresh_token_not_found') {
+              await supabase.auth.signOut();
+              setOwnerUser(null);
+          }
         }
         console.warn("No session found during reloadUserData");
         return false;
       },
-      addWorkOrder, updateWorkOrder, completeWorkOrder, recalculateClientMetrics: () => {}, updateClientLTV, updateClientVisits: () => {}, submitNPS: () => {},
+      addWorkOrder, updateWorkOrder, completeWorkOrder, recalculateClientMetrics, updateClientLTV, updateClientVisits, submitNPS: () => {},
       addClient, updateClient, deleteClient, addVehicle, updateVehicle, removeVehicle,
       addInventoryItem, updateInventoryItem, deleteInventoryItem, deductStock,
       toggleTheme: () => setTheme(prev => prev === 'dark' ? 'light' : 'dark'), generateReminders: () => {},
       updatePrice, updateServiceInterval, bulkUpdatePrices: () => {}, getPrice: (sId, size) => priceMatrix.find(p => p.serviceId === sId && p.size === size)?.price || 0, 
       addService, updateService, deleteService,
-      assignTask: () => {}, startTask: () => {}, stopTask: () => {}, addEmployeeTransaction: () => {}, updateEmployeeTransaction: () => {}, deleteEmployeeTransaction: () => {},
+      assignTask: () => {}, startTask: () => {}, stopTask: () => {}, addEmployeeTransaction, updateEmployeeTransaction, deleteEmployeeTransaction,
       addEmployee, updateEmployee, deleteEmployee,
       addFinancialTransaction, updateFinancialTransaction, deleteFinancialTransaction,
       createCampaign, updateCampaign, getWhatsappLink: (p, m) => `https://wa.me/${p}?text=${encodeURIComponent(m)}`,
@@ -1064,7 +1357,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }, serviceConsumptions,
       buyTokens: () => {}, consumeTokens: () => true, changePlan: () => {},
       isAppLoading,
-      tenantId // EXPOSED
+      tenantId
     }}>
       {children}
     </AppContext.Provider>

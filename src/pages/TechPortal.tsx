@@ -87,10 +87,15 @@ export default function TechPortal() {
     }
   };
 
+  // UPDATED: Convert to Base64 for persistence
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const url = URL.createObjectURL(e.target.files[0]);
-      setDamagePhoto(url);
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setDamagePhoto(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 

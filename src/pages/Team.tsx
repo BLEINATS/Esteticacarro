@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Users, Award, TrendingUp, DollarSign, Settings, Plus, Minus, Trash2, UserPlus, Filter, Calendar, Pencil, Save, X, Briefcase, Wallet } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Users, Award, TrendingUp, DollarSign, Settings, Plus, Minus, Trash2, UserPlus, Filter, Calendar, Pencil, Save, X, Briefcase, Wallet, Star, Clock } from 'lucide-react';
 import { formatCurrency, cn, formatDateToLocalInput } from '../lib/utils';
 import { useApp } from '../context/AppContext';
 import { Employee, EmployeeTransaction } from '../types';
@@ -14,7 +14,9 @@ export default function Team() {
     updateEmployeeTransaction, 
     deleteEmployeeTransaction, 
     deleteEmployee,
-    addFinancialTransaction 
+    addFinancialTransaction,
+    workOrders,
+    services
   } = useApp();
   const { showConfirm, showAlert } = useDialog();
   
@@ -43,6 +45,62 @@ export default function Team() {
     date: '',
     type: 'commission' as 'commission' | 'advance' | 'payment' | 'salary'
   });
+
+  // --- ANALYTICS LOGIC ---
+  const employeeMetrics = useMemo(() => {
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+
+    return employees.map(emp => {
+        // Filter Completed WorkOrders for this employee in current month
+        const empWorkOrders = workOrders.filter(os => 
+            os.status === 'Concluído' && 
+            os.technician === emp.name && 
+            new Date(os.createdAt).getMonth() === currentMonth &&
+            new Date(os.createdAt).getFullYear() === currentYear
+        );
+
+        const totalRevenue = empWorkOrders.reduce((acc, os) => acc + (os.totalValue || 0), 0);
+        const completedServices = empWorkOrders.length;
+        const averageTicket = completedServices > 0 ? totalRevenue / completedServices : 0;
+
+        // Estimate Hours Worked based on Standard Time of services
+        let totalMinutes = 0;
+        empWorkOrders.forEach(os => {
+            if (os.serviceIds && os.serviceIds.length > 0) {
+                os.serviceIds.forEach(id => {
+                    const s = services.find(srv => srv.id === id);
+                    if (s) totalMinutes += s.standardTimeMinutes;
+                });
+            } else if (os.serviceId) {
+                const s = services.find(srv => srv.id === os.serviceId);
+                if (s) totalMinutes += s.standardTimeMinutes;
+            } else {
+                // Fallback if no ID (legacy)
+                totalMinutes += 60; // Assume 1h default
+            }
+        });
+        
+        const estimatedHours = totalMinutes / 60;
+        const revenuePerHour = estimatedHours > 0 ? totalRevenue / estimatedHours : 0;
+
+        return {
+            ...emp,
+            metrics: {
+                totalRevenue,
+                completedServices,
+                averageTicket,
+                estimatedHours,
+                revenuePerHour
+            }
+        };
+    }).sort((a, b) => b.metrics.totalRevenue - a.metrics.totalRevenue); // Sort by Revenue for Ranking
+  }, [employees, workOrders, services]);
+
+  const topPerformer = employeeMetrics.length > 0 ? employeeMetrics[0] : null;
+  const mostEfficient = [...employeeMetrics].sort((a, b) => b.metrics.revenuePerHour - a.metrics.revenuePerHour)[0];
+
+  // --- ACTIONS ---
 
   const handleAddVale = () => {
     if (selectedEmployee && valeAmount) {
@@ -333,8 +391,8 @@ export default function Team() {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Equipe & RH</h2>
-          <p className="text-slate-500 dark:text-slate-400">Produtividade, comissões e fechamento de folha.</p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Gestão de Equipe & Performance</h2>
+          <p className="text-slate-500 dark:text-slate-400">Acompanhe produtividade, comissões e ranking.</p>
         </div>
         <button 
             onClick={openNewModal}
@@ -345,93 +403,151 @@ export default function Team() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {employees.map((member) => (
-          <div key={member.id} className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all relative group">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-lg font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                {member.name.charAt(0)}
+      {/* PERFORMANCE DASHBOARD */}
+      {employeeMetrics.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Top Performer Card */}
+            <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-xl p-6 text-white shadow-lg relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
+                <div className="relative z-10">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="p-2 bg-white/20 rounded-lg"><Award size={24} className="text-yellow-300" /></div>
+                        <div>
+                            <h3 className="font-bold text-lg">Campeão de Vendas</h3>
+                            <p className="text-indigo-200 text-xs uppercase font-bold">Destaque do Mês</p>
+                        </div>
+                    </div>
+                    
+                    {topPerformer && (
+                        <div className="flex items-end justify-between">
+                            <div>
+                                <p className="text-3xl font-bold">{topPerformer.name}</p>
+                                <p className="text-indigo-100 text-sm mt-1">{topPerformer.role}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-2xl font-bold text-yellow-300">{formatCurrency(topPerformer.metrics.totalRevenue)}</p>
+                                <p className="text-indigo-200 text-xs">Faturamento Gerado</p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Efficiency Card */}
+            <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg text-green-600 dark:text-green-400"><TrendingUp size={24} /></div>
+                    <div>
+                        <h3 className="font-bold text-lg text-slate-900 dark:text-white">Maior Eficiência</h3>
+                        <p className="text-slate-500 dark:text-slate-400 text-xs uppercase font-bold">Receita por Hora</p>
+                    </div>
+                </div>
+
+                {mostEfficient && (
+                    <div className="flex items-end justify-between">
+                        <div>
+                            <p className="text-2xl font-bold text-slate-900 dark:text-white">{mostEfficient.name}</p>
+                            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{mostEfficient.metrics.completedServices} serviços realizados</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(mostEfficient.metrics.revenuePerHour)}/h</p>
+                            <p className="text-slate-400 text-xs">Média Estimada</p>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+      )}
+
+      {/* EMPLOYEE LIST WITH METRICS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {employeeMetrics.map((emp, idx) => (
+          <div key={emp.id} className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all relative group">
+            {/* Rank Badge */}
+            <div className={cn(
+                "absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2",
+                idx === 0 ? "bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-600" :
+                idx === 1 ? "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600" :
+                idx === 2 ? "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-600" :
+                "bg-transparent text-slate-400 border-transparent"
+            )}>
+                {idx + 1}º
+            </div>
+
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xl font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-sm">
+                {emp.name.charAt(0)}
               </div>
               <div>
-                <h3 className="font-bold text-slate-900 dark:text-white">{member.name}</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{member.role}</p>
-              </div>
-              <div className="ml-auto flex gap-1">
-                <button 
-                    onClick={() => openEditModal(member)}
-                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                    title="Editar"
-                >
-                    <Settings size={18} />
-                </button>
-                <button 
-                    onClick={() => handleDeleteEmployee(member.id)}
-                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                    title="Excluir"
-                >
-                    <Trash2 size={18} />
-                </button>
+                <h3 className="font-bold text-lg text-slate-900 dark:text-white">{emp.name}</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-wide">{emp.role}</p>
               </div>
             </div>
             
-            <div className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500 dark:text-slate-400">Modelo</span>
-                <span className="font-medium text-slate-900 dark:text-white text-right">
-                    {member.salaryType === 'fixed' 
-                        ? `Fixo: ${formatCurrency(member.fixedSalary)}` 
-                        : member.salaryType === 'mixed'
-                            ? `Fixo: ${formatCurrency(member.fixedSalary)} + ${member.commissionRate}%`
-                            : `${member.commissionRate}% (${member.commissionBase === 'gross' ? 'Bruto' : 'Líquido'})`
-                    }
-                </span>
-              </div>
-              
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800 mt-2">
-                <div className="flex justify-between items-center mb-1">
-                   <span className="text-xs font-bold text-slate-500 uppercase">Saldo a Receber</span>
-                   <span className={cn("text-lg font-bold", member.balance >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500")}>
-                        {formatCurrency(member.balance)}
+            {/* Metrics Grid */}
+            <div className="grid grid-cols-2 gap-3 mb-6">
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Gerado (Mês)</p>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(emp.metrics.totalRevenue)}</p>
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Ticket Médio</p>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(emp.metrics.averageTicket)}</p>
+                </div>
+            </div>
+
+            {/* Balance Section */}
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-800/30 mb-4">
+                <div className="flex justify-between items-center mb-2">
+                   <span className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase flex items-center gap-1">
+                        <Wallet size={12} /> Saldo a Receber
+                   </span>
+                   <span className={cn("text-lg font-bold", emp.balance > 0 ? "text-green-600 dark:text-green-400" : "text-slate-500")}>
+                        {formatCurrency(emp.balance)}
                    </span>
                 </div>
                 
-                <div className="flex flex-col gap-2 mt-2">
-                    {(member.salaryType === 'fixed' || member.salaryType === 'mixed') && (
+                <div className="flex flex-col gap-2 mt-3">
+                    {(emp.salaryType === 'fixed' || emp.salaryType === 'mixed') && (
                         <button 
-                            onClick={() => handleCreditSalary(member)}
-                            className="w-full py-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors flex items-center justify-center gap-1"
+                            onClick={() => handleCreditSalary(emp)}
+                            className="w-full py-1.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 rounded text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
                         >
-                            <Wallet size={12} /> Lançar Salário
+                            Lançar Salário Fixo
                         </button>
                     )}
                     <div className="flex gap-2">
                         <button 
-                            onClick={() => { setSelectedEmployee(member); setIsValeModalOpen(true); }}
-                            className="flex-1 py-1.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center justify-center gap-1"
+                            onClick={() => { setSelectedEmployee(emp); setIsValeModalOpen(true); }}
+                            className="flex-1 py-2 bg-white dark:bg-slate-800 border border-red-200 dark:border-red-800 rounded text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                         >
-                            <Minus size={12} /> Vale
+                            Vale
                         </button>
                         <button 
-                            onClick={() => handlePayBalance(member)}
-                            className="flex-1 py-1.5 bg-green-600 text-white rounded text-xs font-bold hover:bg-green-700 transition-colors flex items-center justify-center gap-1 shadow-sm"
+                            onClick={() => handlePayBalance(emp)}
+                            className="flex-1 py-2 bg-green-600 text-white rounded text-xs font-bold hover:bg-green-700 transition-colors shadow-sm"
                         >
-                            <DollarSign size={12} /> Pagar
+                            Pagar Saldo
                         </button>
                     </div>
                 </div>
-              </div>
-              
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1">
-                    <TrendingUp size={12} /> Eficiência (Tempo)
-                  </span>
-                  <span className="text-xs font-bold text-blue-600 dark:text-blue-400">92%</span>
-                </div>
-                <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5">
-                  <div className="bg-blue-600 dark:bg-blue-500 h-1.5 rounded-full" style={{ width: '92%' }}></div>
-                </div>
-              </div>
+            </div>
+            
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button 
+                    onClick={() => openEditModal(emp)}
+                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                    title="Configurações"
+                >
+                    <Settings size={16} />
+                </button>
+                <button 
+                    onClick={() => handleDeleteEmployee(emp.id)}
+                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                    title="Excluir"
+                >
+                    <Trash2 size={16} />
+                </button>
             </div>
           </div>
         ))}

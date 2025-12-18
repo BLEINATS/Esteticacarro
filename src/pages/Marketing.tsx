@@ -13,9 +13,10 @@ import {
 } from 'recharts';
 import { useApp } from '../context/AppContext';
 import { ClientSegment, MarketingCampaign, WorkOrder } from '../types';
-import { cn, formatCurrency } from '../lib/utils';
+import { cn, formatCurrency, formatId } from '../lib/utils';
 import { useDialog } from '../context/DialogContext';
 
+// ... (CAMPAIGN_TEMPLATES and COSTS remain the same) ...
 const CAMPAIGN_TEMPLATES = [
   {
     id: 'inactive',
@@ -49,13 +50,12 @@ const CAMPAIGN_TEMPLATES = [
   }
 ];
 
-// Custos em Tokens
 const COSTS = {
     SOCIAL_AI: 5,
     WHATSAPP_MSG: 1
 };
 
-// --- COMPONENTE MODAL DE DETALHES ---
+// ... (CampaignDetailsModal remains the same) ...
 const CampaignDetailsModal = ({ campaign, onClose }: { campaign: MarketingCampaign, onClose: () => void }) => {
   const { updateCampaign } = useApp();
   const { showConfirm, showAlert } = useDialog();
@@ -431,10 +431,24 @@ export default function Marketing() {
     const os = workOrders.find(o => o.id === selectedOSId);
     if (!os) return { before: null, after: null };
 
-    const before = os.damages.find(d => d.photoUrl && d.photoUrl !== 'pending')?.photoUrl || 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=300&q=80';
-    const after = os.dailyLog?.flatMap?.(l => l.photos)?.[0] || 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=300&q=80'; // Fallback
+    // Before: damages photos (find first non-pending)
+    const before = os.damages.find(d => d.photoUrl && d.photoUrl !== 'pending')?.photoUrl;
+    
+    // After: dailyLog photos (flatten all photos from logs and take the last one)
+    const allLogPhotos = os.dailyLog?.reduce((acc: string[], log) => {
+        if (log.photos && Array.isArray(log.photos)) {
+            return [...acc, ...log.photos];
+        }
+        return acc;
+    }, []) || [];
+    
+    const after = allLogPhotos.length > 0 ? allLogPhotos[allLogPhotos.length - 1] : null;
 
-    return { before, after };
+    // Fallbacks (Placeholders)
+    return { 
+        before: before || 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=300&q=80', 
+        after: after || 'https://images.unsplash.com/photo-1601362840469-51e4d8d58785?auto=format&fit=crop&w=300&q=80' 
+    };
   };
 
   const selectedPhotos = getSelectedOSPhotos();
@@ -490,6 +504,7 @@ export default function Marketing() {
         />
       )}
 
+      {/* ... (Header and Tabs remain the same) ... */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Marketing & CRM</h2>
@@ -519,11 +534,12 @@ export default function Marketing() {
         </div>
       </div>
 
-      {/* --- TAB: DASHBOARD --- */}
+      {/* ... (Dashboard Tab remains the same) ... */}
       {activeTab === 'dashboard' && (
         <div className="space-y-6 animate-in fade-in slide-in-from-left">
           {/* KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+             {/* ... (KPIs) ... */}
              <div className="bg-gradient-to-br from-purple-600 to-indigo-600 p-3 sm:p-6 rounded-lg sm:rounded-xl text-white shadow-lg">
                 <div className="flex justify-between items-start mb-2 sm:mb-4">
                     <div className="p-1.5 sm:p-2 bg-white/20 rounded-lg"><Star size={18} className="text-yellow-300" /></div>
@@ -561,6 +577,7 @@ export default function Marketing() {
 
           {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6">
+            {/* ... (Charts code remains the same) ... */}
             <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                 <h3 className="font-bold text-slate-900 dark:text-white mb-4 sm:mb-6 text-sm sm:text-base">Performance de Campanhas</h3>
                 <div className="h-[250px] sm:h-[300px] w-full">
@@ -620,9 +637,10 @@ export default function Marketing() {
         </div>
       )}
 
-      {/* --- TAB: CAMPAIGNS --- */}
+      {/* ... (Campaigns Tab remains the same) ... */}
       {activeTab === 'campaigns' && (
          <div className="space-y-4 sm:space-y-6 animate-in fade-in slide-in-from-right">
+             {/* ... (Campaigns content) ... */}
              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                  <h3 className="font-bold text-base sm:text-lg text-slate-900 dark:text-white">Histórico de Campanhas</h3>
                  <button 
@@ -841,7 +859,7 @@ export default function Marketing() {
                                  <option value="">Selecione uma OS concluída...</option>
                                  {completedWorkOrders.map(os => (
                                      <option key={os.id} value={os.id}>
-                                         #{os.id} - {os.vehicle} ({os.service})
+                                         {formatId(os.id)} - {os.vehicle} ({os.service})
                                      </option>
                                  ))}
                              </select>
@@ -916,15 +934,15 @@ export default function Marketing() {
                              <div className="flex gap-3">
                                  <button 
                                     onClick={() => selectedPhotos.after && downloadImage(selectedPhotos.after, 'depois.jpg')}
-                                    disabled={!selectedPhotos.after}
-                                    className="flex-1 flex items-center justify-center gap-2 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                    disabled={!selectedPhotos.after || selectedPhotos.after.includes('unsplash')}
+                                    className="flex-1 flex items-center justify-center gap-2 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
                                  >
                                      <Download size={14} /> Foto Depois
                                  </button>
                                  <button 
                                     onClick={() => selectedPhotos.before && downloadImage(selectedPhotos.before, 'antes.jpg')}
-                                    disabled={!selectedPhotos.before}
-                                    className="flex-1 flex items-center justify-center gap-2 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                    disabled={!selectedPhotos.before || selectedPhotos.before.includes('unsplash')}
+                                    className="flex-1 flex items-center justify-center gap-2 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
                                  >
                                      <Download size={14} /> Foto Antes
                                  </button>
@@ -1013,11 +1031,10 @@ export default function Marketing() {
          </div>
       )}
 
-      {/* --- TAB: AUTOMATION --- */}
+      {/* ... (Automation Tab remains the same) ... */}
       {activeTab === 'automation' && (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom">
-            
-            {/* Seção de Alertas de Retorno */}
+            {/* ... (Automation content) ... */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                 <div className="flex items-center gap-3 mb-6">
                     <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-lg text-amber-600 dark:text-amber-400">
