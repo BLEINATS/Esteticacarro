@@ -1,13 +1,15 @@
 // ... existing types ...
 export interface SystemAlert {
   id: string;
-  type: 'agenda' | 'financeiro' | 'cliente' | 'profissional';
+  type: 'agenda' | 'financeiro' | 'cliente' | 'profissional' | 'estoque';
   message: string;
   level: 'info' | 'atencao' | 'critico';
   actionLink?: string;
   actionLabel?: string;
   resolved: boolean;
   createdAt: string;
+  financialImpact?: number; // NEW: Value in BRL to prioritize alerts
+  suggestedAction?: any; // NEW: Payload for automatic actions
 }
 
 // ... rest of the file (keep existing types)

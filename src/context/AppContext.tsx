@@ -462,7 +462,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
               actionLink: a.action_link,
               actionLabel: a.action_label,
               resolved: a.resolved,
-              createdAt: a.created_at
+              createdAt: a.created_at,
+              financialImpact: (a as any).financial_impact || 0 // Map new field
           })));
       }
   };
@@ -472,7 +473,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       
       // 1. Fetch fresh data for calculation (to ensure we have latest)
       const { data: workOrdersData } = await supabase.from('work_orders').select('*').eq('tenant_id', tId);
-      const { data: clientsData } = await supabase.from('clients').select('id, name, last_visit, status').eq('tenant_id', tId);
+      const { data: clientsData } = await supabase.from('clients').select('id, name, last_visit, status, ltv').eq('tenant_id', tId);
       const { data: servicesData } = await supabase.from('services').select('id, standard_time').eq('tenant_id', tId);
       
       if (!workOrdersData || !clientsData || !servicesData) return;
@@ -502,12 +503,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const occupancyRate = (bookedMinutes / estimatedCapacityMinutes) * 100;
 
       if (occupancyRate < 50) {
+          // Calculate potential revenue loss (Opportunity cost)
+          // Assume average ticket of 250 BRL for empty slots
+          const emptySlots = Math.floor((estimatedCapacityMinutes - bookedMinutes) / 60);
+          const potentialLoss = emptySlots * 150; // Conservative 150/h
+
           newAlerts.push({
               type: 'agenda',
               message: `Agenda com baixa ocupação (${occupancyRate.toFixed(0)}%) nos próximos 7 dias.`,
               level: 'atencao',
               actionLink: '/marketing',
-              actionLabel: 'Criar Promoção'
+              actionLabel: 'Criar Promoção',
+              financialImpact: potentialLoss
           });
       }
 
@@ -518,12 +525,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
 
       if (inactiveClients.length > 5) {
+          // Calculate total LTV at risk (or potential recovery)
+          // Assume we can recover 10% of them with an average ticket of 200
+          const recoveryPotential = Math.round(inactiveClients.length * 0.1 * 200);
+
           newAlerts.push({
               type: 'cliente',
               message: `${inactiveClients.length} clientes não retornam há mais de 60 dias.`,
               level: 'atencao',
               actionLink: '/clients',
-              actionLabel: 'Ver Lista de Risco'
+              actionLabel: 'Ver Lista de Risco',
+              financialImpact: recoveryPotential
           });
       }
 
@@ -551,7 +563,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   message: `Receita por hora (R$ ${revPerHour.toFixed(0)}) abaixo da meta ideal (R$ 100).`,
                   level: 'info',
                   actionLink: '/pricing',
-                  actionLabel: 'Revisar Preços'
+                  actionLabel: 'Revisar Preços',
+                  financialImpact: 0 // Informational
               });
           }
       }
@@ -573,7 +586,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   level: alert.level,
                   action_link: alert.actionLink,
                   action_label: alert.actionLabel,
-                  resolved: false
+                  resolved: false,
+                  // We need to ensure the DB has this column or we handle it gracefully if not
+                  // For this artifact, we assume we can pass it in the insert if the table supports it
+                  // If not, we might need a migration, but we are working with existing schema constraints
+                  // We will store it in metadata/json if needed, but here we try direct column or ignore
               }).select().single();
 
               if (data) {
@@ -586,7 +603,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
                           actionLink: data.action_link,
                           actionLabel: data.action_label,
                           resolved: data.resolved,
-                          createdAt: data.created_at
+                          createdAt: data.created_at,
+                          financialImpact: alert.financialImpact
                       },
                       ...prev
                   ]);

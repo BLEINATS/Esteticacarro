@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -17,7 +17,10 @@ import {
   MapPin,
   BrainCircuit,
   Lightbulb,
-  X
+  X,
+  Clock,
+  Award,
+  Zap
 } from 'lucide-react';
 import { 
   PieChart, 
@@ -29,20 +32,30 @@ import {
   Bar,
   XAxis,
   YAxis,
-  CartesianGrid
+  CartesianGrid,
+  AreaChart,
+  Area
 } from 'recharts';
 import { formatCurrency, cn, formatId } from '../lib/utils';
 import { useApp } from '../context/AppContext';
 import WorkOrderModal from '../components/WorkOrderModal';
 import { WorkOrder } from '../types';
 import { useNavigate } from 'react-router-dom';
+import { isSameDay, isSameMonth, startOfMonth, endOfMonth, isWithinInterval, subMonths } from 'date-fns';
+import AIAssistant from '../components/AIAssistant';
 
-const StatCard = ({ title, value, subtext, icon: Icon, color, decorationColor, trend, tooltip }: any) => (
-  <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
+const StatCard = ({ title, value, subtext, icon: Icon, color, decorationColor, trend, tooltip, onClick }: any) => (
+  <div 
+    onClick={onClick}
+    className={cn(
+      "bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all relative overflow-hidden group cursor-pointer",
+      onClick ? "hover:border-blue-400 dark:hover:border-blue-600" : ""
+    )}
+  >
     {/* Background Decoration Shape */}
     <div className={cn(
       "absolute right-0 top-0 w-24 h-24 opacity-10 rounded-bl-full transition-transform group-hover:scale-110", 
-      decorationColor || color.replace('text-', 'bg-').split(' ')[0] // Fallback safe logic or explicit color
+      decorationColor || color.replace('text-', 'bg-').split(' ')[0] 
     )} />
     
     <div className="flex items-center justify-between mb-4">
@@ -73,13 +86,14 @@ const StatCard = ({ title, value, subtext, icon: Icon, color, decorationColor, t
 );
 
 export default function Dashboard() {
-  const { theme, workOrders, clients, inventory, financialTransactions, companySettings, systemAlerts, markAlertResolved } = useApp();
+  const { theme, workOrders, clients, inventory, financialTransactions, companySettings, systemAlerts, markAlertResolved, employees } = useApp();
   const isDark = theme === 'dark';
   const [selectedOS, setSelectedOS] = useState<WorkOrder | null>(null);
   const navigate = useNavigate();
 
   // --- CÁLCULOS REAIS (Real Data) ---
-  
+  const today = new Date();
+
   // 1. Financeiro (Baseado nas transações 'paid')
   const paidTransactions = financialTransactions.filter(t => t.status === 'paid');
 
@@ -93,49 +107,86 @@ export default function Dashboard() {
 
   const netProfit = totalIncome - totalExpense;
   const currentBalance = (companySettings.initialBalance || 0) + netProfit;
-  
   const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
+
+  // --- NOVOS CÁLCULOS PARA O RESUMO EXECUTIVO ---
+  
+  // Faturamento Hoje vs Mês
+  const revenueToday = paidTransactions
+    .filter(t => t.type === 'income' && isSameDay(new Date(t.date), today))
+    .reduce((acc, t) => acc + (t.netAmount ?? t.amount), 0);
+
+  const revenueMonth = paidTransactions
+    .filter(t => t.type === 'income' && isSameMonth(new Date(t.date), today))
+    .reduce((acc, t) => acc + (t.netAmount ?? t.amount), 0);
+
+  // Agenda Preenchida (%)
+  const activeTechs = employees.filter(e => e.active).length || 1;
+  const dailyCapacity = activeTechs * 4; // Estimativa: 4 carros por técnico/dia
+  const osTodayCount = workOrders.filter(os => {
+      if (os.deadline) {
+          const dl = os.deadline.toLowerCase();
+          return dl.includes('hoje') || dl.includes(today.toLocaleDateString('pt-BR').slice(0, 5));
+      }
+      return isSameDay(new Date(os.createdAt), today);
+  }).length;
+  const agendaOccupancy = Math.min(100, Math.round((osTodayCount / dailyCapacity) * 100));
+
+  // Ticket Médio (Mês Atual)
+  const completedMonthOS = workOrders.filter(os => 
+    os.status === 'Concluído' && isSameMonth(new Date(os.createdAt), today)
+  );
+  const ticketMedio = completedMonthOS.length > 0 
+    ? completedMonthOS.reduce((acc, os) => acc + os.totalValue, 0) / completedMonthOS.length 
+    : 0;
+
+  // Serviço Mais Lucrativo (Mês Atual)
+  const serviceRevenue: Record<string, number> = {};
+  completedMonthOS.forEach(os => {
+      const name = os.service;
+      serviceRevenue[name] = (serviceRevenue[name] || 0) + os.totalValue;
+  });
+  const topServiceEntry = Object.entries(serviceRevenue).sort((a, b) => b[1] - a[1])[0];
+  const topService = topServiceEntry ? { name: topServiceEntry[0], value: topServiceEntry[1] } : null;
+
+  // Profissional Destaque (Mês Atual)
+  const techRevenue: Record<string, number> = {};
+  completedMonthOS.forEach(os => {
+      const tech = os.technician;
+      if (tech && tech !== 'A Definir') {
+          techRevenue[tech] = (techRevenue[tech] || 0) + os.totalValue;
+      }
+  });
+  const topTechEntry = Object.entries(techRevenue).sort((a, b) => b[1] - a[1])[0];
+  const topTech = topTechEntry ? { name: topTechEntry[0], value: topTechEntry[1] } : null;
+
+  // Alertas Automáticos (Queda/Ociosidade)
+  // Sort alerts by financial impact (High to Low)
+  const sortedAlerts = [...systemAlerts].sort((a, b) => (b.financialImpact || 0) - (a.financialImpact || 0));
+
+  // --- OUTROS DADOS ---
+  const activeOS = workOrders.filter(os => ['Em Andamento', 'Aguardando Peças', 'Controle de Qualidade'].includes(os.status));
+  const pendingApproval = workOrders.filter(os => os.status === 'Aguardando Aprovação').length;
+  const churnRisk = clients.filter(c => c.status === 'churn_risk').length;
+  const newClients = clients.filter(c => c.segment === 'new').length;
+  const visitsThisMonth = workOrders.filter(os => isSameMonth(new Date(os.createdAt), today)).length;
 
   const financialData = [
     { name: 'Receita', value: totalIncome, color: '#10b981' }, 
     { name: 'Despesa', value: totalExpense, color: '#ef4444' }, 
   ];
 
-  // 2. Operacional
-  const activeOS = workOrders.filter(os => ['Em Andamento', 'Aguardando Peças', 'Controle de Qualidade'].includes(os.status));
-  const pendingApproval = workOrders.filter(os => os.status === 'Aguardando Aprovação').length;
-
-  // 3. CRM / Clientes
-  const churnRisk = clients.filter(c => c.status === 'churn_risk').length;
-  const vipClients = clients.filter(c => c.segment === 'vip').length;
-  const recurringClients = clients.filter(c => c.segment === 'recurring').length;
-  const newClients = clients.filter(c => c.segment === 'new').length;
-  
   const clientSegmentsData = [
-    { name: 'VIP', value: vipClients, fill: '#8b5cf6', label: 'VIP' }, 
-    { name: 'Recorrente', value: recurringClients, fill: '#3b82f6', label: 'Recorrentes' }, 
+    { name: 'VIP', value: clients.filter(c => c.segment === 'vip').length, fill: '#8b5cf6', label: 'VIP' }, 
+    { name: 'Recorrente', value: clients.filter(c => c.segment === 'recurring').length, fill: '#3b82f6', label: 'Recorrentes' }, 
     { name: 'Novos', value: newClients, fill: '#10b981', label: 'Novos' }, 
     { name: 'Risco', value: churnRisk, fill: '#f59e0b', label: 'Em Risco' }, 
   ];
 
-  // 4. NPS Médio
-  const ratedOS = workOrders.filter(os => os.npsScore !== undefined);
-  const avgNPS = ratedOS.length > 0 
-    ? (ratedOS.reduce((acc, os) => acc + (os.npsScore || 0), 0) / ratedOS.length).toFixed(1)
-    : '0';
-
-  // 5. Visitas do Mês (Novas OS criadas este mês)
-  const currentMonth = new Date().getMonth();
-  const currentYear = new Date().getFullYear();
-  const visitsThisMonth = workOrders.filter(os => {
-    const date = new Date(os.createdAt);
-    return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
-  }).length;
-
   const handleNewOS = () => {
     const newOS: WorkOrder = {
         id: `OS-${Math.floor(Math.random() * 10000)}`,
-        clientId: '', // Empty to force selection
+        clientId: '',
         vehicle: 'Veículo Novo',
         plate: '',
         service: 'A Definir',
@@ -155,7 +206,9 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="h-screen overflow-hidden flex flex-col bg-slate-50 dark:bg-slate-950 animate-in fade-in duration-500">
+    <div className="h-screen overflow-hidden flex flex-col bg-slate-50 dark:bg-slate-950 animate-in fade-in duration-500 relative">
+      <AIAssistant />
+      
       {selectedOS && (
         <WorkOrderModal 
           workOrder={selectedOS} 
@@ -163,7 +216,7 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Header & Quick Actions - Compact */}
+      {/* Header & Quick Actions */}
       <div className="flex-shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 p-4 sm:p-6 border-b border-slate-200 dark:border-slate-800">
         <div className="min-w-0">
           <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Command Center</h2>
@@ -191,43 +244,159 @@ export default function Dashboard() {
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         <div className="space-y-6">
           
-          {/* --- VISÃO DO DONO (INTELLIGENCE LAYER) --- */}
-          <div className="bg-gradient-to-r from-slate-900 to-slate-800 dark:from-slate-800 dark:to-slate-900 rounded-2xl p-6 text-white shadow-xl border border-slate-700">
-             <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
-                    <BrainCircuit size={24} className="text-purple-400" />
+          {/* --- RESUMO EXECUTIVO (30s Overview) --- */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            {/* Card 1: Faturamento Hoje / Mês */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-3 opacity-10">
+                    <DollarSign size={48} />
                 </div>
-                <div>
-                    <h3 className="text-lg font-bold">Visão do Dono</h3>
-                    <p className="text-xs text-slate-400">Insights automáticos para decisão rápida.</p>
+                <h3 className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-2">Faturamento</h3>
+                <div className="flex flex-col gap-1">
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(revenueToday)}</span>
+                        <span className="text-xs text-green-600 font-bold bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded">Hoje</span>
+                    </div>
+                    <div className="flex items-baseline gap-2 text-sm text-slate-500 dark:text-slate-400">
+                        <span>Mês:</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-300">{formatCurrency(revenueMonth)}</span>
+                    </div>
                 </div>
+            </div>
+
+            {/* Card 2: Agenda & Ociosidade */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-3 opacity-10">
+                    <Clock size={48} />
+                </div>
+                <h3 className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-2">Agenda Hoje</h3>
+                <div className="flex items-end gap-2 mb-2">
+                    <span className={cn("text-3xl font-bold", agendaOccupancy > 80 ? "text-green-600" : agendaOccupancy < 40 ? "text-red-500" : "text-amber-500")}>
+                        {agendaOccupancy}%
+                    </span>
+                    <span className="text-xs text-slate-400 mb-1">preenchida</span>
+                </div>
+                <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                    <div 
+                        className={cn("h-full rounded-full transition-all duration-500", agendaOccupancy > 80 ? "bg-green-500" : agendaOccupancy < 40 ? "bg-red-500" : "bg-amber-500")} 
+                        style={{ width: `${agendaOccupancy}%` }}
+                    />
+                </div>
+            </div>
+
+            {/* Card 3: Ticket Médio & Top Serviço */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-3 opacity-10">
+                    <Target size={48} />
+                </div>
+                <div className="flex flex-col h-full justify-between">
+                    <div>
+                        <h3 className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase mb-1">Ticket Médio</h3>
+                        <p className="text-xl font-bold text-slate-900 dark:text-white">{formatCurrency(ticketMedio)}</p>
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                        <h3 className="text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase mb-1">Top Serviço (Lucro)</h3>
+                        <p className="text-sm font-bold text-blue-600 dark:text-blue-400 truncate" title={topService?.name}>
+                            {topService ? topService.name : '-'}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Card 4: Destaque & Alertas */}
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 dark:from-slate-800 dark:to-black p-5 rounded-xl border border-slate-700 shadow-lg text-white relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-3 opacity-10">
+                    <Award size={48} />
+                </div>
+                
+                {sortedAlerts.length > 0 ? (
+                    <div className="flex flex-col h-full justify-between">
+                        <div className="flex items-start gap-2 mb-2">
+                            <AlertCircle className="text-amber-400 animate-pulse" size={18} />
+                            <div>
+                                <h3 className="text-amber-400 text-xs font-bold uppercase">Atenção Necessária</h3>
+                                <p className="text-sm font-medium leading-tight mt-1 line-clamp-2">{sortedAlerts[0].message}</p>
+                                {sortedAlerts[0].financialImpact && sortedAlerts[0].financialImpact > 0 && (
+                                    <p className="text-xs text-red-300 mt-1 font-bold">
+                                        Impacto: {formatCurrency(sortedAlerts[0].financialImpact)}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                        {sortedAlerts[0].actionLink && (
+                            <button 
+                                onClick={() => navigate(sortedAlerts[0].actionLink!)}
+                                className="mt-2 text-xs bg-white/10 hover:bg-white/20 py-1.5 px-3 rounded transition-colors w-fit"
+                            >
+                                {sortedAlerts[0].actionLabel || 'Resolver'}
+                            </button>
+                        )}
+                    </div>
+                ) : (
+                    <div className="flex flex-col h-full justify-between">
+                        <div>
+                            <h3 className="text-slate-400 text-xs font-bold uppercase mb-1 flex items-center gap-1">
+                                <Award size={12} className="text-yellow-400" /> Profissional Destaque
+                            </h3>
+                            <p className="text-xl font-bold text-white truncate">{topTech ? topTech.name : '-'}</p>
+                            <p className="text-xs text-slate-400">{topTech ? formatCurrency(topTech.value) : 'R$ 0,00'} gerados</p>
+                        </div>
+                        <div className="mt-2 flex items-center gap-1 text-green-400 text-xs font-bold">
+                            <CheckCircle2 size={12} /> Operação Saudável
+                        </div>
+                    </div>
+                )}
+            </div>
+          </div>
+
+          {/* --- VISÃO DO DONO (INTELLIGENCE LAYER) - EXPANDED --- */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-800">
+             <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-purple-600 dark:text-purple-400">
+                        <BrainCircuit size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">Inteligência Operacional</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Análise de anomalias e oportunidades.</p>
+                    </div>
+                </div>
+                {sortedAlerts.length > 0 && (
+                    <span className="bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 px-3 py-1 rounded-full text-xs font-bold">
+                        {sortedAlerts.length} Alertas
+                    </span>
+                )}
              </div>
 
              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Active Alerts List */}
                 <div className="space-y-3">
-                    {systemAlerts.length > 0 ? (
-                        systemAlerts.map(alert => (
+                    {sortedAlerts.length > 0 ? (
+                        sortedAlerts.map(alert => (
                             <div key={alert.id} className={cn(
                                 "flex items-start gap-3 p-3 rounded-xl border transition-all",
-                                alert.level === 'critico' ? "bg-red-500/10 border-red-500/30" :
-                                alert.level === 'atencao' ? "bg-amber-500/10 border-amber-500/30" :
-                                "bg-blue-500/10 border-blue-500/30"
+                                alert.level === 'critico' ? "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800" :
+                                alert.level === 'atencao' ? "bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800" :
+                                "bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800"
                             )}>
                                 <div className={cn(
                                     "p-2 rounded-lg flex-shrink-0",
-                                    alert.level === 'critico' ? "bg-red-500/20 text-red-400" :
-                                    alert.level === 'atencao' ? "bg-amber-500/20 text-amber-400" :
-                                    "bg-blue-500/20 text-blue-400"
+                                    alert.level === 'critico' ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400" :
+                                    alert.level === 'atencao' ? "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400" :
+                                    "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
                                 )}>
                                     <Lightbulb size={18} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-slate-200">{alert.message}</p>
+                                    <p className="text-sm font-medium text-slate-900 dark:text-white">{alert.message}</p>
+                                    {alert.financialImpact && alert.financialImpact > 0 && (
+                                        <p className="text-xs font-bold text-red-500 mt-0.5">Impacto Estimado: {formatCurrency(alert.financialImpact)}</p>
+                                    )}
                                     {alert.actionLink && (
                                         <button 
                                             onClick={() => navigate(alert.actionLink!)}
-                                            className="text-xs font-bold text-white hover:underline mt-1 flex items-center gap-1"
+                                            className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline mt-1 flex items-center gap-1"
                                         >
                                             {alert.actionLabel || 'Ver Detalhes'} <ArrowRight size={10} />
                                         </button>
@@ -235,7 +404,7 @@ export default function Dashboard() {
                                 </div>
                                 <button 
                                     onClick={() => markAlertResolved(alert.id)}
-                                    className="text-slate-500 hover:text-white transition-colors p-1"
+                                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1"
                                     title="Dispensar"
                                 >
                                     <X size={14} />
@@ -243,87 +412,37 @@ export default function Dashboard() {
                             </div>
                         ))
                     ) : (
-                        <div className="flex flex-col items-center justify-center h-full py-6 text-slate-500 border border-dashed border-slate-700 rounded-xl">
-                            <CheckCircle2 size={32} className="mb-2 opacity-50" />
+                        <div className="flex flex-col items-center justify-center h-full py-6 text-slate-500 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+                            <CheckCircle2 size={32} className="mb-2 opacity-50 text-green-500" />
                             <p className="text-sm">Tudo certo! Sem alertas pendentes.</p>
                         </div>
                     )}
                 </div>
 
-                {/* Quick Stats Summary */}
+                {/* Quick Stats Summary (Secondary) */}
                 <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-                        <p className="text-xs text-slate-400 uppercase font-bold mb-1">Faturamento Mês</p>
-                        <p className="text-2xl font-bold text-emerald-400">{formatCurrency(totalIncome)}</p>
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold mb-1">Margem de Lucro</p>
+                        <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{profitMargin.toFixed(1)}%</p>
                     </div>
-                    <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-                        <p className="text-xs text-slate-400 uppercase font-bold mb-1">Margem de Lucro</p>
-                        <p className="text-2xl font-bold text-blue-400">{profitMargin.toFixed(1)}%</p>
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold mb-1">Novos Clientes</p>
+                        <p className="text-2xl font-bold text-slate-900 dark:text-white">{newClients}</p>
                     </div>
-                    <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-                        <p className="text-xs text-slate-400 uppercase font-bold mb-1">Ticket Médio</p>
-                        <p className="text-2xl font-bold text-purple-400">{formatCurrency(totalIncome / (visitsThisMonth || 1))}</p>
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold mb-1">Pátio Ativo</p>
+                        <p className="text-2xl font-bold text-slate-900 dark:text-white">{activeOS.length}</p>
+                        <p className="text-[10px] text-slate-400">{pendingApproval} pendentes</p>
                     </div>
-                    <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-                        <p className="text-xs text-slate-400 uppercase font-bold mb-1">Novos Clientes</p>
-                        <p className="text-2xl font-bold text-white">{newClients}</p>
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-slate-100 dark:border-slate-800">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold mb-1">Risco de Churn</p>
+                        <p className="text-2xl font-bold text-red-500">{churnRisk}</p>
                     </div>
                 </div>
              </div>
           </div>
 
-          {/* KPI Grid - Updated to 5 columns for large screens */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 flex-shrink-0">
-            <StatCard 
-              title="Lucro Líquido Real" 
-              value={formatCurrency(netProfit)} 
-              subtext={`Margem atual: ${profitMargin.toFixed(1)}%`}
-              trend={netProfit >= 0 ? "up" : "down"} 
-              icon={DollarSign} 
-              color="text-emerald-600 dark:text-emerald-400" 
-              decorationColor="bg-emerald-600"
-            />
-            <StatCard 
-              title="Pátio Ativo" 
-              value={activeOS.length.toString()} 
-              subtext={`${pendingApproval} aguardando aprovação`}
-              trend={pendingApproval > 0 ? 'down' : 'up'} 
-              icon={Activity} 
-              color="text-blue-600 dark:text-blue-400" 
-              decorationColor="bg-blue-600"
-            />
-            <StatCard 
-              title="Qualidade (NPS)" 
-              value={avgNPS} 
-              subtext="Média das últimas avaliações"
-              trend="up" 
-              icon={Star} 
-              color="text-yellow-500 dark:text-yellow-400"
-              decorationColor="bg-yellow-500"
-              tooltip="NPS (Net Promoter Score) mede a satisfação do cliente."
-            />
-            <StatCard 
-              title="Risco de Churn" 
-              value={churnRisk.toString()} 
-              subtext="Clientes inativos > 60 dias"
-              trend="down" 
-              icon={Users} 
-              color="text-red-500 dark:text-red-400"
-              decorationColor="bg-red-500"
-              tooltip="Clientes sem interação recente."
-            />
-            <StatCard 
-              title="Visitas do Mês" 
-              value={visitsThisMonth.toString()} 
-              subtext="Veículos recebidos"
-              trend="up" 
-              icon={Car} 
-              color="text-indigo-600 dark:text-indigo-400"
-              decorationColor="bg-indigo-600"
-              tooltip="Total de novas Ordens de Serviço abertas neste mês."
-            />
-          </div>
-
+          {/* ... (Rest of the dashboard remains the same) ... */}
           {/* Main Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-shrink-0">
         

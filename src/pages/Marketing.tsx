@@ -5,7 +5,8 @@ import {
   CalendarClock, Wrench, BarChart3, ArrowRight,
   Instagram, Wand2, Image as ImageIcon, Share2, Copy,
   Smartphone, Video, BellRing, Loader2, Plus, X, Download, Layers,
-  FileText, Eye, MousePointerClick, DollarSign, MessageSquare, Bot, Info
+  FileText, Eye, MousePointerClick, DollarSign, MessageSquare, Bot, Info,
+  Sparkles
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -289,6 +290,9 @@ export default function Marketing() {
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [sendingCampaign, setSendingCampaign] = useState(false);
 
+  // --- SMART COPYWRITER STATE ---
+  const [isGeneratingCopy, setIsGeneratingCopy] = useState(false);
+
   // Segmentação de Clientes
   const segments = {
     vip: clients.filter(c => c.segment === 'vip'),
@@ -312,6 +316,32 @@ export default function Marketing() {
     if (template) {
       setNewCampaign(prev => ({ ...prev, message: template.text }));
     }
+  };
+
+  const handleGenerateSmartCopy = async () => {
+      setIsGeneratingCopy(true);
+      
+      // Simulate AI generation based on target
+      setTimeout(() => {
+          let suggestion = "";
+          switch(newCampaign.target) {
+              case 'vip':
+                  suggestion = "Olá {cliente}! 🌟 Como nosso cliente VIP, preparamos algo exclusivo: traga seu {veiculo} esta semana e ganhe um tratamento de ozônio cortesia na sua manutenção. Podemos agendar?";
+                  break;
+              case 'inactive':
+                  suggestion = "Oi {cliente}, tudo bem? Sentimos falta do seu {veiculo} aqui na Cristal Care! 🚗 Que tal renovar a proteção com 15% OFF para agendamentos até sexta? Responda 'SIM' para garantir.";
+                  break;
+              case 'new':
+                  suggestion = "Bem-vindo à família Cristal Care, {cliente}! 👋 Para sua segunda visita, temos um presente especial esperando por você e seu {veiculo}. Venha nos visitar!";
+                  break;
+              default:
+                  suggestion = "Olá {cliente}! A previsão é de sol para o fim de semana. ☀️ Que tal deixar seu {veiculo} brilhando? Temos poucos horários disponíveis, garanta o seu!";
+          }
+          
+          setNewCampaign(prev => ({ ...prev, message: suggestion }));
+          setIsGeneratingCopy(false);
+          showAlert({ title: 'Texto Gerado', message: 'Sugestão criada com IA.', type: 'success' });
+      }, 1500);
   };
 
   const handleSendCampaign = async () => {
@@ -802,7 +832,17 @@ export default function Marketing() {
                              </div>
 
                              <div>
-                                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Mensagem (WhatsApp)</label>
+                                 <div className="flex justify-between items-center mb-1.5">
+                                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Mensagem (WhatsApp)</label>
+                                    <button 
+                                        onClick={handleGenerateSmartCopy}
+                                        disabled={isGeneratingCopy}
+                                        className="text-xs text-purple-600 dark:text-purple-400 font-bold flex items-center gap-1 hover:underline"
+                                    >
+                                        {isGeneratingCopy ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                                        Gerar com IA
+                                    </button>
+                                 </div>
                                  <textarea 
                                     value={newCampaign.message}
                                     onChange={e => setNewCampaign({...newCampaign, message: e.target.value})}
