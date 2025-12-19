@@ -10,7 +10,6 @@ import {
 import { useApp } from '../context/AppContext';
 import { useDialog } from '../context/DialogContext';
 import { cn } from '../lib/utils';
-import { checkSupabaseConnection } from '../lib/supabase';
 
 export default function Layout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -26,7 +25,6 @@ export default function Layout() {
   const [storeName, setStoreName] = useState(ownerUser?.shopName || '');
   const [storePhone, setStorePhone] = useState('');
   const [isCreatingStore, setIsCreatingStore] = useState(false);
-  const [isCheckingConnection, setIsCheckingConnection] = useState(false);
 
   const unreadNotifications = notifications.filter(n => !n.read).length;
 
@@ -54,18 +52,6 @@ export default function Layout() {
     }
   };
 
-  const handleCheckConnection = async () => {
-      setIsCheckingConnection(true);
-      const isConnected = await checkSupabaseConnection();
-      setIsCheckingConnection(false);
-      
-      if (isConnected) {
-          await showAlert({ title: 'Conexão OK', message: 'O sistema está conectado ao banco de dados.', type: 'success' });
-      } else {
-          await showAlert({ title: 'Erro de Conexão', message: 'Falha ao conectar com o banco de dados. Verifique sua internet.', type: 'error' });
-      }
-  };
-
   const handleCreateStore = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!storeName) return;
@@ -75,9 +61,8 @@ export default function Layout() {
           const success = await createTenant(storeName, storePhone);
           if (success) {
               await showAlert({ title: 'Sucesso', message: 'Loja criada com sucesso! Bem-vindo.', type: 'success' });
-              // Navigation happens automatically via state change in AppContext (tenantId set)
           } else {
-              await showAlert({ title: 'Erro', message: 'Não foi possível criar a loja. Verifique sua conexão e tente novamente.', type: 'error' });
+              await showAlert({ title: 'Erro', message: 'Não foi possível criar a loja.', type: 'error' });
           }
       } catch (error) {
           console.error(error);
@@ -136,17 +121,7 @@ export default function Layout() {
                           {isCreatingStore ? 'Criando Loja...' : 'Criar Minha Loja'}
                       </button>
 
-                      <div className="grid grid-cols-2 gap-3 pt-2">
-                          <button 
-                              type="button"
-                              onClick={handleCheckConnection}
-                              disabled={isCheckingConnection}
-                              className="w-full py-2 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors flex items-center justify-center gap-1"
-                          >
-                              {isCheckingConnection ? <Loader2 className="animate-spin" size={14} /> : <RefreshCw size={14} />}
-                              Testar Conexão
-                          </button>
-                          
+                      <div className="grid grid-cols-1 gap-3 pt-2">
                           <button 
                               type="button"
                               onClick={handleLogout}
@@ -196,7 +171,7 @@ export default function Layout() {
         <div className="h-full flex flex-col">
           <div className="h-16 flex items-center justify-between px-4 border-b border-slate-200 dark:border-slate-800">
             <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent truncate">
-              {ownerUser?.storeName || 'Crystal Care'}
+              {ownerUser?.shopName || 'Crystal Care'}
             </span>
             <button 
               onClick={closeSidebar}

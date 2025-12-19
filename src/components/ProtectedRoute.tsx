@@ -2,20 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Loader2 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { ownerUser, isAppLoading } = useApp();
+  const { ownerUser, isAppLoading, logoutOwner } = useApp();
   const location = useLocation();
   const [showLogout, setShowLogout] = useState(false);
   
   useEffect(() => {
     if (isAppLoading) {
-      const timer = setTimeout(() => setShowLogout(true), 5000); // Show logout after 5s
+      const timer = setTimeout(() => setShowLogout(true), 5000); 
       return () => clearTimeout(timer);
     }
   }, [isAppLoading]);
@@ -28,11 +27,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
         {showLogout && (
             <button 
                 onClick={async () => { 
-                    try {
-                        await supabase.auth.signOut(); 
-                    } catch (error) {
-                        console.warn("Sign out error:", error);
-                    }
+                    await logoutOwner();
                     window.location.reload(); 
                 }} 
                 className="text-xs text-red-500 hover:underline mt-4"
@@ -45,7 +40,6 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   if (!ownerUser) {
-    // Redirect to login page, but save the current location they were trying to go to
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

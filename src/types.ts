@@ -1,4 +1,37 @@
 // ... existing types ...
+
+// Atualização na interface de MarketingCampaign para suportar o novo sistema
+export interface MarketingCampaign {
+  id: string;
+  name: string;
+  type?: 'flash' | 'reactivation' | 'vip' | 'birthday' | 'promo' | 'combo' | 'custom';
+  targetSegment: ClientSegment | 'all' | 'custom';
+  selectedClientIds?: string[]; // Para salvar a seleção exata em rascunhos
+  messageTemplate: string;
+  channel?: 'whatsapp' | 'sms' | 'email';
+  discount?: {
+    type: 'percentage' | 'fixed';
+    value: number;
+  };
+  sentCount: number;
+  conversionCount?: number; 
+  revenueGenerated?: number; 
+  date: string;
+  scheduledFor?: string; // Data de agendamento
+  status: 'draft' | 'sent' | 'scheduled';
+  costInTokens?: number;
+}
+
+export interface CampaignTemplate {
+  id: string;
+  label: string;
+  category: 'retention' | 'sales' | 'operational' | 'relationship';
+  defaultMessage: string;
+  suggestedSegment?: ClientSegment | 'all';
+  variables: string[];
+}
+
+// ... rest of the file (keep existing types)
 export interface SystemAlert {
   id: string;
   type: 'agenda' | 'financeiro' | 'cliente' | 'profissional' | 'estoque';
@@ -8,11 +41,10 @@ export interface SystemAlert {
   actionLabel?: string;
   resolved: boolean;
   createdAt: string;
-  financialImpact?: number; // NEW: Value in BRL to prioritize alerts
-  suggestedAction?: any; // NEW: Payload for automatic actions
+  financialImpact?: number;
+  suggestedAction?: any;
 }
 
-// ... rest of the file (keep existing types)
 export type VehicleSize = 'small' | 'medium' | 'large' | 'xl';
 
 export const VEHICLE_SIZES: Record<VehicleSize, string> = {
@@ -22,7 +54,6 @@ export const VEHICLE_SIZES: Record<VehicleSize, string> = {
   xl: 'Extra G. (Pickup)'
 };
 
-// NEW: Owner Type
 export interface ShopOwner {
   id: string;
   name: string;
@@ -75,16 +106,13 @@ export interface Client {
   name: string;
   phone: string;
   email: string;
-  
-  // Address Fields
   cep?: string;
   street?: string;
   number?: string;
   neighborhood?: string;
   city?: string;
   state?: string;
-  address?: string; // Full formatted address for display
-  
+  address?: string;
   notes?: string;
   vehicles: Vehicle[];
   ltv: number; 
@@ -92,19 +120,6 @@ export interface Client {
   visitCount: number; 
   status: 'active' | 'inactive' | 'churn_risk'; 
   segment: ClientSegment; 
-}
-
-export interface MarketingCampaign {
-  id: string;
-  name: string;
-  targetSegment: ClientSegment | 'all';
-  messageTemplate: string;
-  sentCount: number;
-  conversionCount?: number; 
-  revenueGenerated?: number; 
-  date: string;
-  status: 'draft' | 'sent' | 'scheduled';
-  costInTokens?: number;
 }
 
 export interface InventoryItem {
@@ -349,7 +364,6 @@ export interface WorkOrder {
   additionalItems?: AdditionalItem[]; 
   discount?: Discount;
 
-  // Payment Info
   paymentStatus?: 'pending' | 'paid';
   paymentMethod?: string;
   paidAt?: string;
@@ -402,7 +416,7 @@ export interface LandingPageConfig {
   primaryColor: string;
   showServices: boolean;
   showTestimonials: boolean;
-  whatsappMessage?: string; // NEW: Custom message for landing page
+  whatsappMessage?: string;
 }
 
 export interface CompanyPreferences {
@@ -430,7 +444,6 @@ export interface CompanySettings {
   email: string;
   phone: string;
   address: string;
-  // Structured Address Fields
   cep?: string;
   street?: string;
   number?: string;
@@ -450,12 +463,11 @@ export interface CompanySettings {
   gamification: GamificationConfig;
 }
 
-// --- TOKEN SYSTEM TYPES ---
 export interface TokenTransaction {
   id: string;
-  type: 'credit' | 'debit'; // Compra (+) ou Uso (-)
+  type: 'credit' | 'debit';
   amount: number;
-  description: string; // Ex: "Compra Pacote 500" ou "Campanha Black Friday"
+  description: string;
   date: string;
 }
 
@@ -471,7 +483,6 @@ export interface SubscriptionDetails {
     status: 'paid' | 'pending' | 'failed';
     pdfUrl: string;
   }[];
-  // Token System
   tokenBalance: number;
   tokenHistory: TokenTransaction[];
 }
@@ -486,15 +497,13 @@ export interface Notification {
   link?: string;
 }
 
-// --- SAAS SUPER ADMIN TYPES ---
-
 export interface SaaSPlan {
   id: 'starter' | 'pro' | 'enterprise';
   name: string;
   price: number;
   features: string[];
-  includedTokens: number; // Tokens mensais inclusos
-  maxDiskSpace: number; // GB
+  includedTokens: number;
+  maxDiskSpace: number;
   active: boolean;
   highlight?: boolean;
   maxEmployees?: number;
@@ -510,7 +519,7 @@ export interface TokenPackage {
 
 export interface SaaSTenant {
   id: string;
-  name: string; // Shop Name
+  name: string;
   responsibleName: string;
   email: string;
   phone: string;
@@ -519,24 +528,22 @@ export interface SaaSTenant {
   joinedAt: string;
   nextBilling: string;
   tokenBalance: number;
-  mrr: number; // Monthly Recurring Revenue from this tenant
+  mrr: number;
   lastLogin: string;
   logoUrl?: string;
 }
 
-// NEW: Token Economics Ledger
 export interface SaaSTokenTransaction {
   id: string;
   tenantId: string;
   tenantName: string;
   type: 'purchase' | 'usage' | 'bonus' | 'plan_credit';
-  amount: number; // Positive for credit, Negative for usage
-  value?: number; // Monetary value (for purchases)
+  amount: number;
+  value?: number;
   description: string;
   date: string;
 }
 
-// Auth Types
 export interface AuthResponse {
   success: boolean;
   error?: {
