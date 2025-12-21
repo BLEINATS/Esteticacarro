@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { 
   CheckCircle2, Clock, Wrench, ShieldCheck, MapPin, Phone, 
-  MessageCircle, ChevronRight, Camera, Calendar, ArrowLeft
+  MessageCircle, ChevronRight, Camera, Calendar, ArrowLeft,
+  Star, Send, ThumbsUp, Frown, Meh, Smile, Heart
 } from 'lucide-react';
 import { db } from '../lib/db';
 import { WorkOrder, CompanySettings } from '../types';
@@ -13,6 +14,13 @@ export default function ServiceTracker() {
   const [order, setOrder] = useState<WorkOrder | null>(null);
   const [settings, setSettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Rating State
+  const [rating, setRating] = useState<number | null>(null);
+  const [hoverRating, setHoverRating] = useState<number | null>(null);
+  const [comment, setComment] = useState('');
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [ratingSubmitted, setRatingSubmitted] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -24,6 +32,10 @@ export default function ServiceTracker() {
         
         if (foundOrder) {
           setOrder(foundOrder);
+          if (foundOrder.npsScore) {
+              setRating(foundOrder.npsScore);
+              setRatingSubmitted(true);
+          }
           
           // Buscar Configurações da Loja
           if (foundOrder.tenant_id) {
@@ -42,6 +54,27 @@ export default function ServiceTracker() {
     };
     loadData();
   }, [orderId]);
+
+  const handleSubmitRating = async () => {
+      if (!order || rating === null) return;
+      
+      setIsSubmittingRating(true);
+      try {
+          // Update local DB (Simulating API call)
+          // We save npsComment in json_data AND top level for type safety if possible, 
+          // but AppContext loads json_data into root, so saving to json_data is enough for persistence in this mock structure.
+          await db.update('work_orders', order.id, { 
+              nps_score: rating,
+              json_data: { ...order.json_data, npsComment: comment } 
+          });
+          setRatingSubmitted(true);
+      } catch (error) {
+          console.error("Erro ao salvar avaliação", error);
+          alert("Erro ao enviar avaliação. Tente novamente.");
+      } finally {
+          setIsSubmittingRating(false);
+      }
+  };
 
   if (loading) {
     return (
@@ -78,11 +111,26 @@ export default function ServiceTracker() {
   );
 
   const activeStep = currentStepIndex === -1 ? 0 : currentStepIndex;
+  const isCompleted = order.status === 'Concluído' || order.status === 'Entregue';
 
   // Collect all photos
   const timelinePhotos = order.dailyLog?.flatMap(log => log.photos.map(url => ({ url, date: log.date, desc: log.description }))) || [];
   const damagePhotos = order.damages?.filter(d => d.photoUrl && d.photoUrl !== 'pending').map(d => ({ url: d.photoUrl!, date: order.createdAt, desc: `Avaria: ${d.description}` })) || [];
   const allPhotos = [...damagePhotos, ...timelinePhotos].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  // --- EMOTION LOGIC ---
+  const currentScore = hoverRating ?? rating;
+  
+  const getReaction = (score: number | null) => {
+      if (score === null) return { icon: Star, color: 'text-white/30', text: 'Toque para avaliar', animation: '' };
+      if (score >= 9) return { icon: Heart, color: 'text-pink-400 fill-pink-400', text: 'Incrível! 😍', animation: 'animate-bounce' };
+      if (score >= 7) return { icon: Smile, color: 'text-green-400', text: 'Muito Bom! 🙂', animation: 'animate-pulse' };
+      if (score >= 5) return { icon: Meh, color: 'text-yellow-400', text: 'Razoável 😐', animation: '' };
+      return { icon: Frown, color: 'text-red-400', text: 'Poxa, o que houve? 😔', animation: 'animate-pulse' };
+  };
+
+  const reaction = getReaction(currentScore);
+  const ReactionIcon = reaction.icon;
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
@@ -147,18 +195,18 @@ export default function ServiceTracker() {
             
             <div className="space-y-6 relative">
               {steps.map((step, idx) => {
-                const isCompleted = idx <= activeStep;
+                const isStepCompleted = idx <= activeStep;
                 const isCurrent = idx === activeStep;
                 
                 return (
                   <div key={step.id} className="flex items-center gap-4">
                     <div className={cn(
                       "w-8 h-8 rounded-full flex items-center justify-center z-10 transition-colors duration-500",
-                      isCompleted ? "bg-green-500 text-white" : "bg-slate-200 text-slate-400"
+                      isStepCompleted ? "bg-green-500 text-white" : "bg-slate-200 text-slate-400"
                     )}>
                       <step.icon size={14} />
                     </div>
-                    <div className={cn("flex-1 transition-opacity duration-500", isCompleted ? "opacity-100" : "opacity-40")}>
+                    <div className={cn("flex-1 transition-opacity duration-500", isStepCompleted ? "opacity-100" : "opacity-40")}>
                       <p className={cn("text-sm font-bold", isCurrent ? "text-green-600" : "text-slate-900")}>
                         {step.label}
                       </p>
@@ -168,7 +216,7 @@ export default function ServiceTracker() {
                         </p>
                       )}
                     </div>
-                    {isCompleted && <CheckCircle2 size={16} className="text-green-500" />}
+                    {isStepCompleted && <CheckCircle2 size={16} className="text-green-500" />}
                   </div>
                 );
               })}
@@ -218,6 +266,81 @@ export default function ServiceTracker() {
               ))}
             </div>
           </div>
+        )}
+
+        {/* NPS Rating Section - Only if Completed/Delivered */}
+        {isCompleted && (
+            <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-6 text-white shadow-lg animate-in slide-in-from-bottom">
+                <div className="text-center mb-6">
+                    {/* Dynamic Emotion Animation */}
+                    <div className="h-24 flex items-center justify-center mb-2">
+                        <div className={cn("transition-all duration-300 transform", reaction.animation)}>
+                            <ReactionIcon size={80} className={cn("drop-shadow-lg", reaction.color)} />
+                        </div>
+                    </div>
+                    
+                    <h3 className="text-xl font-bold mb-1 transition-all">
+                        {ratingSubmitted ? 'Obrigado pela avaliação!' : reaction.text}
+                    </h3>
+                    
+                    {!ratingSubmitted && (
+                        <p className="text-indigo-100 text-sm">
+                            Como você avalia nossa qualidade de 0 a 10?
+                        </p>
+                    )}
+                </div>
+
+                {!ratingSubmitted ? (
+                    <div className="space-y-6">
+                        <div className="flex justify-center gap-1.5 flex-wrap">
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((score) => (
+                                <button
+                                    key={score}
+                                    onClick={() => setRating(score)}
+                                    onMouseEnter={() => setHoverRating(score)}
+                                    onMouseLeave={() => setHoverRating(null)}
+                                    className={cn(
+                                        "w-8 h-10 rounded-lg font-bold text-sm transition-all flex items-center justify-center border-b-4 active:border-b-0 active:translate-y-1",
+                                        (hoverRating !== null ? score <= hoverRating : (rating !== null && score <= rating))
+                                            ? "bg-white text-indigo-700 border-indigo-900 scale-110 shadow-lg"
+                                            : "bg-white/10 text-white border-white/20 hover:bg-white/20"
+                                    )}
+                                >
+                                    {score}
+                                </button>
+                            ))}
+                        </div>
+                        
+                        <div className="bg-white/10 p-1 rounded-xl">
+                            <textarea 
+                                value={comment}
+                                onChange={(e) => setComment(e.target.value)}
+                                placeholder="O que você mais gostou? (Opcional)..."
+                                className="w-full p-3 bg-transparent border-none text-white placeholder-indigo-200 text-sm focus:ring-0 resize-none"
+                                rows={3}
+                            />
+                        </div>
+
+                        <button 
+                            onClick={handleSubmitRating}
+                            disabled={rating === null || isSubmittingRating}
+                            className="w-full py-4 bg-white text-indigo-700 font-bold rounded-xl hover:bg-indigo-50 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg"
+                        >
+                            {isSubmittingRating ? 'Enviando...' : 'Enviar Avaliação'} <Send size={18} />
+                        </button>
+                    </div>
+                ) : (
+                    <div className="bg-white/10 rounded-xl p-6 text-center border border-white/10">
+                        <div className="flex justify-center gap-1 mb-3">
+                            {[1,2,3,4,5].map(i => (
+                                <Star key={i} size={24} className={cn(i <= Math.round((rating || 0)/2) ? "fill-yellow-300 text-yellow-300" : "text-indigo-300")} />
+                            ))}
+                        </div>
+                        <p className="text-2xl font-bold text-white mb-1">Nota {rating}</p>
+                        <p className="text-sm text-indigo-200">Sua opinião ajuda a melhorar nossos serviços.</p>
+                    </div>
+                )}
+            </div>
         )}
 
         {/* Contact Footer */}

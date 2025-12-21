@@ -241,6 +241,7 @@ interface AppContextType {
   updateCampaign: (id: string, updates: Partial<MarketingCampaign>) => void;
   deleteCampaign: (id: string) => void;
   seedDefaultCampaigns: () => Promise<void>;
+  seedMockReviews: () => Promise<void>;
   getWhatsappLink: (phone: string, message: string) => string;
   
   createSocialPost: (post: SocialPost) => void;
@@ -465,7 +466,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setCampaigns(campaignsData.map(c => ({
             ...c,
             targetSegment: c.target_segment,
-            messageTemplate: c.message_template,
+            message_template: c.message_template,
             sentCount: c.sent_count,
             conversionCount: c.conversion_count,
             revenueGenerated: c.revenue_generated,
@@ -874,6 +875,74 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [clients, pointsHistory, redemptions, companySettings.gamification.pointsMultiplier, companySettings.gamification.tiers]);
 
   const seedDefaultCampaigns = async () => { if (!tenantId) return; const templates = [ { name: 'Reativação', type: 'reactivation', targetSegment: 'inactive', messageTemplate: 'Olá! Sentimos sua falta.', status: 'sent', sentCount: 45, conversionCount: 12, revenueGenerated: 3500, costInTokens: 45, date: new Date().toISOString() }, { name: 'Promoção Relâmpago', type: 'flash', targetSegment: 'recurring', messageTemplate: 'Promoção hoje.', status: 'sent', sentCount: 120, conversionCount: 28, revenueGenerated: 5600, costInTokens: 120, date: new Date().toISOString() }, { name: 'VIP Experience', type: 'vip', targetSegment: 'vip', messageTemplate: 'Convite VIP.', status: 'scheduled', sentCount: 0, conversionCount: 0, revenueGenerated: 0, costInTokens: 0, date: new Date().toISOString() } ]; for (const t of templates) { await createCampaign(t as any); } };
+  
+  const seedMockReviews = async () => {
+    if (!tenantId) return;
+    
+    // Create mock orders with reviews
+    const reviews = [
+        {
+            clientName: 'Roberto Silva',
+            vehicle: 'BMW 320i',
+            service: 'Vitrificação 9H',
+            score: 10,
+            comment: 'Serviço impecável! O carro parece novo, brilho absurdo.',
+            date: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString() // 2 days ago
+        },
+        {
+            clientName: 'Fernanda Lima',
+            vehicle: 'Porsche Macan',
+            service: 'Higienização Premium',
+            score: 9,
+            comment: 'Muito bom, atendimento excelente. O interior ficou perfeito.',
+            date: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString() // 5 days ago
+        },
+        {
+            clientName: 'Carlos Oliveira',
+            vehicle: 'Honda Civic',
+            service: 'Polimento Técnico',
+            score: 8,
+            comment: 'Resultado ótimo, mas demorou um pouco mais que o previsto na entrega.',
+            date: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10).toISOString() // 10 days ago
+        }
+    ];
+
+    for (const review of reviews) {
+        // Find or create client
+        let client = clients.find(c => c.name === review.clientName);
+        // If not found (unlikely with mock data but safe check), use first available or skip
+        if (!client && clients.length > 0) client = clients[0];
+        
+        if (client) {
+            const os: WorkOrder = {
+                id: `OS-NPS-${Math.floor(Math.random() * 10000)}`,
+                clientId: client.id,
+                vehicle: review.vehicle,
+                plate: 'MOCK-000',
+                service: review.service,
+                status: 'Concluído',
+                technician: 'João Técnico',
+                deadline: 'Concluído',
+                priority: 'medium',
+                totalValue: 500,
+                damages: [],
+                vehicleInventory: { estepe: false, macaco: false, chaveRoda: false, tapetes: false, manual: false, antena: false, pertences: '' },
+                dailyLog: [],
+                qaChecklist: [],
+                tasks: [],
+                checklist: [],
+                createdAt: review.date,
+                paymentStatus: 'paid',
+                paidAt: review.date,
+                npsScore: review.score,
+                npsComment: review.comment,
+                tenant_id: tenantId
+            };
+            await addWorkOrder(os);
+        }
+    }
+  };
+
   const getWhatsappLink = (p: string, m: string) => `https://wa.me/${p}?text=${encodeURIComponent(m)}`;
   
   const calculateServiceCost = useCallback((serviceId: string) => { 
@@ -968,7 +1037,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addService, updateService, deleteService, assignTask: () => {}, startTask: () => {}, stopTask: () => {}, 
       addEmployeeTransaction, updateEmployeeTransaction, deleteEmployeeTransaction, addEmployee, updateEmployee, deleteEmployee,
       addFinancialTransaction, updateFinancialTransaction, deleteFinancialTransaction,
-      createCampaign, updateCampaign, deleteCampaign, seedDefaultCampaigns, getWhatsappLink,
+      createCampaign, updateCampaign, deleteCampaign, seedDefaultCampaigns, seedMockReviews, getWhatsappLink,
       
       connectWhatsapp, disconnectWhatsapp, simulateWhatsappScan,
       messageLogs,

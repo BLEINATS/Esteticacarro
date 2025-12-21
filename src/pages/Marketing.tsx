@@ -7,7 +7,7 @@ import {
   Smartphone, Video, BellRing, Loader2, Plus, X, Download, Layers,
   FileText, Eye, MousePointerClick, DollarSign, MessageSquare, Bot, Info,
   Sparkles, Trash2, Edit2, Play, BrainCircuit, Calendar, Gift, Heart,
-  Filter, ArrowDown, RefreshCw, Check, ThumbsUp, Activity, Zap
+  Filter, ArrowDown, RefreshCw, Check, ThumbsUp, Activity, Zap, Quote
 } from 'lucide-react';
 import { 
   PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer,
@@ -30,7 +30,7 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'
 
 export default function Marketing() {
   const { 
-    clients, campaigns, createCampaign, deleteCampaign, updateCampaign, seedDefaultCampaigns, 
+    clients, campaigns, createCampaign, deleteCampaign, updateCampaign, seedDefaultCampaigns, seedMockReviews,
     getWhatsappLink, workOrders, reminders, subscription, consumeTokens, systemAlerts,
     socialPosts, createSocialPost, generateSocialContent, companySettings, updateCompanySettings,
     messageLogs
@@ -106,6 +106,14 @@ export default function Marketing() {
 
     return { totalSent, totalDelivered, totalRead, totalEngaged, totalConverted, totalRevenue, totalCost, roi };
   }, [campaigns, workOrders, reminders]);
+
+  // --- REVIEWS LIST ---
+  const recentReviews = useMemo(() => {
+      return workOrders
+        .filter(os => os.npsScore !== undefined && os.npsScore !== null)
+        .sort((a, b) => new Date(b.paidAt || b.createdAt).getTime() - new Date(a.paidAt || a.createdAt).getTime())
+        .slice(0, 5);
+  }, [workOrders]);
 
   // ... (Existing handlers: handleCreateCampaign, handleEditDraft, etc.) ...
   const handleCreateCampaign = (data: Partial<MarketingCampaign> & { selectedClientIds: string[] }) => {
@@ -583,6 +591,63 @@ export default function Marketing() {
                             <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400 relative z-10">💰 Sucesso</span>
                         </div>
                     </div>
+                </div>
+             </div>
+
+             {/* REVIEWS WALL (NEW) */}
+             <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                        <Star size={20} className="text-yellow-500" /> Mural de Avaliações
+                    </h3>
+                    <div className="text-right">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">NPS Médio</p>
+                        <p className="text-xl font-bold text-slate-900 dark:text-white">{npsScoreAvg.toFixed(1)}</p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {recentReviews.length > 0 ? recentReviews.map(review => (
+                        <div key={review.id} className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                            <div className="flex justify-between items-start mb-2">
+                                <div>
+                                    <p className="font-bold text-slate-900 dark:text-white text-sm">{clients.find(c => c.id === review.clientId)?.name || 'Cliente'}</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">{review.vehicle} • {review.service}</p>
+                                </div>
+                                <div className="flex items-center gap-1 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
+                                    <Star size={12} className="text-yellow-500 fill-yellow-500" />
+                                    <span className="font-bold text-sm text-slate-900 dark:text-white">{review.npsScore}</span>
+                                </div>
+                            </div>
+                            {review.npsComment ? (
+                                <div className="relative mt-2">
+                                    <Quote size={16} className="absolute -top-1 -left-1 text-slate-300 dark:text-slate-600 transform -scale-x-100" />
+                                    <p className="text-sm text-slate-600 dark:text-slate-300 italic pl-4 border-l-2 border-slate-200 dark:border-slate-600">
+                                        "{review.npsComment}"
+                                    </p>
+                                </div>
+                            ) : (
+                                <p className="text-xs text-slate-400 italic mt-2">Sem comentário.</p>
+                            )}
+                            <p className="text-[10px] text-slate-400 mt-3 text-right">
+                                {new Date(review.paidAt || review.createdAt).toLocaleDateString()}
+                            </p>
+                        </div>
+                    )) : (
+                        <div className="col-span-full text-center py-8 text-slate-400">
+                            <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
+                            <p className="mb-4">Nenhuma avaliação recebida ainda.</p>
+                            <button 
+                                onClick={async () => {
+                                    await seedMockReviews();
+                                    showAlert({ title: 'Sucesso', message: 'Avaliações de exemplo geradas!', type: 'success' });
+                                }}
+                                className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-3 py-2 rounded-lg font-bold hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                            >
+                                Gerar Avaliações de Teste
+                            </button>
+                        </div>
+                    )}
                 </div>
              </div>
 

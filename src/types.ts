@@ -128,10 +128,11 @@ export interface WorkOrder {
   paymentMethod?: string;
   paidAt?: string;
   npsScore?: number;
+  npsComment?: string; // Added for feedback tracking
   clientSignature?: string;
   tenant_id?: string;
   json_data?: any;
-  campaignId?: string; // NEW: Link to Marketing Campaign
+  campaignId?: string;
   insuranceDetails?: {
     isInsurance: boolean;
     insuranceName?: string;
