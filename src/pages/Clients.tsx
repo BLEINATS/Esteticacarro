@@ -9,13 +9,15 @@ import { useDialog } from '../context/DialogContext';
 import { differenceInDays } from 'date-fns';
 
 export default function Clients() {
-  const { clients, deleteClient, getWhatsappLink, subscription, consumeTokens } = useApp();
-  const { showConfirm, showAlert } = useDialog();
+  const { clients, deleteClient, getWhatsappLink, subscription, consumeTokens, companySettings } = useApp();
+  const { showConfirm, showAlert, showOptions } = useDialog();
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [activeFilter, setActiveFilter] = useState<'all' | 'vip' | 'risk' | 'inactive' | 'new'>('all');
+
+  const isWhatsAppConnected = companySettings.whatsapp.session.status === 'connected';
 
   // Filter Logic
   const filteredClients = clients.filter(client => {
@@ -77,29 +79,29 @@ export default function Clients() {
           actionType = 'Contato';
       }
 
-      // Check tokens for bot automation (optional)
-      if ((subscription.tokenBalance || 0) > 0) {
-          const useBot = await showConfirm({
-              title: `Enviar Mensagem (${actionType})`,
-              message: 'Deseja usar 1 Token para enviar via Robô ou abrir o WhatsApp Web?',
-              confirmText: 'Usar Robô (1 Token)',
-              cancelText: 'WhatsApp Web (Manual)',
-              type: 'info'
-          });
+      let method = 'manual';
 
-          if (useBot) {
-              if (consumeTokens(1, `Msg ${actionType}: ${client.name}`)) {
-                  await showAlert({ title: 'Enviado', message: 'Mensagem na fila de disparo.', type: 'success' });
-              } else {
-                  await showAlert({ title: 'Erro', message: 'Erro ao processar tokens.', type: 'error' });
-              }
-              return;
-          }
+      if (isWhatsAppConnected && (subscription.tokenBalance || 0) > 0) {
+          method = await showOptions({
+              title: `Enviar Mensagem (${actionType})`,
+              message: 'Como deseja enviar esta mensagem?',
+              options: [
+                  { label: '🤖 Robô (1 Token)', value: 'bot', variant: 'primary' },
+                  { label: '📱 Manual (WhatsApp Web)', value: 'manual', variant: 'secondary' }
+              ]
+          }) || 'cancel';
       }
 
-      // Fallback to manual
-      const link = getWhatsappLink(client.phone, message);
-      window.open(link, '_blank');
+      if (method === 'bot') {
+          if (consumeTokens(1, `Msg ${actionType}: ${client.name}`)) {
+              await showAlert({ title: 'Enviado', message: 'Mensagem na fila de disparo.', type: 'success' });
+          } else {
+              await showAlert({ title: 'Erro', message: 'Erro ao processar tokens.', type: 'error' });
+          }
+      } else if (method === 'manual') {
+          const link = getWhatsappLink(client.phone, message);
+          window.open(link, '_blank');
+      }
   };
 
   const getDaysSinceLastVisit = (dateStr: string) => {

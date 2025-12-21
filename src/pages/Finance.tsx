@@ -14,32 +14,68 @@ import {
   Target,
   BarChart3,
   CheckCircle2,
-  Clock
+  Clock,
+  Plus,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { format, addWeeks, startOfWeek, endOfWeek, isWithinInterval, parseISO, isAfter, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import TransactionModal from '../components/TransactionModal';
+import { FinancialTransaction } from '../types';
+import { useDialog } from '../context/DialogContext';
 
 export default function Finance() {
-  const { financialTransactions, workOrders, companySettings } = useApp();
+  const { financialTransactions, workOrders, companySettings, deleteFinancialTransaction } = useApp();
+  const { showConfirm, showAlert } = useDialog();
   const [activeTab, setActiveTab] = useState<'overview' | 'forecast'>('overview');
   const [filterPeriod, setFilterPeriod] = useState('month');
+  
+  // Transaction Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<FinancialTransaction | null>(null);
 
   // --- LÓGICA DE VISÃO GERAL (EXISTENTE) ---
   const metrics = {
     revenue: financialTransactions
-      .filter(t => t.type === 'income' && t.status === 'completed')
+      .filter(t => t.type === 'income' && t.status === 'paid')
       .reduce((acc, t) => acc + t.amount, 0),
     expenses: financialTransactions
-      .filter(t => t.type === 'expense' && t.status === 'completed')
-      .reduce((acc, t) => acc + t.amount, 0),
+      .filter(t => t.type === 'expense' && t.status === 'paid')
+      .reduce((acc, t) => acc + Math.abs(t.amount), 0),
     pending: financialTransactions
       .filter(t => t.status === 'pending')
-      .reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 0)
+      .reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -Math.abs(t.amount)), 0)
   };
 
   const profit = metrics.revenue - metrics.expenses;
   const margin = metrics.revenue > 0 ? (profit / metrics.revenue) * 100 : 0;
+
+  // --- HANDLERS ---
+  const handleNewTransaction = () => {
+    setEditingTransaction(null);
+    setIsModalOpen(true);
+  };
+
+  const handleEditTransaction = (t: FinancialTransaction) => {
+    setEditingTransaction(t);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteTransaction = async (id: number) => {
+    const confirm = await showConfirm({
+        title: 'Excluir Transação',
+        message: 'Tem certeza que deseja excluir este lançamento? O saldo será recalculado.',
+        type: 'danger',
+        confirmText: 'Sim, Excluir'
+    });
+
+    if (confirm) {
+        deleteFinancialTransaction(id);
+        showAlert({ title: 'Excluído', message: 'Lançamento removido com sucesso.', type: 'success' });
+    }
+  };
 
   // --- LÓGICA DE PREVISÃO (NOVA) ---
   const forecastMetrics = useMemo(() => {
@@ -51,7 +87,9 @@ export default function Finance() {
       // Filtrar OSs para esta semana futura
       const weekOrders = workOrders.filter(os => {
         if (!os.deadline) return false;
-        const osDate = parseISO(os.deadline);
+        // Simple deadline parsing or createdAt + deadline logic
+        // For simplicity using createdAt if deadline is text
+        const osDate = parseISO(os.createdAt); 
         return isWithinInterval(osDate, { start, end });
       });
 
@@ -62,7 +100,7 @@ export default function Finance() {
 
       // Receita Potencial: Orçamentos
       const potential = weekOrders
-        .filter(os => ['Orçamento', 'Pendente'].includes(os.status))
+        .filter(os => ['Orçamento', 'Pendente', 'Aguardando Aprovação'].includes(os.status))
         .reduce((acc, os) => acc + os.totalValue, 0);
 
       return {
@@ -79,7 +117,6 @@ export default function Finance() {
     const totalPotential = next4Weeks.reduce((acc, w) => acc + w.potential, 0);
     
     // Meta semanal baseada no histórico (exemplo simples: média das últimas transações ou fixo)
-    // Em um cenário real, isso viria de companySettings.monthlyGoal
     const weeklyGoal = 5000; 
 
     const alerts = next4Weeks
@@ -95,6 +132,14 @@ export default function Finance() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
+      {isModalOpen && (
+        <TransactionModal 
+            isOpen={isModalOpen} 
+            onClose={() => setIsModalOpen(false)} 
+            transaction={editingTransaction}
+        />
+      )}
+
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -102,30 +147,40 @@ export default function Finance() {
           <p className="text-slate-500 dark:text-slate-400 mt-1">Gestão de fluxo de caixa e previsibilidade</p>
         </div>
         
-        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={cn(
-              "px-4 py-2 rounded-lg text-sm font-bold transition-all",
-              activeTab === 'overview' 
-                ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm" 
-                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-            )}
-          >
-            Visão Geral
-          </button>
-          <button
-            onClick={() => setActiveTab('forecast')}
-            className={cn(
-              "px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2",
-              activeTab === 'forecast' 
-                ? "bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm" 
-                : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-            )}
-          >
-            <Target size={16} />
-            Previsão Futura
-          </button>
+        <div className="flex gap-3">
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+            <button
+                onClick={() => setActiveTab('overview')}
+                className={cn(
+                "px-4 py-2 rounded-lg text-sm font-bold transition-all",
+                activeTab === 'overview' 
+                    ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm" 
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                )}
+            >
+                Visão Geral
+            </button>
+            <button
+                onClick={() => setActiveTab('forecast')}
+                className={cn(
+                "px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2",
+                activeTab === 'forecast' 
+                    ? "bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm" 
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                )}
+            >
+                <Target size={16} />
+                Previsão Futura
+            </button>
+            </div>
+
+            <button 
+                onClick={handleNewTransaction}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20"
+            >
+                <Plus size={18} />
+                Nova Transação
+            </button>
         </div>
       </div>
 
@@ -217,11 +272,12 @@ export default function Finance() {
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Data</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Valor</th>
+                    <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                   {financialTransactions.map((transaction) => (
-                    <tr key={transaction.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <tr key={transaction.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div className={cn(
@@ -242,21 +298,44 @@ export default function Finance() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={cn(
                           "px-2 py-1 text-xs font-bold rounded-full",
-                          transaction.status === 'completed' 
+                          transaction.status === 'paid' 
                             ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                             : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                         )}>
-                          {transaction.status === 'completed' ? 'Pago' : 'Pendente'}
+                          {transaction.status === 'paid' ? 'Pago' : 'Pendente'}
                         </span>
                       </td>
                       <td className={cn(
                         "px-6 py-4 whitespace-nowrap text-sm font-bold text-right",
                         transaction.type === 'income' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
                       )}>
-                        {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
+                        {transaction.type === 'income' ? '+' : '-'}{formatCurrency(Math.abs(transaction.amount))}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                                onClick={() => handleEditTransaction(transaction)}
+                                className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                            >
+                                <Pencil size={16} />
+                            </button>
+                            <button 
+                                onClick={() => handleDeleteTransaction(transaction.id)}
+                                className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
+                  {financialTransactions.length === 0 && (
+                      <tr>
+                          <td colSpan={6} className="px-6 py-8 text-center text-slate-400">
+                              Nenhuma transação encontrada.
+                          </td>
+                      </tr>
+                  )}
                 </tbody>
               </table>
             </div>

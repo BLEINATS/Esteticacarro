@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, QrCode, Copy, CheckCircle2, Loader2, CreditCard, Lock, Calendar, User, ShieldCheck, Globe } from 'lucide-react';
-import { formatCurrency, cn } from '../lib/utils';
+import { X, QrCode, Copy, CheckCircle2, Loader2, CreditCard, Lock, Calendar, User, ShieldCheck, Globe, Info } from 'lucide-react';
+import { formatCurrency, cn, copyToClipboard } from '../lib/utils';
 import { createPixCharge, createCreditCardCharge, AsaasPayment } from '../services/asaas';
 import { createStripePixPaymentIntent, createStripeCardPaymentIntent } from '../services/stripe';
 import QRCode from 'qrcode';
@@ -69,11 +69,13 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
     }
   };
 
-  const handleCopyPix = () => {
+  const handleCopyPix = async () => {
     if (paymentData?.pix?.payload) {
-      navigator.clipboard.writeText(paymentData.pix.payload);
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000);
+      const success = await copyToClipboard(paymentData.pix.payload);
+      if (success) {
+          setCopySuccess(true);
+          setTimeout(() => setCopySuccess(false), 2000);
+      }
     }
   };
 
@@ -128,6 +130,16 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
       setError(err.message || 'Erro ao processar pagamento.');
       setStep('card_details');
     }
+  };
+
+  // Helper para preencher dados de teste
+  const fillTestData = () => {
+      setCardData({
+          number: '4242 4242 4242 4242',
+          holderName: 'TESTE APROVADO',
+          expiry: '12/30',
+          cvv: '123'
+      });
   };
 
   if (!isOpen) return null;
@@ -224,6 +236,18 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
                         &larr; Voltar
                     </button>
                     <span className="text-xs font-bold text-slate-500 uppercase">Dados do Cartão</span>
+                </div>
+
+                {/* TEST DATA HELPER */}
+                <div 
+                    onClick={fillTestData}
+                    className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2 flex items-start gap-2 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+                >
+                    <Info size={16} className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                        <p className="text-xs font-bold text-amber-700 dark:text-amber-300">Modo de Teste Ativo</p>
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400">Clique aqui para preencher com dados fictícios de aprovação.</p>
+                    </div>
                 </div>
 
                 {error && (

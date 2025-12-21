@@ -1,146 +1,252 @@
 import { 
   MOCK_CLIENTS, MOCK_EMPLOYEES, MOCK_FINANCIALS, 
   MOCK_INVENTORY, MOCK_SERVICES, MOCK_TENANT, 
-  MOCK_USER, MOCK_WORK_ORDERS, MOCK_ALERTS 
+  MOCK_USER, MOCK_WORK_ORDERS, MOCK_ALERTS, MOCK_REMINDERS, MOCK_REWARDS, MOCK_EMPLOYEE_TRANSACTIONS
 } from './mockData';
 
-const DB_KEY = 'cristal_care_local_db_v1';
+const DB_NAME = 'cristal_care_idb';
+const DB_VERSION = 1;
+const LOCAL_STORAGE_KEY = 'cristal_care_local_db_v1';
 
-// Tipos genéricos para o banco
-type CollectionName = 
-  | 'clients' 
-  | 'work_orders' 
-  | 'inventory' 
-  | 'services' 
-  | 'employees' 
-  | 'financial_transactions' 
-  | 'users' 
-  | 'tenants'
-  | 'marketing_campaigns'
-  | 'rewards'
-  | 'redemptions'
-  | 'fidelity_cards'
-  | 'points_history'
-  | 'alerts';
+// List of all object stores (collections)
+const COLLECTIONS = [
+  'clients', 
+  'work_orders', 
+  'inventory', 
+  'services', 
+  'employees', 
+  'employee_transactions',
+  'financial_transactions', 
+  'users', 
+  'tenants',
+  'marketing_campaigns', 
+  'rewards', 
+  'redemptions', 
+  'fidelity_cards', 
+  'points_history', 
+  'alerts', 
+  'reminders', 
+  'message_logs'
+] as const;
 
-interface DatabaseSchema {
-  clients: any[];
-  work_orders: any[];
-  inventory: any[];
-  services: any[];
-  employees: any[];
-  financial_transactions: any[];
-  users: any[];
-  tenants: any[];
-  marketing_campaigns: any[];
-  rewards: any[];
-  redemptions: any[];
-  fidelity_cards: any[];
-  points_history: any[];
-  alerts: any[];
-}
+type CollectionName = typeof COLLECTIONS[number];
 
-// Inicializa o banco se não existir
-const initializeDB = () => {
-  const existing = localStorage.getItem(DB_KEY);
-  if (!existing) {
-    const initialData: DatabaseSchema = {
-      clients: MOCK_CLIENTS,
-      work_orders: MOCK_WORK_ORDERS,
-      inventory: MOCK_INVENTORY,
-      services: MOCK_SERVICES,
-      employees: MOCK_EMPLOYEES,
-      financial_transactions: MOCK_FINANCIALS,
-      users: [MOCK_USER],
-      tenants: [MOCK_TENANT],
-      marketing_campaigns: [],
-      rewards: [],
-      redemptions: [],
-      fidelity_cards: [],
-      points_history: [],
-      alerts: MOCK_ALERTS
+let dbInstance: IDBDatabase | null = null;
+let dbInitPromise: Promise<IDBDatabase> | null = null;
+
+// Open IndexedDB Connection
+const openDB = (): Promise<IDBDatabase> => {
+  if (dbInstance) return Promise.resolve(dbInstance);
+  if (dbInitPromise) return dbInitPromise;
+
+  dbInitPromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      COLLECTIONS.forEach(col => {
+        if (!db.objectStoreNames.contains(col)) {
+          // Create object store with 'id' as keyPath
+          db.createObjectStore(col, { keyPath: 'id' });
+        }
+      });
     };
-    localStorage.setItem(DB_KEY, JSON.stringify(initialData));
-    console.log('Database initialized with mock data');
+
+    request.onsuccess = (event) => {
+      dbInstance = (event.target as IDBOpenDBRequest).result;
+      resolve(dbInstance);
+    };
+
+    request.onerror = (event) => {
+      console.error("IndexedDB error:", (event.target as IDBOpenDBRequest).error);
+      reject((event.target as IDBOpenDBRequest).error);
+    };
+  });
+
+  return dbInitPromise;
+};
+
+// Helper to run a transaction
+const runTransaction = async <T>(
+  storeName: CollectionName, 
+  mode: IDBTransactionMode, 
+  callback: (store: IDBObjectStore) => IDBRequest<T> | void
+): Promise<T> => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, mode);
+    const store = transaction.objectStore(storeName);
+    
+    let request: IDBRequest<T> | void;
+    try {
+      request = callback(store);
+    } catch (e) {
+      reject(e);
+      return;
+    }
+
+    transaction.oncomplete = () => {
+      if (request) resolve(request.result);
+      else resolve(undefined as unknown as T);
+    };
+
+    transaction.onerror = () => reject(transaction.error);
+  });
+};
+
+// Initialize DB: Migrate from LocalStorage OR Seed Mocks
+const initializeDB = async () => {
+  try {
+    const db = await openDB();
+    
+    // 1. Check if we need to migrate from LocalStorage (Legacy)
+    const existingLocalData = localStorage.getItem(LOCAL_STORAGE_KEY);
+    
+    if (existingLocalData) {
+      console.log('Migrating data from LocalStorage to IndexedDB...');
+      try {
+        const parsedData = JSON.parse(existingLocalData);
+        const tx = db.transaction(COLLECTIONS, 'readwrite');
+        
+        let hasError = false;
+
+        COLLECTIONS.forEach(col => {
+          if (parsedData[col] && Array.isArray(parsedData[col])) {
+            const store = tx.objectStore(col);
+            parsedData[col].forEach((item: any) => {
+              // Ensure ID exists
+              if (!item.id) item.id = Date.now().toString() + Math.random().toString(36).substr(2, 5);
+              store.put(item);
+            });
+          }
+        });
+
+        await new Promise<void>((resolve, reject) => {
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => { hasError = true; reject(tx.error); };
+        });
+
+        if (!hasError) {
+          console.log('Migration successful. Clearing LocalStorage.');
+          localStorage.removeItem(LOCAL_STORAGE_KEY);
+        }
+      } catch (e) {
+        console.error('Migration failed:', e);
+      }
+      return;
+    }
+
+    // 2. If no local data, check if IDB is empty (Fresh Start)
+    const userCount = await runTransaction<number>('users', 'readonly', store => store.count());
+    
+    if (userCount === 0) {
+      console.log('Seeding IndexedDB with Mock Data...');
+      const tx = db.transaction(COLLECTIONS, 'readwrite');
+      
+      const seed = (col: CollectionName, data: any[]) => {
+        const store = tx.objectStore(col);
+        data.forEach(item => {
+           // Ensure ID is string for consistency if needed, but keeping as is for numbers
+           store.put(item);
+        });
+      };
+
+      seed('clients', MOCK_CLIENTS);
+      seed('work_orders', MOCK_WORK_ORDERS);
+      seed('inventory', MOCK_INVENTORY);
+      seed('services', MOCK_SERVICES);
+      seed('employees', MOCK_EMPLOYEES);
+      seed('employee_transactions', MOCK_EMPLOYEE_TRANSACTIONS);
+      seed('financial_transactions', MOCK_FINANCIALS);
+      seed('users', [MOCK_USER]);
+      seed('tenants', [MOCK_TENANT]);
+      seed('alerts', MOCK_ALERTS);
+      seed('reminders', MOCK_REMINDERS);
+      seed('rewards', MOCK_REWARDS);
+      
+      // Initialize empty collections
+      ['marketing_campaigns', 'redemptions', 'fidelity_cards', 'points_history', 'message_logs'].forEach(col => {
+          // No op, just ensuring transaction covers them if we added logic later
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+      console.log('Seeding complete.');
+    }
+
+  } catch (error) {
+    console.error("Failed to initialize DB:", error);
   }
 };
 
-// Helper para simular delay de rede
-const delay = (ms = 300) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms = 100) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Helper para ler o banco
-const getDB = (): DatabaseSchema => {
-  const data = localStorage.getItem(DB_KEY);
-  return data ? JSON.parse(data) : {};
-};
-
-// Helper para salvar o banco
-const saveDB = (data: DatabaseSchema) => {
-  localStorage.setItem(DB_KEY, JSON.stringify(data));
-};
-
-// Serviço CRUD Genérico
 export const db = {
   init: initializeDB,
 
+  reset: async () => {
+    if (dbInstance) {
+      dbInstance.close();
+      dbInstance = null;
+    }
+    const req = indexedDB.deleteDatabase(DB_NAME);
+    req.onsuccess = () => {
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      window.location.reload();
+    };
+  },
+
   getAll: async <T>(collection: CollectionName): Promise<T[]> => {
-    await delay();
-    const db = getDB();
-    return (db[collection] || []) as T[];
+    return runTransaction<T[]>(collection, 'readonly', store => store.getAll());
   },
 
   getById: async <T>(collection: CollectionName, id: string | number): Promise<T | null> => {
-    await delay();
-    const db = getDB();
-    const item = db[collection]?.find((i: any) => i.id === id);
-    return item || null;
+    return runTransaction<T>(collection, 'readonly', store => store.get(id))
+      .then(res => res || null);
   },
 
   create: async <T>(collection: CollectionName, item: T): Promise<T> => {
-    await delay();
-    const db = getDB();
-    // Gera ID se não existir
     const newItem = { 
       id: (item as any).id || (typeof item === 'object' && 'id' in (item as any) ? (item as any).id : Date.now().toString()),
       ...item,
-      created_at: new Date().toISOString()
+      created_at: (item as any).created_at || new Date().toISOString()
     };
     
-    // Garante que a coleção existe
-    if (!db[collection]) db[collection] = [];
-    
-    db[collection] = [newItem, ...db[collection]];
-    saveDB(db);
+    await runTransaction(collection, 'readwrite', store => store.add(newItem));
     return newItem;
   },
 
   update: async <T>(collection: CollectionName, id: string | number, updates: Partial<T>): Promise<T | null> => {
-    await delay();
-    const db = getDB();
-    const index = db[collection]?.findIndex((i: any) => i.id === id);
-    
-    if (index !== undefined && index >= 0) {
-      const updatedItem = { ...db[collection][index], ...updates };
-      db[collection][index] = updatedItem;
-      saveDB(db);
-      return updatedItem;
-    }
-    return null;
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(collection, 'readwrite');
+      const store = tx.objectStore(collection);
+      const request = store.get(id);
+
+      request.onsuccess = () => {
+        const data = request.result;
+        if (!data) {
+          resolve(null);
+          return;
+        }
+        const updatedItem = { ...data, ...updates };
+        store.put(updatedItem);
+        resolve(updatedItem);
+      };
+      
+      request.onerror = () => reject(request.error);
+    });
   },
 
   delete: async (collection: CollectionName, id: string | number): Promise<boolean> => {
-    await delay();
-    const db = getDB();
-    const initialLength = db[collection]?.length || 0;
-    db[collection] = db[collection]?.filter((i: any) => i.id !== id) || [];
-    saveDB(db);
-    return db[collection].length < initialLength;
+    await runTransaction(collection, 'readwrite', store => store.delete(id));
+    return true;
   },
 
-  // Auth Helpers
   findUserByEmail: async (email: string) => {
-    await delay();
-    const db = getDB();
-    return db.users.find((u: any) => u.email === email);
+    const users = await db.getAll<any>('users');
+    return users.find((u: any) => u.email === email);
   }
 };

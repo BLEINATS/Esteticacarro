@@ -32,6 +32,11 @@ export default function CampaignModal({ isOpen, onClose, onSave, clients, initia
   const [message, setMessage] = useState(initialData?.messageTemplate || '');
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>(initialData?.selectedClientIds || []);
   
+  // Smart Segment State (Controls RecipientSelector)
+  const [smartSegment, setSmartSegment] = useState<string | undefined>(
+      initialData?.targetSegment && initialData.targetSegment !== 'custom' ? initialData.targetSegment : undefined
+  );
+
   // Channel is now strictly 'whatsapp'
   const [channel, setChannel] = useState<'whatsapp'>('whatsapp');
   
@@ -49,12 +54,18 @@ export default function CampaignModal({ isOpen, onClose, onSave, clients, initia
     lista_servicos: ''
   });
 
-  // Load Template Logic
+  // Load Template Logic (SMART UPDATE)
   const handleTemplateSelect = (template: CampaignTemplate) => {
     setType(template.id as any);
     setMessage(template.defaultMessage);
     if (name === '') setName(template.label.split('(')[0].trim());
-    // Auto-select segment logic could go here if we had a way to trigger RecipientSelector filter
+    
+    // Auto-select smart segment based on template
+    if (template.suggestedSegment) {
+        setSmartSegment(template.suggestedSegment);
+        // Switch to recipients tab to show the smart selection
+        // setActiveTab('recipients'); 
+    }
   };
 
   // Validation
@@ -123,6 +134,10 @@ export default function CampaignModal({ isOpen, onClose, onSave, clients, initia
             date: new Date().toISOString()
         });
     }
+  };
+
+  const insertVariable = (variable: string) => {
+      setMessage(prev => prev + ` ${variable}`);
   };
 
   if (!isOpen) return null;
@@ -195,7 +210,7 @@ export default function CampaignModal({ isOpen, onClose, onSave, clients, initia
                                     </button>
                                 ))}
                                 <button
-                                    onClick={() => { setType('custom'); setMessage(''); }}
+                                    onClick={() => { setType('custom'); setMessage(''); setSmartSegment(undefined); }}
                                     className={cn(
                                         "w-full text-left p-3 rounded-lg border text-sm transition-all",
                                         type === 'custom' 
@@ -223,11 +238,14 @@ export default function CampaignModal({ isOpen, onClose, onSave, clients, initia
                             </div>
 
                             <div>
-                                <div className="flex justify-between items-center mb-1.5">
+                                <div className="flex justify-between items-center mb-1.5 flex-wrap gap-2">
                                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Mensagem</label>
-                                    <div className="flex gap-2">
-                                        <button className="text-xs text-blue-600 hover:underline" onClick={() => setMessage(prev => prev + ' {cliente}')}>+ Nome</button>
-                                        <button className="text-xs text-blue-600 hover:underline" onClick={() => setMessage(prev => prev + ' {veiculo}')}>+ Veículo</button>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium" onClick={() => insertVariable('{cliente}')}>+ Nome</button>
+                                        <button className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium" onClick={() => insertVariable('{veiculo}')}>+ Veículo</button>
+                                        <button className="text-xs text-purple-600 dark:text-purple-400 hover:underline font-medium" onClick={() => insertVariable('{desconto}')}>+ Desconto</button>
+                                        <button className="text-xs text-purple-600 dark:text-purple-400 hover:underline font-medium" onClick={() => insertVariable('{valor}')}>+ Valor</button>
+                                        <button className="text-xs text-purple-600 dark:text-purple-400 hover:underline font-medium" onClick={() => insertVariable('{horario}')}>+ Horário</button>
                                     </div>
                                 </div>
                                 <textarea 
@@ -238,32 +256,49 @@ export default function CampaignModal({ isOpen, onClose, onSave, clients, initia
                                     placeholder="Escreva sua mensagem aqui..."
                                 />
                                 <div className="flex justify-between mt-2 text-xs text-slate-400">
-                                    <span>Variáveis disponíveis: {'{cliente}, {veiculo}, {desconto}, {valor}'}</span>
+                                    <span>Variáveis disponíveis: {'{cliente}, {veiculo}, {desconto}, {valor}, {horario}'}</span>
                                     <span>{message.length} caracteres</span>
                                 </div>
                             </div>
 
-                            {/* Variables Input */}
-                            {type !== 'custom' && (
-                                <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
-                                    <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-3">Preencher Variáveis do Modelo</h4>
+                            {/* Variables Input - Dynamically shown based on message content */}
+                            {(message.includes('{desconto}') || message.includes('{valor}') || message.includes('{horario}')) && (
+                                <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 animate-in fade-in">
+                                    <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-3">Preencher Variáveis</h4>
                                     <div className="grid grid-cols-2 gap-4">
                                         {message.includes('{desconto}') && (
                                             <div>
                                                 <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Desconto (%)</label>
-                                                <input type="number" value={discountValue} onChange={e => setDiscountValue(Number(e.target.value))} className="w-full px-3 py-2 rounded border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm" />
+                                                <input 
+                                                    type="number" 
+                                                    value={discountValue} 
+                                                    onChange={e => setDiscountValue(Number(e.target.value))} 
+                                                    className="w-full px-3 py-2 rounded border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm" 
+                                                    placeholder="Ex: 10"
+                                                />
                                             </div>
                                         )}
                                         {message.includes('{valor}') && (
                                             <div>
                                                 <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Valor (R$)</label>
-                                                <input type="number" value={customVars.valor} onChange={e => setCustomVars({...customVars, valor: e.target.value})} className="w-full px-3 py-2 rounded border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm" />
+                                                <input 
+                                                    type="number" 
+                                                    value={customVars.valor} 
+                                                    onChange={e => setCustomVars({...customVars, valor: e.target.value})} 
+                                                    className="w-full px-3 py-2 rounded border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm" 
+                                                    placeholder="Ex: 150.00"
+                                                />
                                             </div>
                                         )}
                                         {message.includes('{horario}') && (
                                             <div>
                                                 <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Horário</label>
-                                                <input type="time" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} className="w-full px-3 py-2 rounded border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm" />
+                                                <input 
+                                                    type="time" 
+                                                    value={scheduleTime} 
+                                                    onChange={e => setScheduleTime(e.target.value)} 
+                                                    className="w-full px-3 py-2 rounded border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm" 
+                                                />
                                             </div>
                                         )}
                                     </div>
@@ -281,7 +316,7 @@ export default function CampaignModal({ isOpen, onClose, onSave, clients, initia
                         clients={clients} 
                         selectedIds={selectedClientIds} 
                         onSelectionChange={setSelectedClientIds}
-                        preSelectedSegment={CAMPAIGN_TEMPLATES.find(t => t.id === type)?.suggestedSegment}
+                        preSelectedSegment={smartSegment}
                     />
                 </div>
             )}
@@ -322,7 +357,7 @@ export default function CampaignModal({ isOpen, onClose, onSave, clients, initia
                                     type="date" 
                                     value={scheduleDate}
                                     onChange={e => setScheduleDate(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none dark:text-white"
                                 />
                             </div>
                             <div>
@@ -331,7 +366,7 @@ export default function CampaignModal({ isOpen, onClose, onSave, clients, initia
                                     type="time" 
                                     value={scheduleTime}
                                     onChange={e => setScheduleTime(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none dark:text-white"
                                 />
                             </div>
                         </div>

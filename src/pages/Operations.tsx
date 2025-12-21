@@ -1,9 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Search, Filter, Plus, Clock, 
   MoreHorizontal, Car,
   UserPlus, AlertCircle, CheckCircle2, 
-  Hammer, ShieldCheck, PackageX
+  Hammer, ShieldCheck, PackageX, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { cn, formatId } from '../lib/utils';
 import { useApp } from '../context/AppContext';
@@ -36,6 +36,14 @@ export default function Operations() {
   const [selectedOS, setSelectedOS] = useState<WorkOrder | null>(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
 
+  // Scroll Refs & State
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(true);
+
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Cliente Desconhecido';
 
   const sortedWorkOrders = [...workOrders].sort((a, b) => {
@@ -52,8 +60,56 @@ export default function Operations() {
     { id: 'done', title: 'Pronto / Entregue', statuses: ['Concluído', 'Entregue'], color: 'green', borderColor: 'border-green-500', bgColor: 'bg-green-50/50 dark:bg-green-900/10', icon: CheckCircle2 }
   ];
 
+  // --- SCROLL LOGIC ---
+  const checkScroll = () => {
+    if (scrollContainerRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
+      setShowLeftArrow(scrollLeft > 0);
+      setShowRightArrow(scrollLeft < scrollWidth - clientWidth - 10);
+    }
+  };
+
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+  }, [viewMode]);
+
+  const scroll = (direction: 'left' | 'right') => {
+    if (scrollContainerRef.current) {
+      const scrollAmount = 300;
+      scrollContainerRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  // Drag to Scroll Handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!scrollContainerRef.current) return;
+    setIsDragging(true);
+    setStartX(e.pageX - scrollContainerRef.current.offsetLeft);
+    setScrollLeft(scrollContainerRef.current.scrollLeft);
+  };
+
+  const handleMouseLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !scrollContainerRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - scrollContainerRef.current.offsetLeft;
+    const walk = (x - startX) * 2; // Scroll speed multiplier
+    scrollContainerRef.current.scrollLeft = scrollLeft - walk;
+  };
+
   return (
-    // FIX: Use h-auto on mobile to allow scrolling the page, h-full on desktop for internal scrolling
     <div className="space-y-6 h-auto md:h-full flex flex-col">
       {selectedOS && (
         <WorkOrderModal 
@@ -118,7 +174,8 @@ export default function Operations() {
                     dailyLog: [],
                     qaChecklist: [],
                     createdAt: new Date().toISOString(),
-                    checklist: []
+                    checklist: [],
+                    tasks: []
                 };
                 setSelectedOS(newOS);
             }}
@@ -133,7 +190,7 @@ export default function Operations() {
       {/* Filters */}
       <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-2 sm:flex-row sm:gap-4 transition-colors flex-shrink-0">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} className="sm:w-5 sm:h-5" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 sm:w-5 sm:h-5" size={18} />
           <input 
             type="text" 
             placeholder="Buscar OS..." 
@@ -273,54 +330,103 @@ export default function Operations() {
 
       {/* Kanban View (RESPONSIVE) */}
       {viewMode === 'kanban' && (
-        <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="overflow-x-auto pb-2 flex-1">
-            <div className="flex gap-2 min-w-min px-2 sm:px-4 h-full">
+        <div className="flex-1 overflow-hidden flex flex-col relative group/kanban">
+          
+          {/* Scroll Buttons (Desktop Only) */}
+          {showLeftArrow && (
+            <button 
+              onClick={() => scroll('left')}
+              className="hidden md:flex absolute left-2 top-1/2 -translate-y-1/2 z-20 bg-white dark:bg-slate-800 p-2 rounded-full shadow-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:scale-110 transition-transform opacity-0 group-hover/kanban:opacity-100 duration-300"
+            >
+              <ChevronLeft size={24} />
+            </button>
+          )}
+          
+          {showRightArrow && (
+            <button 
+              onClick={() => scroll('right')}
+              className="hidden md:flex absolute right-2 top-1/2 -translate-y-1/2 z-20 bg-white dark:bg-slate-800 p-2 rounded-full shadow-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:scale-110 transition-transform opacity-0 group-hover/kanban:opacity-100 duration-300"
+            >
+              <ChevronRight size={24} />
+            </button>
+          )}
+
+          <div 
+            ref={scrollContainerRef}
+            className={cn(
+              "overflow-x-auto pb-4 flex-1 scrollbar-hide cursor-grab active:cursor-grabbing",
+              isDragging ? "select-none" : ""
+            )}
+            onMouseDown={handleMouseDown}
+            onMouseLeave={handleMouseLeave}
+            onMouseUp={handleMouseUp}
+            onMouseMove={handleMouseMove}
+            onScroll={checkScroll}
+          >
+            <div className="flex gap-3 min-w-min px-2 sm:px-4 h-full">
               {kanbanColumns.map((column) => {
                 const columnWorkOrders = workOrders.filter(os => column.statuses.includes(os.status));
                 const Icon = column.icon;
                 
                 return (
-                  <div key={column.id} className="flex-shrink-0 w-64 sm:w-72 lg:w-80 flex flex-col">
+                  <div key={column.id} className="flex-shrink-0 w-72 sm:w-80 flex flex-col h-full">
                     {/* Column Header */}
                     <div className={cn(
-                      "flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 lg:px-4 py-2 rounded-t-lg border-t-4 bg-white dark:bg-slate-900",
+                      "flex items-center gap-2 px-3 py-3 rounded-t-xl border-t-4 bg-white dark:bg-slate-900 shadow-sm",
                       column.borderColor
                     )}>
-                      <Icon size={16} className="sm:w-[18px] sm:h-[18px] flex-shrink-0" />
-                      <div className="min-w-0">
-                        <h3 className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm truncate">{column.title}</h3>
-                        <p className="text-[10px] text-slate-500 dark:text-slate-400">{columnWorkOrders.length} OS</p>
+                      <Icon size={18} className="flex-shrink-0 text-slate-500 dark:text-slate-400" />
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-bold text-slate-900 dark:text-white text-sm truncate">{column.title}</h3>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{columnWorkOrders.length} OS</p>
                       </div>
                     </div>
 
                     {/* Cards Container */}
-                    <div className={cn("flex-1 overflow-y-auto space-y-1.5 sm:space-y-2 p-2", column.bgColor)}>
+                    <div className={cn("flex-1 overflow-y-auto space-y-2 p-2 rounded-b-xl border-x border-b border-slate-200 dark:border-slate-800/50", column.bgColor)}>
                       {columnWorkOrders.length > 0 ? (
                         columnWorkOrders.map((os) => (
                           <div
                             key={os.id}
-                            onClick={() => setSelectedOS(os)}
-                            className="bg-white dark:bg-slate-800 p-2 sm:p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer hover:shadow-lg transition-all select-none"
+                            onClick={() => !isDragging && setSelectedOS(os)}
+                            className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all select-none group"
                           >
-                            <div className="flex items-start justify-between gap-1.5">
+                            <div className="flex items-start justify-between gap-2 mb-2">
                               <div className="flex-1 min-w-0">
-                                <p className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm truncate">{os.vehicle}</p>
-                                <p className="text-[9px] sm:text-xs text-slate-500 dark:text-slate-400">{formatId(os.id)}</p>
-                                <p className="text-[9px] sm:text-xs text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-2">{os.service}</p>
+                                <p className="font-bold text-slate-900 dark:text-white text-sm truncate">{os.vehicle}</p>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{formatId(os.id)}</p>
                               </div>
-                              <div className="text-[9px] sm:text-xs font-bold text-blue-600 dark:text-blue-400 flex-shrink-0 text-right whitespace-nowrap">
+                              <div className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded flex-shrink-0">
                                 R$ {os.totalValue.toFixed(0)}
                               </div>
                             </div>
-                            <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-700">
-                              <span className="text-[8px] sm:text-[9px] text-slate-600 dark:text-slate-400 truncate">{getClientName(os.clientId)}</span>
+                            
+                            <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 mb-2 min-h-[2.5em]">{os.service}</p>
+                            
+                            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <div className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-slate-600 dark:text-slate-300 flex-shrink-0">
+                                    {os.technician.charAt(0)}
+                                </div>
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{os.technician}</span>
+                              </div>
+                              {os.deadline && (
+                                <div className={cn(
+                                    "flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded",
+                                    os.deadline.toLowerCase().includes('hoje') ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                                )}>
+                                    <Clock size={10} /> {os.deadline.split(' ')[0]}
+                                </div>
+                              )}
                             </div>
                           </div>
                         ))
                       ) : (
-                        <div className="flex items-center justify-center h-24 sm:h-32 text-slate-400 text-[10px] sm:text-xs text-center px-2">
-                          Nenhuma OS nesta etapa
+                        <div className="flex flex-col items-center justify-center h-32 text-slate-400 text-xs text-center opacity-60">
+                          <div className="p-2 bg-white/50 dark:bg-black/20 rounded-full mb-2">
+                             <column.icon size={20} />
+                          </div>
+                          Vazio
                         </div>
                       )}
                     </div>

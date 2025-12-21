@@ -1,8 +1,12 @@
 import React from 'react';
 import { ArrowLeft, Lock, Eye, Database, Globe, Shield } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useSuperAdmin } from '../context/SuperAdminContext';
 
 export default function PrivacyPolicy() {
+  const { saasSettings } = useSuperAdmin();
+  const platformName = saasSettings?.platformName || 'Cristal Care ERP';
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       {/* Header */}
@@ -12,7 +16,7 @@ export default function PrivacyPolicy() {
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
               <Shield size={18} />
             </div>
-            <span className="font-bold text-lg">Cristal Care ERP</span>
+            <span className="font-bold text-lg">{platformName}</span>
           </div>
           <Link to="/" className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors">
             <ArrowLeft size={16} />
@@ -29,7 +33,7 @@ export default function PrivacyPolicy() {
           <div className="prose dark:prose-invert max-w-none space-y-8 text-sm sm:text-base">
             <section>
               <p>
-                A sua privacidade é importante para nós. É política da Cristal Care respeitar a sua privacidade em relação a qualquer informação sua que possamos coletar no sistema Cristal Care ERP e outros sites que possuímos e operamos.
+                A sua privacidade é importante para nós. É política da {platformName} respeitar a sua privacidade em relação a qualquer informação sua que possamos coletar no sistema {platformName} e outros sites que possuímos e operamos.
               </p>
             </section>
 
@@ -94,7 +98,7 @@ export default function PrivacyPolicy() {
 
             <div className="pt-8 border-t border-slate-200 dark:border-slate-800 mt-8">
               <p className="text-sm text-slate-500">
-                Se você tiver alguma dúvida sobre como lidamos com dados do usuário e informações pessoais, entre em contato conosco em <a href="mailto:privacy@cristalcare.com" className="text-blue-600 hover:underline">privacy@cristalcare.com</a>
+                Se você tiver alguma dúvida sobre como lidamos com dados do usuário e informações pessoais, entre em contato conosco em <a href={`mailto:${saasSettings.supportEmail}`} className="text-blue-600 hover:underline">{saasSettings.supportEmail}</a>
               </p>
             </div>
           </div>

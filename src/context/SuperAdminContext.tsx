@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { SaaSPlan, SaaSTenant, TokenPackage, SaaSTokenTransaction } from '../types';
+import { SaaSPlan, SaaSTenant, TokenPackage, SaaSTokenTransaction, SaaSTransaction } from '../types';
 import { addDays, formatISO, subDays } from 'date-fns';
 
 // Configurações da Plataforma SaaS
@@ -10,6 +10,13 @@ export interface SaaSSettings {
   pixKey: string;
   apiKey: string;
   adminPassword?: string;
+  // Configuração Global do WhatsApp (w-api.app)
+  whatsappGlobal?: {
+    enabled: boolean;
+    baseUrl: string;
+    apiKey: string;
+    webhookUrl?: string;
+  };
 }
 
 interface SuperAdminContextType {
@@ -17,6 +24,7 @@ interface SuperAdminContextType {
   plans: SaaSPlan[];
   tokenPackages: TokenPackage[];
   tokenLedger: SaaSTokenTransaction[];
+  saasTransactions: SaaSTransaction[];
   isAuthenticated: boolean;
   saasSettings: SaaSSettings;
   login: (password: string) => boolean;
@@ -35,12 +43,22 @@ interface SuperAdminContextType {
   updateTokenPackage: (id: string, updates: Partial<TokenPackage>) => void;
   deleteTokenPackage: (id: string) => void;
 
+  addSaaSTransaction: (transaction: SaaSTransaction) => void;
+  deleteSaaSTransaction: (id: string) => void;
+
   updateSaaSSettings: (settings: Partial<SaaSSettings>) => void;
   
   totalMRR: number;
   activeTenantsCount: number;
   totalTokensSold: number;
   totalTokensConsumed: number;
+  
+  financialMetrics: {
+      revenue: number;
+      expenses: number;
+      profit: number;
+      margin: number;
+  };
 }
 
 const SuperAdminContext = createContext<SuperAdminContextType | undefined>(undefined);
@@ -111,7 +129,13 @@ const initialSaaSSettings: SaaSSettings = {
   paymentGateway: 'asaas',
   pixKey: '00.000.000/0001-00',
   apiKey: '', 
-  adminPassword: 'admin'
+  adminPassword: 'admin',
+  whatsappGlobal: {
+    enabled: true,
+    baseUrl: 'https://w-api.app/api',
+    apiKey: '',
+    webhookUrl: 'https://api.cristalcare.com/webhook/whatsapp'
+  }
 };
 
 const generateMockLedger = (tenants: SaaSTenant[]): SaaSTokenTransaction[] => {
@@ -144,7 +168,9 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
   const [saasSettings, setSaasSettings] = useState<SaaSSettings>(() => {
     try {
         const stored = localStorage.getItem('saas_settings');
-        return stored ? JSON.parse(stored) : initialSaaSSettings;
+        // Merge with initial to ensure new fields exist
+        const parsed = stored ? JSON.parse(stored) : initialSaaSSettings;
+        return { ...initialSaaSSettings, ...parsed, whatsappGlobal: { ...initialSaaSSettings.whatsappGlobal, ...parsed.whatsappGlobal } };
     } catch (e) { return initialSaaSSettings; }
   });
 
@@ -152,6 +178,13 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
     try {
         const stored = localStorage.getItem('saas_token_ledger');
         return stored ? JSON.parse(stored) : generateMockLedger(initialTenants);
+    } catch (e) { return []; }
+  });
+
+  const [saasTransactions, setSaasTransactions] = useState<SaaSTransaction[]>(() => {
+    try {
+        const stored = localStorage.getItem('saas_financial_transactions');
+        return stored ? JSON.parse(stored) : [];
     } catch (e) { return []; }
   });
 
@@ -178,6 +211,10 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem('saas_token_ledger', JSON.stringify(tokenLedger));
   }, [tokenLedger]);
+
+  useEffect(() => {
+    localStorage.setItem('saas_financial_transactions', JSON.stringify(saasTransactions));
+  }, [saasTransactions]);
 
   const login = (password: string) => {
     if (password === saasSettings.adminPassword || password === 'admin123') {
@@ -268,6 +305,14 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
     setTokenPackages(prev => prev.filter(p => p.id !== id));
   };
 
+  const addSaaSTransaction = (transaction: SaaSTransaction) => {
+      setSaasTransactions(prev => [transaction, ...prev]);
+  };
+
+  const deleteSaaSTransaction = (id: string) => {
+      setSaasTransactions(prev => prev.filter(t => t.id !== id));
+  };
+
   const updateSaaSSettings = (settings: Partial<SaaSSettings>) => {
     setSaasSettings(prev => ({ ...prev, ...settings }));
   };
@@ -283,12 +328,31 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
     .filter(t => t.type === 'usage')
     .reduce((acc, t) => acc + t.amount, 0));
 
+  // FINANCIAL METRICS CALCULATION
+  const tokenSalesRevenue = tokenLedger
+    .filter(t => t.type === 'purchase')
+    .reduce((acc, t) => acc + (t.value || 0), 0);
+
+  const manualExpenses = saasTransactions
+    .filter(t => t.type === 'expense')
+    .reduce((acc, t) => acc + t.amount, 0);
+
+  const manualIncome = saasTransactions
+    .filter(t => t.type === 'income')
+    .reduce((acc, t) => acc + t.amount, 0);
+
+  const totalRevenue = totalMRR + tokenSalesRevenue + manualIncome;
+  const totalExpenses = manualExpenses;
+  const profit = totalRevenue - totalExpenses;
+  const margin = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
+
   return (
     <SuperAdminContext.Provider value={{
       tenants,
       plans,
       tokenPackages,
       tokenLedger,
+      saasTransactions,
       isAuthenticated,
       saasSettings,
       login,
@@ -303,11 +367,19 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
       addTokenPackage,
       updateTokenPackage,
       deleteTokenPackage,
+      addSaaSTransaction,
+      deleteSaaSTransaction,
       updateSaaSSettings,
       totalMRR,
       activeTenantsCount,
       totalTokensSold,
-      totalTokensConsumed
+      totalTokensConsumed,
+      financialMetrics: {
+          revenue: totalRevenue,
+          expenses: totalExpenses,
+          profit,
+          margin
+      }
     }}>
       {children}
     </SuperAdminContext.Provider>

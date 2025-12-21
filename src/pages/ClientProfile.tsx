@@ -5,7 +5,7 @@ import { ArrowLeft, Smartphone, Wallet, QrCode, Copy, Share2, Loader2, Gift } fr
 import FidelityCard from '../components/FidelityCard';
 import QRCode from 'qrcode';
 import { ClientPoints } from '../types';
-import { getWhatsappLink } from '../lib/utils'; // Importando helper se necessário, ou usando do contexto
+import { getWhatsappLink } from '../lib/utils';
 
 export default function ClientProfile() {
   const { clientId } = useParams();
@@ -31,13 +31,15 @@ export default function ClientProfile() {
   const [pkpassUrl, setPkpassUrl] = useState('');
   const [googleWalletUrl, setGoogleWalletUrl] = useState('');
   const [shareLink, setShareLink] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // Ensure card exists if gamification is enabled
   useEffect(() => {
-    if (clientId && !card && companySettings.gamification?.enabled) {
-      createFidelityCard(clientId);
+    if (clientId && !card && companySettings.gamification?.enabled && !isGenerating) {
+      setIsGenerating(true);
+      createFidelityCard(clientId).finally(() => setIsGenerating(false));
     }
-  }, [clientId, card, companySettings.gamification?.enabled, createFidelityCard]);
+  }, [clientId, card, companySettings.gamification?.enabled, createFidelityCard, isGenerating]);
 
   useEffect(() => {
     if (!card) return;
@@ -63,7 +65,7 @@ export default function ClientProfile() {
     // Gerar link compartilhável
     const baseUrl = window.location.origin;
     setShareLink(`${baseUrl}/client-profile/${clientId}`);
-  }, [clientId, card, points, generatePKPass, generateGoogleWallet, client?.id]);
+  }, [clientId, card, points.totalPoints, points.tier, generatePKPass, generateGoogleWallet, client?.id, client?.name]);
 
   if (!client) {
     return (

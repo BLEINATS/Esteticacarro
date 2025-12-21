@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { 
   Tags, Filter, Plus, ArrowUpRight, Calculator, Info,
   CheckCircle2, Clock, RotateCcw, ToggleLeft, ToggleRight, Image as ImageIcon, Upload,
-  Search, Trash2, Beaker, DollarSign, TrendingUp, TrendingDown, BarChart3, AlertTriangle, Timer
+  Search, Trash2, Beaker, DollarSign, TrendingUp, TrendingDown, BarChart3, AlertTriangle, Timer,
+  Settings
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatCurrency, cn } from '../lib/utils';
@@ -19,6 +20,10 @@ export default function ServicesPricing() {
   const [bulkTarget, setBulkTarget] = useState<VehicleSize | 'all'>('large');
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Shop Hourly Cost State (Local for now, could be in CompanySettings)
+  const [shopHourlyCost, setShopHourlyCost] = useState<number>(50); // Default R$ 50/h
+  const [isEditingHourlyCost, setIsEditingHourlyCost] = useState(false);
 
   // Modal States
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
@@ -41,20 +46,25 @@ export default function ServicesPricing() {
         // 2. Cost (CMV from Consumption)
         const cost = calculateServiceCost(service.id);
         
-        // 3. Margin
-        const margin = price - cost;
-        const marginPercent = price > 0 ? (margin / price) * 100 : 0;
+        // 3. Margin Bruta
+        const grossMargin = price - cost;
+        const marginPercent = price > 0 ? (grossMargin / price) * 100 : 0;
         
         // 4. Efficiency (Profit per Hour)
         const timeHours = (service.standardTimeMinutes || 60) / 60;
-        const profitPerHour = timeHours > 0 ? margin / timeHours : 0;
+        const profitPerHour = timeHours > 0 ? grossMargin / timeHours : 0;
 
-        // 5. Volume (Real usage from WorkOrders)
+        // 5. Net Profit (Considering Shop Hourly Cost)
+        const laborCost = timeHours * shopHourlyCost;
+        const netProfit = grossMargin - laborCost;
+        const netMarginPercent = price > 0 ? (netProfit / price) * 100 : 0;
+
+        // 6. Volume (Real usage from WorkOrders)
         const usageCount = workOrders.filter(os => 
             os.serviceId === service.id || (os.serviceIds && os.serviceIds.includes(service.id))
         ).length;
 
-        // 6. Classification
+        // 7. Classification
         let status: 'star' | 'cash_cow' | 'question' | 'dog' = 'question';
         
         // Simple BCG-like Logic
@@ -64,24 +74,26 @@ export default function ServicesPricing() {
         else status = 'dog'; // Low Margin, Low Vol
 
         // Schedule Hog Check (Low Profit/Hour + High Time)
-        const isScheduleHog = profitPerHour < 50 && service.standardTimeMinutes > 120;
+        const isScheduleHog = profitPerHour < shopHourlyCost && service.standardTimeMinutes > 120;
 
         return {
             ...service,
             metrics: {
                 price,
                 cost,
-                margin,
+                grossMargin,
                 marginPercent,
                 timeHours,
                 profitPerHour,
                 usageCount,
                 status,
-                isScheduleHog
+                isScheduleHog,
+                netProfit,
+                netMarginPercent
             }
         };
-    }).sort((a, b) => b.metrics.margin - a.metrics.margin); // Default sort by margin
-  }, [services, priceMatrix, workOrders, calculateServiceCost]);
+    }).sort((a, b) => b.metrics.grossMargin - a.metrics.grossMargin); // Default sort by margin
+  }, [services, priceMatrix, workOrders, calculateServiceCost, shopHourlyCost]);
 
   const topProfitable = [...profitabilityData].sort((a, b) => b.metrics.profitPerHour - a.metrics.profitPerHour).slice(0, 3);
   const scheduleHogs = profitabilityData.filter(s => s.metrics.isScheduleHog).sort((a, b) => a.metrics.profitPerHour - b.metrics.profitPerHour).slice(0, 3);
@@ -199,7 +211,7 @@ export default function ServicesPricing() {
         </div>
       </div>
 
-      {/* Search & Filter Bar (Visible on all tabs for convenience) */}
+      {/* Search & Filter Bar */}
       <div className="bg-white dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row gap-2 sm:gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -226,6 +238,53 @@ export default function ServicesPricing() {
       {activeTab === 'profitability' && (
         <div className="space-y-6 animate-in fade-in slide-in-from-right duration-300">
             
+            {/* Shop Hourly Cost Configuration */}
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
+                        <Clock size={20} />
+                    </div>
+                    <div>
+                        <h3 className="font-bold text-slate-900 dark:text-white text-sm">Custo Hora da Oficina</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Quanto custa 1 hora da sua operação (Aluguel + Luz + Salários / Horas Úteis)?
+                        </p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    {isEditingHourlyCost ? (
+                        <>
+                            <div className="relative">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">R$</span>
+                                <input 
+                                    type="number" 
+                                    value={shopHourlyCost}
+                                    onChange={(e) => setShopHourlyCost(Number(e.target.value))}
+                                    className="w-24 pl-6 pr-2 py-1.5 bg-slate-50 dark:bg-slate-800 border border-blue-500 rounded-lg text-sm font-bold text-slate-900 dark:text-white focus:outline-none"
+                                    autoFocus
+                                />
+                            </div>
+                            <button 
+                                onClick={() => setIsEditingHourlyCost(false)}
+                                className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700"
+                            >
+                                Salvar
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <span className="text-xl font-bold text-slate-900 dark:text-white">{formatCurrency(shopHourlyCost)}</span>
+                            <button 
+                                onClick={() => setIsEditingHourlyCost(true)}
+                                className="p-1.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                            >
+                                <Settings size={16} />
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+
             {/* Insights Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Top Performers */}
@@ -242,7 +301,7 @@ export default function ServicesPricing() {
                                     </span>
                                     <div>
                                         <p className="text-sm font-bold text-slate-900 dark:text-white">{s.name}</p>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400">{s.standardTimeMinutes} min • Margem: {s.metrics.marginPercent.toFixed(0)}%</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">{s.standardTimeMinutes} min • Margem Liq: {s.metrics.netMarginPercent.toFixed(0)}%</p>
                                     </div>
                                 </div>
                                 <div className="text-right">
@@ -269,7 +328,7 @@ export default function ServicesPricing() {
                                     </div>
                                     <div>
                                         <p className="text-sm font-bold text-slate-900 dark:text-white">{s.name}</p>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400">{s.standardTimeMinutes} min • Margem: {s.metrics.marginPercent.toFixed(0)}%</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">{s.standardTimeMinutes} min • Margem Liq: {s.metrics.netMarginPercent.toFixed(0)}%</p>
                                     </div>
                                 </div>
                                 <div className="text-right">
@@ -290,7 +349,7 @@ export default function ServicesPricing() {
             <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
                 <div className="p-4 border-b border-slate-200 dark:border-slate-800">
                     <h3 className="font-bold text-slate-900 dark:text-white">Detalhamento Financeiro por Serviço</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Baseado no preço médio e custo de insumos cadastrados.</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Preço Médio - (Custo Produtos + Custo Hora). Lucro Líquido Real.</p>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
@@ -298,10 +357,10 @@ export default function ServicesPricing() {
                             <tr>
                                 <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Serviço</th>
                                 <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Preço Médio</th>
-                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Custo (CMV)</th>
-                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Margem R$</th>
-                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-center">Margem %</th>
-                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Lucro/Hora</th>
+                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Custo Prod.</th>
+                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Margem Bruta</th>
+                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Lucro Liq.</th>
+                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-center">Margem Liq. %</th>
                                 <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-center">Ações</th>
                             </tr>
                         </thead>
@@ -320,27 +379,25 @@ export default function ServicesPricing() {
                                     </td>
                                     <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-300">{formatCurrency(s.metrics.price)}</td>
                                     <td className="px-4 py-3 text-right text-slate-500 dark:text-slate-400">{formatCurrency(s.metrics.cost)}</td>
-                                    <td className="px-4 py-3 text-right font-bold text-green-600 dark:text-green-400">{formatCurrency(s.metrics.margin)}</td>
+                                    <td className="px-4 py-3 text-right font-medium text-slate-700 dark:text-slate-300">{formatCurrency(s.metrics.grossMargin)}</td>
+                                    <td className="px-4 py-3 text-right font-bold text-green-600 dark:text-green-400">{formatCurrency(s.metrics.netProfit)}</td>
                                     <td className="px-4 py-3 text-center">
                                         <div className="flex items-center justify-center gap-2">
                                             <div className="w-16 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                                                 <div 
-                                                    className={cn("h-full rounded-full", s.metrics.marginPercent > 50 ? "bg-green-500" : s.metrics.marginPercent > 30 ? "bg-yellow-500" : "bg-red-500")} 
-                                                    style={{ width: `${Math.min(s.metrics.marginPercent, 100)}%` }}
+                                                    className={cn("h-full rounded-full", s.metrics.netMarginPercent > 30 ? "bg-green-500" : s.metrics.netMarginPercent > 15 ? "bg-yellow-500" : "bg-red-500")} 
+                                                    style={{ width: `${Math.max(0, Math.min(s.metrics.netMarginPercent, 100))}%` }}
                                                 />
                                             </div>
-                                            <span className="text-xs font-medium">{s.metrics.marginPercent.toFixed(0)}%</span>
+                                            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{s.metrics.netMarginPercent.toFixed(0)}%</span>
                                         </div>
-                                    </td>
-                                    <td className="px-4 py-3 text-right font-bold text-blue-600 dark:text-blue-400">
-                                        {formatCurrency(s.metrics.profitPerHour)}
                                     </td>
                                     <td className="px-4 py-3 text-center">
                                         <button 
                                             onClick={() => handleConsumption(s)}
                                             className="text-xs font-bold text-purple-600 hover:text-purple-700 hover:underline"
                                         >
-                                            Ajustar Custo
+                                            Ficha Técnica
                                         </button>
                                     </td>
                                 </tr>
@@ -355,7 +412,7 @@ export default function ServicesPricing() {
       {/* TAB: MATRIX */}
       {activeTab === 'matrix' && (
         <div className="space-y-6 animate-in fade-in slide-in-from-left duration-300">
-          {/* Bulk Update Tool */}
+          {/* ... (Existing Matrix Content) ... */}
           <div className="bg-gradient-to-r from-slate-800 to-slate-900 dark:from-slate-900 dark:to-slate-950 p-6 rounded-xl text-white shadow-lg border border-slate-700">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
               <div className="flex items-start gap-4">
@@ -529,90 +586,107 @@ export default function ServicesPricing() {
                const serviceCost = calculateServiceCost(service.id);
                
                return (
-               <div key={service.id} className="relative bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:shadow-blue-500/10 transition-all duration-300 group overflow-hidden hover:-translate-y-1">
+               <div key={service.id} className="relative bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:shadow-blue-500/10 transition-all duration-300 group overflow-hidden hover:-translate-y-1 flex flex-col">
                  {/* Animated Border Effect */}
-                 <div className="absolute inset-0 border-2 border-transparent group-hover:border-blue-500/50 rounded-xl transition-colors duration-300 pointer-events-none" />
-                 <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-purple-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left" />
+                 <div className="absolute inset-0 border-2 border-transparent group-hover:border-blue-500/50 rounded-xl transition-colors duration-300 pointer-events-none z-20" />
+                 <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-purple-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left z-20" />
 
-                 <div className="flex justify-between items-start mb-4 relative z-10">
-                   <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform duration-300">
-                     <Tags size={20} />
-                   </div>
-                   <div className={cn("w-3 h-3 rounded-full", service.active ? "bg-green-500" : "bg-slate-300")} />
-                 </div>
-                 
-                 <div className="flex flex-wrap items-center gap-2 mb-2 relative z-10">
-                    <h3 className="font-bold text-lg text-slate-900 dark:text-white">{service.name}</h3>
-                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-bold border uppercase", getCategoryStyle(service.category))}>
-                        {service.category}
-                    </span>
-                 </div>
-
-                 <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 min-h-[40px] relative z-10">{service.description}</p>
-                 
-                 {/* Price Display */}
-                 <div className="mb-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800 group-hover:border-blue-200 dark:group-hover:border-blue-900/50 transition-colors relative z-10">
-                    <div className="flex justify-between items-center">
-                        <div>
-                            <p className="text-xs text-slate-400 uppercase font-bold mb-1">Investimento</p>
-                            <p className="text-lg font-bold text-slate-900 dark:text-white">
-                                {minPrice === 0 ? 'Sob Consulta' : (
-                                    minPrice === maxPrice 
-                                        ? formatCurrency(minPrice)
-                                        : `${formatCurrency(minPrice)} - ${formatCurrency(maxPrice)}`
-                                )}
-                            </p>
+                 {/* Image Section */}
+                 <div className="h-40 w-full bg-slate-100 dark:bg-slate-800 relative overflow-hidden flex-shrink-0">
+                    {service.imageUrl ? (
+                        <img src={service.imageUrl} alt={service.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-300 dark:text-slate-600">
+                            <ImageIcon size={48} />
                         </div>
-                        {serviceCost > 0 && (
-                            <div className="text-right">
-                                <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Custo (CMV)</p>
-                                <p className="text-sm font-bold text-green-600 dark:text-green-400">{formatCurrency(serviceCost)}</p>
-                            </div>
-                        )}
+                    )}
+                    
+                    {/* Active Status Badge Overlay */}
+                    <div className="absolute top-3 right-3 z-10">
+                         <div className={cn("w-3 h-3 rounded-full shadow-sm ring-2 ring-white dark:ring-slate-900", service.active ? "bg-green-500" : "bg-slate-300")} />
+                    </div>
+
+                    {/* Category Badge Overlay */}
+                    <div className="absolute bottom-3 left-3 z-10">
+                        <span className={cn("text-[10px] px-2 py-1 rounded-md font-bold uppercase shadow-sm backdrop-blur-md bg-white/90 dark:bg-slate-900/90 border border-white/20", getCategoryStyle(service.category))}>
+                            {service.category}
+                        </span>
                     </div>
                  </div>
 
-                 {/* Configuração de Recorrência */}
-                 <div className="mb-4 relative z-10">
-                    <label className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
-                        <RotateCcw size={12} /> Alerta de Retorno (Dias)
-                    </label>
-                    <input 
-                        type="number"
-                        value={service.returnIntervalDays || ''}
-                        onChange={(e) => updateServiceInterval(service.id, parseInt(e.target.value) || 0)}
-                        placeholder="Ex: 30 dias"
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                    />
-                    <p className="text-[10px] text-slate-400 mt-1">
-                        O sistema avisará automaticamente quando vencer.
-                    </p>
-                 </div>
+                 {/* Content Section */}
+                 <div className="p-5 flex flex-col flex-1 relative z-10">
+                    <div className="flex justify-between items-start mb-2">
+                         <h3 className="font-bold text-lg text-slate-900 dark:text-white line-clamp-1" title={service.name}>{service.name}</h3>
+                    </div>
 
-                 <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800 relative z-10">
-                   <button 
-                     onClick={() => handleConsumption(service)}
-                     className="text-xs font-bold text-purple-600 dark:text-purple-400 flex items-center gap-1 hover:underline"
-                   >
-                     <Beaker size={14} /> Ficha Técnica
-                   </button>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 line-clamp-2 flex-1">{service.description}</p>
+                    
+                    {/* Price Display */}
+                    <div className="mb-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800 group-hover:border-blue-200 dark:group-hover:border-blue-900/50 transition-colors">
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <p className="text-xs text-slate-400 uppercase font-bold mb-1">Investimento</p>
+                                <p className="text-lg font-bold text-slate-900 dark:text-white">
+                                    {minPrice === 0 ? 'Sob Consulta' : (
+                                        minPrice === maxPrice 
+                                            ? formatCurrency(minPrice)
+                                            : `${formatCurrency(minPrice)} - ${formatCurrency(maxPrice)}`
+                                    )}
+                                </p>
+                            </div>
+                            {serviceCost > 0 && (
+                                <div className="text-right">
+                                    <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Custo (CMV)</p>
+                                    <p className="text-sm font-bold text-green-600 dark:text-green-400">{formatCurrency(serviceCost)}</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
 
-                   <div className="flex gap-2">
+                    {/* Configuração de Recorrência */}
+                    <div className="mb-4">
+                        <label className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
+                            <RotateCcw size={12} /> Alerta de Retorno (Dias)
+                        </label>
+                        <input 
+                            type="number"
+                            value={service.returnIntervalDays || ''}
+                            onChange={(e) => updateServiceInterval(service.id, parseInt(e.target.value) || 0)}
+                            placeholder="Ex: 30 dias"
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                            O sistema avisará automaticamente quando vencer.
+                        </p>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800 mt-auto">
                         <button 
-                            onClick={() => handleEditService(service)}
-                            className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
-                            title="Editar"
+                            onClick={() => handleConsumption(service)}
+                            className="text-xs font-bold text-purple-600 dark:text-purple-400 flex items-center gap-1 hover:underline"
                         >
-                            <ArrowUpRight size={16} />
+                            <Beaker size={14} /> Ficha Técnica
                         </button>
-                        <button 
-                            onClick={() => handleDeleteService(service.id)}
-                            className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                            title="Excluir"
-                        >
-                            <Trash2 size={16} />
-                        </button>
-                   </div>
+
+                        <div className="flex gap-2">
+                                <button 
+                                    onClick={() => handleEditService(service)}
+                                    className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                                    title="Editar"
+                                >
+                                    <ArrowUpRight size={16} />
+                                </button>
+                                <button 
+                                    onClick={() => handleDeleteService(service.id)}
+                                    className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                                    title="Excluir"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                        </div>
+                    </div>
                  </div>
                </div>
              )})}

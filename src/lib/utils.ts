@@ -65,3 +65,41 @@ export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 10
     throw error;
   });
 }
+
+// Safe Copy to Clipboard with Fallback
+export async function copyToClipboard(text: string): Promise<boolean> {
+  if (!navigator.clipboard) {
+    return fallbackCopyTextToClipboard(text);
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (err) {
+    console.warn('Clipboard API failed, trying fallback', err);
+    return fallbackCopyTextToClipboard(text);
+  }
+}
+
+function fallbackCopyTextToClipboard(text: string): boolean {
+  try {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    
+    // Ensure it's not visible but part of the DOM
+    textArea.style.top = "0";
+    textArea.style.left = "0";
+    textArea.style.position = "fixed";
+    textArea.style.opacity = "0";
+
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    const successful = document.execCommand('copy');
+    document.body.removeChild(textArea);
+    return successful;
+  } catch (err) {
+    console.error('Fallback: Oops, unable to copy', err);
+    return false;
+  }
+}

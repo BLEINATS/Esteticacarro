@@ -1,8 +1,12 @@
 import React from 'react';
 import { ArrowLeft, ShieldCheck, FileText, Scale, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useSuperAdmin } from '../context/SuperAdminContext';
 
 export default function TermsOfService() {
+  const { saasSettings } = useSuperAdmin();
+  const platformName = saasSettings?.platformName || 'Cristal Care ERP';
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       {/* Header */}
@@ -12,7 +16,7 @@ export default function TermsOfService() {
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">
               <ShieldCheck size={18} />
             </div>
-            <span className="font-bold text-lg">Cristal Care ERP</span>
+            <span className="font-bold text-lg">{platformName}</span>
           </div>
           <Link to="/" className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors">
             <ArrowLeft size={16} />
@@ -33,7 +37,7 @@ export default function TermsOfService() {
                 1. Aceitação dos Termos
               </h2>
               <p>
-                Ao acessar e utilizar o sistema Cristal Care ERP ("Serviço"), você concorda em cumprir e estar vinculado aos seguintes termos e condições de uso. Se você não concordar com qualquer parte destes termos, você não deve utilizar nosso Serviço.
+                Ao acessar e utilizar o sistema {platformName} ("Serviço"), você concorda em cumprir e estar vinculado aos seguintes termos e condições de uso. Se você não concordar com qualquer parte destes termos, você não deve utilizar nosso Serviço.
               </p>
             </section>
 
@@ -43,7 +47,7 @@ export default function TermsOfService() {
                 2. Descrição do Serviço
               </h2>
               <p>
-                O Cristal Care ERP é uma plataforma SaaS (Software as a Service) projetada para gestão de estéticas automotivas e funilarias. O Serviço inclui, mas não se limita a, gestão de ordens de serviço, controle de estoque, CRM, gestão financeira e agendamento.
+                O {platformName} é uma plataforma SaaS (Software as a Service) projetada para gestão de estéticas automotivas e funilarias. O Serviço inclui, mas não se limita a, gestão de ordens de serviço, controle de estoque, CRM, gestão financeira e agendamento.
               </p>
               <p className="mt-2">
                 Reservamo-nos o direito de modificar ou descontinuar, temporária ou permanentemente, o Serviço (ou qualquer parte dele) com ou sem aviso prévio.
@@ -55,7 +59,7 @@ export default function TermsOfService() {
               <ul className="list-disc pl-5 space-y-2">
                 <li>Você deve fornecer informações precisas e completas ao criar sua conta.</li>
                 <li>Você é responsável por manter a segurança de sua senha e conta.</li>
-                <li>A Cristal Care não se responsabiliza por qualquer perda ou dano decorrente do seu não cumprimento desta obrigação de segurança.</li>
+                <li>A {platformName} não se responsabiliza por qualquer perda ou dano decorrente do seu não cumprimento desta obrigação de segurança.</li>
                 <li>Você é responsável por todo o conteúdo postado e atividades que ocorram sob sua conta.</li>
               </ul>
             </section>
@@ -80,7 +84,7 @@ export default function TermsOfService() {
                 6. Limitação de Responsabilidade
               </h2>
               <p>
-                Você entende e concorda expressamente que a Cristal Care não será responsável por quaisquer danos diretos, indiretos, incidentais, especiais, consequenciais ou exemplares, incluindo, mas não se limitando a, danos por perda de lucros, boa vontade, uso, dados ou outras perdas intangíveis resultantes do uso ou da incapacidade de usar o serviço.
+                Você entende e concorda expressamente que a {platformName} não será responsável por quaisquer danos diretos, indiretos, incidentais, especiais, consequenciais ou exemplares, incluindo, mas não se limitando a, danos por perda de lucros, boa vontade, uso, dados ou outras perdas intangíveis resultantes do uso ou da incapacidade de usar o serviço.
               </p>
             </section>
 
@@ -93,7 +97,7 @@ export default function TermsOfService() {
 
             <div className="pt-8 border-t border-slate-200 dark:border-slate-800 mt-8">
               <p className="text-sm text-slate-500">
-                Dúvidas sobre os termos? Entre em contato conosco em <a href="mailto:legal@cristalcare.com" className="text-blue-600 hover:underline">legal@cristalcare.com</a>
+                Dúvidas sobre os termos? Entre em contato conosco em <a href={`mailto:${saasSettings.supportEmail}`} className="text-blue-600 hover:underline">{saasSettings.supportEmail}</a>
               </p>
             </div>
           </div>

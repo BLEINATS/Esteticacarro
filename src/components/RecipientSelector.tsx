@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Client, VehicleSize, VEHICLE_SIZES } from '../types';
-import { Search, Filter, CheckSquare, Square, Users, Car, DollarSign, Clock, Check } from 'lucide-react';
+import { Search, Filter, CheckSquare, Square, Users, Car, DollarSign, Clock, Calendar, Star } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
-import { differenceInDays } from 'date-fns';
+import { differenceInDays, parseISO } from 'date-fns';
 
 interface RecipientSelectorProps {
   clients: Client[];
@@ -19,10 +19,24 @@ export default function RecipientSelector({ clients, selectedIds, onSelectionCha
   const [activeVehicleSize, setActiveVehicleSize] = useState<VehicleSize | 'all'>('all');
   const [showFilters, setShowFilters] = useState(false);
 
-  // Sync with prop if it changes
+  // Sync with prop if it changes (Smart Template Selection)
   useEffect(() => {
-      if (preSelectedSegment) setActiveSegment(preSelectedSegment as FilterSegment);
+      if (preSelectedSegment) {
+          setActiveSegment(preSelectedSegment as FilterSegment);
+      }
   }, [preSelectedSegment]);
+
+  // Auto-select clients when segment changes (Smart Selection)
+  useEffect(() => {
+      if (preSelectedSegment && preSelectedSegment !== 'all') {
+          const ids = filteredClients.map(c => c.id);
+          // Avoid infinite loop or overwriting manual selection if user already interacted? 
+          // For "Smart" behavior, we usually want to pre-fill.
+          // Let's only do it if selection is empty to be safe, or just let the user click "Select All"
+          // To be truly "Smart", let's auto-select them if it's a template switch
+          onSelectionChange(ids);
+      }
+  }, [activeSegment]);
 
   const filteredClients = useMemo(() => {
     return clients.filter(client => {
@@ -36,7 +50,7 @@ export default function RecipientSelector({ clients, selectedIds, onSelectionCha
 
       // 2. Segment Filter
       let matchesSegment = true;
-      const daysSinceVisit = differenceInDays(new Date(), new Date(client.lastVisit));
+      const daysSinceVisit = client.lastVisit ? differenceInDays(new Date(), new Date(client.lastVisit)) : 999;
 
       switch (activeSegment) {
         case 'vip': matchesSegment = client.segment === 'vip'; break;
@@ -79,6 +93,39 @@ export default function RecipientSelector({ clients, selectedIds, onSelectionCha
 
   const isAllSelected = filteredClients.length > 0 && filteredClients.every(c => selectedIds.includes(c.id));
 
+  // Helper to render contextual info based on segment
+  const renderContextInfo = (client: Client) => {
+      const daysSince = client.lastVisit ? differenceInDays(new Date(), new Date(client.lastVisit)) : 0;
+      
+      if (activeSegment === 'inactive' || activeSegment === 'long_time') {
+          return (
+              <span className="text-xs font-bold text-red-500 flex items-center gap-1 bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded">
+                  <Clock size={12} /> Ausente há {daysSince} dias
+              </span>
+          );
+      }
+      if (activeSegment === 'vip' || activeSegment === 'high_ltv') {
+          return (
+              <span className="text-xs font-bold text-purple-600 dark:text-purple-400 flex items-center gap-1 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded">
+                  <Star size={12} /> LTV: {formatCurrency(client.ltv || 0)}
+              </span>
+          );
+      }
+      if (activeSegment === 'new') {
+          return (
+              <span className="text-xs font-bold text-green-600 dark:text-green-400 flex items-center gap-1 bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded">
+                  <Calendar size={12} /> Novo Cliente
+              </span>
+          );
+      }
+      // Default
+      return (
+          <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+              <Clock size={12} /> Última visita: {daysSince}d atrás
+          </span>
+      );
+  };
+
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
       {/* Header / Toolbar */}
@@ -115,11 +162,10 @@ export default function RecipientSelector({ clients, selectedIds, onSelectionCha
               <div className="flex flex-wrap gap-2">
                 {[
                   { id: 'all', label: 'Todos' },
-                  { id: 'vip', label: 'VIP' },
+                  { id: 'vip', label: 'VIP (Alto Valor)' },
                   { id: 'inactive', label: 'Inativos (+60d)' },
                   { id: 'recurring', label: 'Recorrentes' },
                   { id: 'new', label: 'Novos' },
-                  { id: 'high_ltv', label: 'Alto Valor' },
                   { id: 'long_time', label: 'Sumidos (+90d)' },
                 ].map(seg => (
                   <button
@@ -190,7 +236,6 @@ export default function RecipientSelector({ clients, selectedIds, onSelectionCha
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {filteredClients.length > 0 ? filteredClients.map(client => {
           const isSelected = selectedIds.includes(client.id);
-          const daysSince = differenceInDays(new Date(), new Date(client.lastVisit));
           
           return (
             <div 
@@ -210,15 +255,11 @@ export default function RecipientSelector({ clients, selectedIds, onSelectionCha
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start">
                   <p className="font-bold text-sm text-slate-900 dark:text-white truncate">{client.name}</p>
-                  <div className="flex gap-1">
-                    {client.segment === 'vip' && <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-bold rounded">VIP</span>}
-                    {client.status === 'churn_risk' && <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded">Risco</span>}
-                  </div>
+                  {renderContextInfo(client)}
                 </div>
                 
                 <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400">
                   <span className="flex items-center gap-1"><Car size={12} /> {client.vehicles[0]?.model || 'Sem carro'}</span>
-                  <span className="flex items-center gap-1"><Clock size={12} /> {daysSince}d atrás</span>
                   <span className="flex items-center gap-1"><DollarSign size={12} /> LTV: {formatCurrency(client.ltv || 0)}</span>
                 </div>
               </div>

@@ -10,6 +10,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { useDialog } from '../context/DialogContext';
 import { cn } from '../lib/utils';
+import AIAssistant from './AIAssistant';
 
 export default function Layout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -18,7 +19,7 @@ export default function Layout() {
   
   const location = useLocation();
   const navigate = useNavigate();
-  const { notifications, markNotificationAsRead, clearAllNotifications, ownerUser, logoutOwner, subscription, tenantId, createTenant } = useApp();
+  const { notifications, markNotificationAsRead, clearAllNotifications, ownerUser, logoutOwner, subscription, tenantId, createTenant, companySettings } = useApp();
   const { showConfirm, showAlert } = useDialog();
 
   // Store Creation State
@@ -170,8 +171,11 @@ export default function Layout() {
       >
         <div className="h-full flex flex-col">
           <div className="h-16 flex items-center justify-between px-4 border-b border-slate-200 dark:border-slate-800">
-            <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent truncate">
-              {ownerUser?.shopName || 'Crystal Care'}
+            <span 
+              className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent truncate"
+              title={companySettings.name}
+            >
+              {companySettings.name || ownerUser?.shopName || 'Minha Oficina'}
             </span>
             <button 
               onClick={closeSidebar}
@@ -220,16 +224,14 @@ export default function Layout() {
           </div>
 
           <div className="p-3 border-t border-slate-200 dark:border-slate-800 space-y-1">
-            <a
-              href="/shop"
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              to={`/shop/${companySettings.slug || ''}`}
               className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
               title="Ver Minha Loja (Público)"
             >
               <Globe size={20} className="flex-shrink-0" />
               <span className="font-medium text-sm">Ver Minha Loja</span>
-            </a>
+            </Link>
 
             <button
               onClick={handleLogout}
@@ -244,7 +246,7 @@ export default function Layout() {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 lg:px-8">
           <div className="flex items-center gap-4">
             <button 
@@ -368,6 +370,9 @@ export default function Layout() {
         <main className="flex-1 overflow-y-auto p-4 lg:p-8 scroll-smooth">
           <Outlet />
         </main>
+
+        {/* Global AI Assistant */}
+        <AIAssistant />
       </div>
 
       {isSidebarOpen && (

@@ -6,7 +6,7 @@ import {
   CreditCard, UploadCloud, Lock, Share2, Plus, Trash2,
   DollarSign, Wrench, Check, Smile, Star, ListTodo,
   Image as ImageIcon, Search, Car, UserPlus, ChevronDown,
-  Printer, Send, Tag, Ticket, Trophy, Gift, Sparkles, Bot, Loader2, ImagePlus
+  Printer, Send, Tag, Ticket, Trophy, Gift, Sparkles, Bot, Loader2, ImagePlus, Eye, Megaphone
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { WorkOrder, DamagePoint, VehicleInventory, DailyLogEntry, AdditionalItem, QualityChecklistItem, ScopeItem, Vehicle, VehicleSize, VEHICLE_SIZES, FinancialTransaction } from '../types';
@@ -16,6 +16,7 @@ import ClientModal from './ClientModal';
 import WorkOrderPrintTemplate from './WorkOrderPrintTemplate';
 import SignaturePad from './SignaturePad';
 import { useDialog } from '../context/DialogContext';
+import { useNavigate } from 'react-router-dom';
 
 interface WorkOrderModalProps {
   workOrder: WorkOrder;
@@ -23,51 +24,47 @@ interface WorkOrderModalProps {
 }
 
 export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalProps) {
+  const navigate = useNavigate();
   const { 
     addWorkOrder, updateWorkOrder, completeWorkOrder, submitNPS, 
     clients, recipes, services, getPrice, getWhatsappLink, 
     workOrders, addVehicle, useVoucher, getVoucherDetails,
     getClientPoints, companySettings, getRewardsByLevel, claimReward,
     addFinancialTransaction, deleteFinancialTransaction, financialTransactions,
-    updateClientLTV, subscription, consumeTokens, employees
+    updateClientLTV, subscription, consumeTokens, employees, campaigns
   } = useApp();
-  const { showConfirm, showAlert } = useDialog();
+  const { showConfirm, showAlert, showOptions } = useDialog();
 
   const [activeTab, setActiveTab] = useState<'reception' | 'execution' | 'quality' | 'finance'>('reception');
   const [isSaving, setIsSaving] = useState(false);
 
-  // --- CLIENT & VEHICLE SELECTION STATE ---
+  // ... (rest of state definitions remain the same) ...
   const [selectedClientId, setSelectedClientId] = useState<string>(workOrder.clientId || '');
   const [clientSearch, setClientSearch] = useState('');
   const [showClientList, setShowClientList] = useState(false);
   const [selectedVehiclePlate, setSelectedVehiclePlate] = useState<string>(workOrder.plate || '');
   
-  // New Vehicle State (Quick Add)
   const [isAddingVehicle, setIsAddingVehicle] = useState(false);
   const [newVehicle, setNewVehicle] = useState<Partial<Vehicle>>({ model: '', plate: '', color: '', size: 'medium' });
 
-  // Client Modal State
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
 
-  // --- EXISTING STATES ---
   const [damages, setDamages] = useState<DamagePoint[]>(workOrder.damages || []);
   const [inventory, setInventory] = useState<VehicleInventory>(workOrder.vehicleInventory || {
     estepe: false, macaco: false, chaveRoda: false, tapetes: false, manual: false, antena: false, pertences: ''
   });
   const [dailyLog, setDailyLog] = useState<DailyLogEntry[]>(workOrder.dailyLog || []);
   const [newLogText, setNewLogText] = useState('');
-  const [newLogPhoto, setNewLogPhoto] = useState<string | null>(null); // NEW: State for log photo
+  const [newLogPhoto, setNewLogPhoto] = useState<string | null>(null);
 
   const [insurance, setInsurance] = useState(workOrder.insuranceDetails || { isInsurance: false });
   const [qaList, setQaList] = useState<QualityChecklistItem[]>(workOrder.qaChecklist || []);
   const [additionalItems, setAdditionalItems] = useState<AdditionalItem[]>(workOrder.additionalItems || []);
   const [scopeList, setScopeList] = useState<ScopeItem[]>(workOrder.scopeChecklist || []);
   
-  // STATUS STATE (Fix for status not updating)
   const [currentStatus, setCurrentStatus] = useState<WorkOrder['status']>(workOrder.status);
   const [assignedTechnician, setAssignedTechnician] = useState<string>(workOrder.technician || 'A Definir');
 
-  // MULTI-SERVICE SELECTION
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -80,21 +77,20 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const [isSignaturePadOpen, setIsSignaturePadOpen] = useState(false);
   const [clientSignature, setClientSignature] = useState<string | null>(workOrder.clientSignature || null);
 
-  // DISCOUNT STATE
   const [discountType, setDiscountType] = useState<'value' | 'percentage' | 'service'>(workOrder.discount?.type || 'percentage');
   const [discountAmount, setDiscountAmount] = useState<number>(workOrder.discount?.amount || 0);
   const [discountDescription, setDiscountDescription] = useState<string>(workOrder.discount?.description || '');
   
-  // PAYMENT STATE
   const [paymentMethod, setPaymentMethod] = useState(workOrder.paymentMethod || 'Pix');
   const [paymentDate, setPaymentDate] = useState(workOrder.paidAt ? new Date(workOrder.paidAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
   const [isPaid, setIsPaid] = useState(workOrder.paymentStatus === 'paid');
 
-  // VOUCHER STATE
   const [voucherCode, setVoucherCode] = useState('');
   const [appliedVoucher, setAppliedVoucher] = useState<string | null>(null);
+  
+  // NEW: Campaign Attribution
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>(workOrder.campaignId || '');
 
-  // --- PRICE STATE (EDITABLE) ---
   const [servicePrice, setServicePrice] = useState<number>(() => {
     const extras = workOrder.additionalItems?.reduce((acc, item) => acc + item.value, 0) || 0;
     let baseValue = workOrder.totalValue;
@@ -113,12 +109,10 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     return baseValue > 0 ? Math.max(0, baseValue - extras) : 0;
   });
 
-  // Derived Data
   const selectedClient = clients.find(c => c.id === selectedClientId);
   const clientVehicles = selectedClient ? selectedClient.vehicles : [];
   const selectedVehicleObj = clientVehicles.find(v => v.plate === selectedVehiclePlate);
 
-  // Gamification Data
   const rawClientPoints = selectedClientId ? getClientPoints(selectedClientId) : undefined;
   const currentPoints = rawClientPoints?.totalPoints || 0;
   const currentTierId = rawClientPoints?.tier || 'bronze';
@@ -131,6 +125,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     ? clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.phone.includes(clientSearch))
     : [];
 
+  // ... (useEffect hooks remain the same) ...
   useEffect(() => {
     if (workOrder.clientId && workOrder.clientId !== 'c1' && workOrder.clientId !== '') {
         const c = clients.find(cl => cl.id === workOrder.clientId);
@@ -207,6 +202,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
   }, [workOrder.service]);
 
+  // ... (handlers remain the same) ...
   const handleClientSelect = (client: any) => {
     setSelectedClientId(client.id);
     setClientSearch(client.name);
@@ -294,7 +290,8 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       },
       paymentStatus: isPaid ? 'paid' : 'pending',
       paymentMethod: isPaid ? paymentMethod : undefined,
-      paidAt: isPaid ? paymentDate : undefined
+      paidAt: isPaid ? paymentDate : undefined,
+      campaignId: selectedCampaignId // Save attribution
     };
   };
 
@@ -401,6 +398,9 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           });
       }
   };
+
+  // ... (Other handlers like handleRegisterPayment, handleUndoPayment, handleApplyVoucher, handleAddDamage, handleSaveDamage, handlePhotoCapture, handleLogPhotoSelect, handleAddLog, handleQuickAfterPhoto, handleStatusChange, handleNPS, handlePrint, handleSendWhatsApp) ...
+  // ... (Keeping them as is, just showing handleSendTrackingLink update) ...
 
   const handleRegisterPayment = async () => {
     const currentData = getUpdatedOrderData();
@@ -522,6 +522,12 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         setDiscountDescription(`Voucher Serviço: ${voucherCode} (${details.reward.gift || details.reward.name})`);
       }
       setAppliedVoucher(voucherCode);
+      
+      // AUTO-LINK CAMPAIGN IF VOUCHER IS RELATED (Mock logic: if voucher code contains campaign prefix)
+      // In a real scenario, Redemption would have a campaignId field.
+      // For now, we can try to guess or just leave it.
+      // Better: Let's assume the user manually selects the campaign if not automated.
+      
       await showAlert({ title: 'Sucesso', message: `Voucher ${voucherCode} aplicado! O desconto foi configurado.`, type: 'success' });
     }
   };
@@ -546,7 +552,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
   };
 
-  // UPDATED: Convert to Base64 for persistence
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -558,7 +563,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
   };
 
-  // UPDATED: Convert to Base64 for persistence
   const handleLogPhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -588,7 +592,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     setNewLogPhoto(null);
   };
 
-  // UPDATED: Convert to Base64 for persistence
   const handleQuickAfterPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -646,13 +649,25 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       if (selectedClient) {
         const msg = `Olá ${selectedClient.name}! O serviço no seu ${selectedVehicleObj?.model || 'veículo'} foi concluído com sucesso. Valor Total: ${formatCurrency(fullOrderSnapshot.totalValue)}. Aguardamos sua retirada!`;
         
+        let method = 'manual';
         if (isWhatsAppConnected) {
+            method = await showOptions({
+                title: 'Avisar Cliente',
+                message: 'Serviço concluído! Como deseja avisar o cliente?',
+                options: [
+                    { label: '🤖 Robô (1 Token)', value: 'bot', variant: 'primary' },
+                    { label: '📱 Manual (WhatsApp)', value: 'manual', variant: 'secondary' }
+                ]
+            }) || 'cancel';
+        }
+
+        if (method === 'bot') {
             if (consumeTokens(1, `Aviso Conclusão OS #${workOrder.id}`)) {
                 showAlert({ title: 'Aviso Enviado', message: 'Mensagem de conclusão enviada via Robô.', type: 'success' });
             } else {
                 showAlert({ title: 'Erro no Envio', message: 'Saldo de tokens insuficiente para envio automático.', type: 'warning' });
             }
-        } else {
+        } else if (method === 'manual') {
             window.open(getWhatsappLink(selectedClient.phone, msg), '_blank');
         }
       }
@@ -685,6 +700,8 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
     const htmlContent = WorkOrderPrintTemplate({ workOrder: printOrder, client: selectedClient });
     
+    // ... (Print logic inside template function or similar) ...
+    // Reusing existing print logic
     const printContent = `
       <!DOCTYPE html>
       <html>
@@ -801,7 +818,20 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
     const message = `Olá ${selectedClient.name}! 👋\n\nSua Ordem de Serviço foi registrada:\n\n📋 *OS ${formatId(workOrder.id)}*\n🚗 ${currentData.vehicle} - ${currentData.plate}\n🔧 Serviço: ${currentData.service}\n💰 Valor: ${formatCurrency(currentData.totalValue || 0)}${itemsText}\n⏱️ Prazo: ${workOrder.deadline}\n\nStatus: ${currentStatus}\n\nAguardamos sua confirmação!\n\n${companySettings.name}`;
     
+    let method = 'manual';
+
     if (isWhatsAppConnected) {
+        method = await showOptions({
+            title: 'Enviar OS',
+            message: 'Como deseja enviar esta Ordem de Serviço?',
+            options: [
+                { label: '🤖 Automático (1 Token)', value: 'bot', variant: 'primary' },
+                { label: '📱 Manual (WhatsApp Web)', value: 'manual', variant: 'secondary' }
+            ]
+        }) || 'cancel';
+    }
+
+    if (method === 'bot') {
         if ((subscription.tokenBalance || 0) < 1) {
             await showAlert({
                 title: 'Saldo Insuficiente',
@@ -811,23 +841,55 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             return;
         }
 
-        const confirm = await showConfirm({
-            title: 'Enviar via Robô',
-            message: 'Deseja usar 1 Token para enviar esta mensagem automaticamente?',
-            confirmText: 'Enviar (1 Token)',
-            type: 'info'
-        });
-
-        if (confirm) {
-            if (consumeTokens(1, `Envio OS #${workOrder.id}`)) {
-                await showAlert({ title: 'Enviado', message: 'Mensagem enviada para a fila de disparo do Robô.', type: 'success' });
-            } else {
-                await showAlert({ title: 'Erro', message: 'Falha ao processar tokens.', type: 'error' });
-            }
+        if (consumeTokens(1, `Envio OS #${workOrder.id}`)) {
+            await showAlert({ title: 'Enviado', message: 'Mensagem enviada para a fila de disparo do Robô.', type: 'success' });
+        } else {
+            await showAlert({ title: 'Erro', message: 'Falha ao processar tokens.', type: 'error' });
         }
-    } else {
+    } else if (method === 'manual') {
         window.open(getWhatsappLink(selectedClient.phone, message), '_blank');
     }
+  };
+
+  const handleSendTrackingLink = async () => {
+    if (!selectedClient) {
+      await showAlert({
+        title: 'Atenção',
+        message: 'Selecione um cliente para enviar o link.',
+        type: 'warning'
+      });
+      return;
+    }
+
+    const trackingLink = `${window.location.origin}/track/${workOrder.id}`;
+    const message = `Olá ${selectedClient.name}! 🚗\n\nAcompanhe o serviço do seu ${selectedVehicleObj?.model || 'veículo'} em tempo real, com fotos e status:\n${trackingLink}\n\nQualquer dúvida, estamos à disposição!`;
+
+    let method = 'manual';
+    if (isWhatsAppConnected) {
+        method = await showOptions({
+            title: 'Enviar Link de Acompanhamento',
+            message: 'Como deseja enviar o link?',
+            options: [
+                { label: '🤖 Automático (1 Token)', value: 'bot', variant: 'primary' },
+                { label: '📱 Manual (WhatsApp)', value: 'manual', variant: 'secondary' }
+            ]
+        }) || 'cancel';
+    }
+
+    if (method === 'bot') {
+        if (consumeTokens(1, `Link Acompanhamento OS #${workOrder.id}`)) {
+            await showAlert({ title: 'Enviado', message: 'Link enviado com sucesso!', type: 'success' });
+        } else {
+            await showAlert({ title: 'Erro', message: 'Saldo insuficiente.', type: 'warning' });
+        }
+    } else if (method === 'manual') {
+        window.open(getWhatsappLink(selectedClient.phone, message), '_blank');
+    }
+  };
+
+  const handlePreviewTracking = () => {
+      // Navegação interna para evitar bloqueio de pop-up do ambiente de desenvolvimento
+      navigate(`/track/${workOrder.id}`);
   };
 
   const handleSignatureSave = (signature: string) => {
@@ -851,11 +913,14 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-2 sm:p-4">
+      {/* ... (rest of the modal content) ... */}
       {isClientModalOpen && <ClientModal onClose={() => setIsClientModalOpen(false)} />}
       {isSignaturePadOpen && <SignaturePad onSave={handleSignatureSave} onClose={() => setIsSignaturePadOpen(false)} />}
       
+      {/* ... (Damage Modal) ... */}
       {isDamageModalOpen && (
         <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          {/* ... (Damage Modal Content) ... */}
           <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
              <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold text-lg text-slate-900 dark:text-white">Registrar Avaria</h3>
@@ -913,6 +978,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         
         {/* Header */}
         <div className="p-3 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start gap-2 sm:gap-0 bg-slate-50/50 dark:bg-slate-900/50">
+          {/* ... (Header content) ... */}
           <div className="w-full sm:w-auto">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-3 mb-1">
               <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">{formatId(workOrder.id)}</h2>
@@ -997,7 +1063,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                 )}
             >
                 {isWhatsAppConnected ? <Bot size={14} /> : <Send size={14} />} 
-                <span className="hidden sm:inline">{isWhatsAppConnected ? 'Enviar (Robô)' : 'WhatsApp'}</span>
+                <span className="hidden sm:inline">{isWhatsAppConnected ? 'Enviar (Híbrido)' : 'WhatsApp'}</span>
                 <span className="sm:hidden">{isWhatsAppConnected ? 'Robô' : 'WA'}</span>
             </button>
             <button onClick={onClose} className="p-1.5 sm:p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors">
@@ -1006,7 +1072,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           </div>
         </div>
 
-        {/* ... (rest of the component content) ... */}
+        {/* Tabs */}
         <div className="flex border-b border-slate-100 dark:border-slate-800 px-2 sm:px-6 overflow-x-auto">
           {[
             { id: 'reception', label: 'Recepção & Vistoria', mobileLabel: 'Recepção', icon: ClipboardCheck },
@@ -1038,9 +1104,9 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           {/* TAB: RECEPTION */}
           {activeTab === 'reception' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-8">
-              {/* ... (reception content) ... */}
+              {/* ... (Client & Vehicle Selection - No changes) ... */}
               <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm mb-2">
-                 {/* ... (Client & Vehicle Selection - No changes needed here) ... */}
+                 {/* ... (Client Selection Logic) ... */}
                  <h3 className="font-bold text-slate-900 dark:text-white mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
                     <User size={18} className="text-blue-600" />
                     Dados do Cliente & Veículo
@@ -1139,6 +1205,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                  )}
               </div>
 
+              {/* ... (rest of reception content) ... */}
               <div className="lg:col-span-1 bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                 <h3 className="font-bold text-slate-900 dark:text-white mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
                   <Camera size={18} className="text-blue-600" />
@@ -1148,7 +1215,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
               </div>
 
               <div className="lg:col-span-2 space-y-3 sm:space-y-6">
-                {/* Seleção de Serviço e Escopo */}
+                {/* ... (Service Selection) ... */}
                 <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                   <h3 className="font-bold text-slate-900 dark:text-white mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
                     <Wrench size={18} className="text-blue-600" />
@@ -1156,7 +1223,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                   </h3>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
-                    {/* MULTI-SERVICE SELECTION */}
+                    {/* ... (Multi Service Selection) ... */}
                     <div className="relative" ref={dropdownRef}>
                       <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1.5">Serviços a Realizar</label>
                       
@@ -1231,7 +1298,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                   </div>
                 </div>
 
-                {/* Other panels (Inventory, Signature, etc.) remain the same */}
+                {/* ... (Inventory & Signature) ... */}
                 <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                   <h3 className="font-bold text-slate-900 dark:text-white mb-2 sm:mb-4 text-sm sm:text-base">O que ficou no carro? (Inventário)</h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 sm:gap-4">
@@ -1289,22 +1356,18 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             </div>
           )}
 
-          {/* ... (Other tabs remain the same) ... */}
           {/* TAB: EXECUTION (DIÁRIO DE OBRA + ESCOPO) */}
           {activeTab === 'execution' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* ... (execution content remains the same) ... */}
-              {/* COL 1: CHECKLIST DE ESCOPO (O que fazer) */}
+              {/* ... (Execution Content) ... */}
               <div className="lg:col-span-1 space-y-6">
+                 {/* ... (Scope Checklist) ... */}
                  <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                     <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                         <ListTodo size={20} className="text-blue-600" />
                         Escopo do Serviço
                     </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                        Marque os itens conforme for concluindo a execução.
-                    </p>
-
+                    {/* ... */}
                     <div className="space-y-3">
                         {scopeList.length > 0 ? scopeList.map((item, idx) => (
                             <label key={item.id} className={cn(
@@ -1343,7 +1406,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     </div>
                  </div>
 
-                 {/* BEFORE / AFTER GALLERY PREVIEW */}
+                 {/* ... (Gallery) ... */}
                  <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                     <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                         <ImageIcon size={20} className="text-purple-600" />
@@ -1384,6 +1447,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
               {/* COL 2 & 3: DIÁRIO DE BORDO */}
               <div className="lg:col-span-2 space-y-6">
+                {/* ... (Daily Log) ... */}
                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                   <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                     <CalendarClock size={20} className="text-blue-600" />
@@ -1463,18 +1527,30 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     <p className="text-xs text-purple-600 dark:text-purple-400 mb-3">
                       Envie um link para ele acompanhar as fotos do serviço em tempo real. Isso gera confiança!
                     </p>
-                    <button className="w-full bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-2">
-                      <Share2 size={14} /> Enviar Link de Acompanhamento
-                    </button>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={handleSendTrackingLink}
+                        className="flex-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Share2 size={14} /> Enviar Link de Acompanhamento
+                      </button>
+                      <button 
+                        onClick={handlePreviewTracking}
+                        className="px-4 bg-white dark:bg-slate-800 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-900/30 text-xs font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
+                        title="Ver o que o cliente vê"
+                      >
+                        <Eye size={14} /> Preview
+                      </button>
+                    </div>
                  </div>
               </div>
             </div>
           )}
 
+          {/* ... (Rest of Tabs: Quality, Finance) ... */}
           {/* TAB: QUALITY (QA) */}
           {activeTab === 'quality' && (
             <div className="max-w-2xl mx-auto">
-              {/* ... (quality content remains the same) ... */}
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                 <div className="text-center mb-8">
                   <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4 text-green-600 dark:text-green-400">
@@ -1570,7 +1646,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           {/* TAB: FINANCE */}
           {activeTab === 'finance' && (
             <div className="space-y-6">
-              {/* ... (finance content remains the same) ... */}
               <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                 <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                   <DollarSign size={20} className="text-green-600" />
@@ -1585,6 +1660,29 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     <div className="flex justify-between text-slate-500 dark:text-slate-400">
                     <span>Peças/Extras</span>
                     <span>{formatCurrency(currentExtrasTotal)}</span>
+                    </div>
+                </div>
+
+                {/* CAMPAIGN ATTRIBUTION (NEW) */}
+                <div className="mt-6 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                    <h4 className="font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                        <Megaphone size={16} className="text-purple-600" />
+                        Origem / Campanha
+                    </h4>
+                    <div className="relative">
+                        <select 
+                            value={selectedCampaignId}
+                            onChange={(e) => setSelectedCampaignId(e.target.value)}
+                            className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-purple-500 outline-none"
+                        >
+                            <option value="">Selecione a origem...</option>
+                            {campaigns.filter(c => c.status !== 'draft').map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                        </select>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                            Vincule este serviço a uma campanha para calcular o ROI.
+                        </p>
                     </div>
                 </div>
 
@@ -1832,7 +1930,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     </div>
                 </div>
 
-                {/* --- PAYMENT SECTION (NEW) --- */}
+                {/* --- PAYMENT SECTION --- */}
                 <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
                     <h4 className="font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
                         <CreditCard size={18} className="text-green-600" />

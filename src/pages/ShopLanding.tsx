@@ -4,15 +4,25 @@ import {
   Instagram, CheckCircle2, ChevronRight, Facebook, ExternalLink, Smartphone
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useApp } from '../context/AppContext';
+import { useApp, initialCompanySettings } from '../context/AppContext';
+import { useSuperAdmin } from '../context/SuperAdminContext';
 import { motion, AnimatePresence } from 'framer-motion';
+import { db } from '../lib/db';
 
 export default function ShopLanding() {
   const navigate = useNavigate();
   const { shopId } = useParams(); // Captura o ID/Slug da URL
-  const { companySettings, services } = useApp();
+  const { companySettings: contextSettings, services: contextServices } = useApp();
+  const { saasSettings } = useSuperAdmin();
+  const platformName = saasSettings?.platformName || 'Cristal Care ERP';
+  
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  
+  // Local state for public view (detached from auth context if needed)
+  const [landingSettings, setLandingSettings] = useState(contextSettings);
+  const [landingServices, setLandingServices] = useState(contextServices);
+  const [isLoading, setIsLoading] = useState(!!shopId);
 
   // Detect scroll for navbar styling
   useEffect(() => {
@@ -23,8 +33,51 @@ export default function ShopLanding() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Load public data if shopId is present
+  useEffect(() => {
+    const loadShopData = async () => {
+      if (!shopId) {
+          // If no ID, use context (Owner Preview Mode)
+          setLandingSettings(contextSettings);
+          setLandingServices(contextServices);
+          setIsLoading(false);
+          return;
+      }
+
+      try {
+          // Try to find tenant by slug
+          const tenants = await db.getAll<any>('tenants');
+          const tenant = tenants.find((t: any) => t.slug === shopId || t.id === shopId);
+
+          if (tenant) {
+              // Merge settings
+              const mergedSettings = { 
+                  ...initialCompanySettings, 
+                  ...tenant.settings,
+                  landingPage: { ...initialCompanySettings.landingPage, ...(tenant.settings?.landingPage || {}) }
+              };
+              setLandingSettings(mergedSettings);
+
+              // Load services for this tenant
+              const allServices = await db.getAll<any>('services');
+              const tenantServices = allServices.filter((s: any) => s.tenant_id === tenant.id);
+              setLandingServices(tenantServices);
+          } else {
+              // Fallback to context if not found (or show 404)
+              console.warn("Shop not found, using default.");
+          }
+      } catch (error) {
+          console.error("Error loading shop data", error);
+      } finally {
+          setIsLoading(false);
+      }
+    };
+
+    loadShopData();
+  }, [shopId, contextSettings, contextServices]);
+
   // Filter active services that are enabled for landing page
-  const displayServices = services
+  const displayServices = landingServices
     .filter(s => s.active && (s.showOnLandingPage !== false))
     .slice(0, 9); // Limit to 9 for layout
     
@@ -48,36 +101,22 @@ export default function ShopLanding() {
       name: 'Higienização Premium',
       description: 'Limpeza profunda de bancos, teto, carpetes e hidratação de couro com produtos bactericidas.',
       imageUrl: 'https://images.unsplash.com/photo-1605218427360-6961d3748ea9?auto=format&fit=crop&q=80&w=1000'
-    },
-    {
-      id: 'def4',
-      name: 'Detalhamento de Motor',
-      description: 'Limpeza técnica e proteção de plásticos e borrachas do cofre do motor, sem uso de água sob pressão.',
-      imageUrl: 'https://images.unsplash.com/photo-1552930294-6b595f4c2974?auto=format&fit=crop&q=80&w=1000'
-    },
-    {
-      id: 'def5',
-      name: 'Revitalização de Faróis',
-      description: 'Remoção do amarelado e opacidade das lentes, devolvendo a transparência e segurança na iluminação.',
-      imageUrl: 'https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&q=80&w=1000'
-    },
-    {
-      id: 'def6',
-      name: 'Oxi-Sanitização',
-      description: 'Eliminação de odores, fungos e bactérias do interior do veículo através de gerador de ozônio.',
-      imageUrl: 'https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&q=80&w=1000'
     }
   ];
 
   const servicesToShow = hasServices ? displayServices : defaultServices;
   
   // Link do WhatsApp com mensagem personalizada
-  const defaultMessage = companySettings.landingPage?.whatsappMessage || 'Olá, gostaria de agendar uma visita.';
-  const whatsappLink = `https://wa.me/55${companySettings.phone.replace(/\D/g, '')}?text=${encodeURIComponent(defaultMessage)}`;
+  const defaultMessage = landingSettings.landingPage?.whatsappMessage || 'Olá, gostaria de agendar uma visita.';
+  const whatsappLink = `https://wa.me/55${landingSettings.phone.replace(/\D/g, '')}?text=${encodeURIComponent(defaultMessage)}`;
 
-  // NOTE: In a real backend scenario, we would fetch the shop data based on `shopId`.
-  // Since this is a local-storage based prototype, we assume the current context IS the shop.
-  // However, we can use the shopId for display or validation if needed.
+  if (isLoading) {
+      return (
+          <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+              <p className="text-white">Carregando loja...</p>
+          </div>
+      );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-white font-sans selection:bg-blue-500 selection:text-white">
@@ -94,14 +133,14 @@ export default function ShopLanding() {
           <div className="flex justify-between items-center">
             {/* Logo */}
             <div className="flex items-center gap-3">
-              {companySettings.logoUrl ? (
-                 <img src={companySettings.logoUrl} alt="Logo" className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl object-cover border-2 border-white/10 shadow-lg" />
+              {landingSettings.logoUrl ? (
+                 <img src={landingSettings.logoUrl} alt="Logo" className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl object-cover border-2 border-white/10 shadow-lg" />
               ) : (
                 <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-blue-600/20">
-                    {companySettings.name.substring(0, 2).toUpperCase()}
+                    {landingSettings.name.substring(0, 2).toUpperCase()}
                 </div>
               )}
-              <span className="font-bold text-lg sm:text-xl tracking-tight text-white">{companySettings.name}</span>
+              <span className="font-bold text-lg sm:text-xl tracking-tight text-white">{landingSettings.name}</span>
             </div>
             
             {/* Desktop Menu */}
@@ -173,7 +212,7 @@ export default function ShopLanding() {
         {/* Background Image with Overlay */}
         <div className="absolute inset-0 z-0">
           <img 
-            src={companySettings.landingPage?.heroImage || "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&q=80&w=1920"} 
+            src={landingSettings.landingPage?.heroImage || "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&q=80&w=1920"} 
             alt="Hero Background" 
             className="w-full h-full object-cover"
           />
@@ -199,7 +238,7 @@ export default function ShopLanding() {
               transition={{ duration: 0.6, delay: 0.1 }}
               className="text-5xl md:text-7xl font-extrabold text-white leading-[1.1] mb-6"
             >
-              {companySettings.landingPage?.heroTitle || 'Seu carro merece tratamento VIP'}
+              {landingSettings.landingPage?.heroTitle || 'Seu carro merece tratamento VIP'}
             </motion.h1>
             
             <motion.p 
@@ -208,7 +247,7 @@ export default function ShopLanding() {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="text-lg md:text-xl text-slate-300 mb-8 leading-relaxed max-w-2xl"
             >
-              {companySettings.landingPage?.heroSubtitle || 'Transformamos seu veículo com as técnicas mais avançadas de detalhamento, proteção e restauração. Qualidade que você vê e sente.'}
+              {landingSettings.landingPage?.heroSubtitle || 'Transformamos seu veículo com as técnicas mais avançadas de detalhamento, proteção e restauração. Qualidade que você vê e sente.'}
             </motion.p>
             
             <motion.div 
@@ -418,21 +457,21 @@ export default function ShopLanding() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
             <div className="col-span-1 md:col-span-2">
               <div className="flex items-center gap-2 mb-4">
-                {companySettings.logoUrl && <img src={companySettings.logoUrl} className="w-8 h-8 rounded-lg" alt="Logo" />}
-                <span className="text-xl font-bold text-white">{companySettings.name}</span>
+                {landingSettings.logoUrl && <img src={landingSettings.logoUrl} className="w-8 h-8 rounded-lg" alt="Logo" />}
+                <span className="text-xl font-bold text-white">{landingSettings.name}</span>
               </div>
               <p className="text-slate-400 text-sm leading-relaxed max-w-sm mb-6">
                 Elevando o padrão da estética automotiva. Cuidamos do seu carro com a paixão e a técnica que ele merece.
               </p>
               <div className="flex gap-4">
-                {companySettings.instagram && (
-                    <a href={companySettings.instagram} target="_blank" rel="noreferrer" className="p-2 bg-slate-900 border border-slate-800 rounded-lg hover:bg-blue-600 hover:border-blue-600 hover:text-white text-slate-400 transition-all"><Instagram size={20} /></a>
+                {landingSettings.instagram && (
+                    <a href={landingSettings.instagram} target="_blank" rel="noreferrer" className="p-2 bg-slate-900 border border-slate-800 rounded-lg hover:bg-blue-600 hover:border-blue-600 hover:text-white text-slate-400 transition-all"><Instagram size={20} /></a>
                 )}
-                {companySettings.facebook && (
-                    <a href={companySettings.facebook} target="_blank" rel="noreferrer" className="p-2 bg-slate-900 border border-slate-800 rounded-lg hover:bg-blue-600 hover:border-blue-600 hover:text-white text-slate-400 transition-all"><Facebook size={20} /></a>
+                {landingSettings.facebook && (
+                    <a href={landingSettings.facebook} target="_blank" rel="noreferrer" className="p-2 bg-slate-900 border border-slate-800 rounded-lg hover:bg-blue-600 hover:border-blue-600 hover:text-white text-slate-400 transition-all"><Facebook size={20} /></a>
                 )}
-                {companySettings.website && (
-                    <a href={companySettings.website} target="_blank" rel="noreferrer" className="p-2 bg-slate-900 border border-slate-800 rounded-lg hover:bg-blue-600 hover:border-blue-600 hover:text-white text-slate-400 transition-all"><ExternalLink size={20} /></a>
+                {landingSettings.website && (
+                    <a href={landingSettings.website} target="_blank" rel="noreferrer" className="p-2 bg-slate-900 border border-slate-800 rounded-lg hover:bg-blue-600 hover:border-blue-600 hover:text-white text-slate-400 transition-all"><ExternalLink size={20} /></a>
                 )}
               </div>
             </div>
@@ -442,11 +481,11 @@ export default function ShopLanding() {
               <ul className="space-y-3 text-sm text-slate-400">
                 <li className="flex items-start gap-3">
                   <Phone size={18} className="text-blue-500 mt-0.5" /> 
-                  <span>{companySettings.phone}</span>
+                  <span>{landingSettings.phone}</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <MapPin size={18} className="text-blue-500 mt-0.5" /> 
-                  <span>{companySettings.address}</span>
+                  <span>{landingSettings.address}</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <Clock size={18} className="text-blue-500 mt-0.5" /> 
@@ -467,10 +506,10 @@ export default function ShopLanding() {
           
           <div className="pt-8 border-t border-slate-900 flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-xs text-slate-600">
-              &copy; {new Date().getFullYear()} {companySettings.name}. Todos os direitos reservados.
+              &copy; {new Date().getFullYear()} {landingSettings.name}. Todos os direitos reservados.
             </p>
             <p className="text-xs text-slate-700 flex items-center gap-1">
-              Powered by <span className="font-bold text-slate-600">Cristal Care ERP</span>
+              Powered by <span className="font-bold text-slate-600">{platformName}</span>
             </p>
           </div>
         </div>

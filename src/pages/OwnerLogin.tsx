@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { Shield, Lock, Mail, User, Store, ArrowRight, Loader2, CheckCircle2, Eye, EyeOff, AlertCircle, Wifi } from 'lucide-react';
+import { useSuperAdmin } from '../context/SuperAdminContext';
+import { Shield, Lock, Mail, User, Store, ArrowRight, Loader2, CheckCircle2, Eye, EyeOff, AlertCircle, Wifi, ShieldCheck, ArrowLeft } from 'lucide-react';
 
 export default function OwnerLogin() {
   const { loginOwner, registerOwner, ownerUser, isAppLoading } = useApp();
+  const { saasSettings } = useSuperAdmin();
+  const platformName = saasSettings?.platformName || 'Cristal Care ERP';
+
   const navigate = useNavigate();
   const location = useLocation();
   
@@ -63,11 +67,15 @@ export default function OwnerLogin() {
       </div>
 
       <div className="w-full max-w-md relative z-10">
+        <Link to="/product" className="inline-flex items-center gap-2 text-slate-400 hover:text-white mb-6 transition-colors text-sm font-medium">
+            <ArrowLeft size={16} /> Voltar para o Site
+        </Link>
+
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-purple-600 shadow-lg shadow-blue-500/30 mb-4">
             <Shield className="text-white w-8 h-8" />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Cristal Care ERP</h1>
+          <h1 className="text-3xl font-bold text-white mb-2">{platformName}</h1>
           <p className="text-slate-400">Gestão inteligente (Modo Offline)</p>
           
           <div className="mt-4 flex justify-center">
@@ -210,10 +218,15 @@ export default function OwnerLogin() {
                 </button>
             </form>
             
-            <div className="mt-6 text-center">
+            <div className="mt-6 text-center space-y-3">
                 <p className="text-xs text-slate-500">
                     Dica: Use <strong>admin@cristalcare.com</strong> / <strong>123</strong> para testar.
                 </p>
+                <div className="pt-3 border-t border-slate-800">
+                    <Link to="/super-admin/login" className="inline-flex items-center gap-1.5 text-[10px] uppercase font-bold text-slate-600 hover:text-indigo-400 transition-colors tracking-wider">
+                        <ShieldCheck size={12} /> Acesso Super Admin (SaaS)
+                    </Link>
+                </div>
             </div>
         </div>
       </div>

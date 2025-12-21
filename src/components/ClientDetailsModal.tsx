@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, User, Phone, Mail, MapPin, Calendar, Car, 
   History, TrendingUp, MessageCircle, Plus, Zap, Gift, Copy, DollarSign, Save, Loader2,
-  Edit2, Trash2, StickyNote, Calculator, Bot, RefreshCw
+  Edit2, Trash2, StickyNote, Calculator, Bot, RefreshCw, ExternalLink
 } from 'lucide-react';
-import QRCode from 'qrcode';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Client, Vehicle, VEHICLE_SIZES, VehicleSize, ClientPoints } from '../types';
-import { cn, formatCurrency } from '../lib/utils';
+import { cn, formatCurrency, copyToClipboard, formatId } from '../lib/utils';
 import FidelityCard from './FidelityCard';
 import { useDialog } from '../context/DialogContext';
 
@@ -17,6 +17,7 @@ interface ClientDetailsModalProps {
 }
 
 export default function ClientDetailsModal({ client, onClose }: ClientDetailsModalProps) {
+  const navigate = useNavigate();
   const { 
     workOrders, reminders, addVehicle, updateVehicle, removeVehicle, updateClient, 
     getClientPoints, getFidelityCard, createFidelityCard, companySettings, 
@@ -24,7 +25,7 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
     addPointsToClient, subscription, consumeTokens 
   } = useApp();
   
-  const { showConfirm, showAlert } = useDialog();
+  const { showConfirm, showAlert, showOptions } = useDialog();
   const [activeTab, setActiveTab] = useState<'overview' | 'vehicles' | 'history' | 'crm' | 'fidelidade'>('overview');
   const [showAddVehicle, setShowAddVehicle] = useState(false);
   const [shareLink, setShareLink] = useState('');
@@ -101,8 +102,6 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
     setShareLink(`${baseUrl}/client-profile/${client.id}`);
   }, [client.id]);
 
-  // ... (rest of component logic remains same) ...
-  // Sync edit form data when client prop updates
   useEffect(() => {
     setEditFormData({
         name: client.name,
@@ -230,9 +229,18 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
     }
   };
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(shareLink);
-    showAlert({ title: 'Copiado', message: 'Link do cartão copiado!', type: 'success' });
+  const handleCopyLink = async () => {
+    const success = await copyToClipboard(shareLink);
+    if (success) {
+        showAlert({ title: 'Copiado', message: 'Link do cartão copiado!', type: 'success' });
+    } else {
+        showAlert({ title: 'Erro', message: 'Não foi possível copiar o link. Tente selecionar e copiar manualmente.', type: 'error' });
+    }
+  };
+
+  const handleOpenCard = () => {
+    // Navigate internally to avoid new tab issues in WebContainer
+    navigate(`/client-profile/${client.id}`);
   };
 
   const generateReminderMessage = (reminder: any) => {
@@ -243,34 +251,36 @@ Manter essa manutenção em dia é essencial para garantir a proteção e o bril
 Podemos agendar para esta semana?`;
   };
 
+  // --- HYBRID SENDING LOGIC ---
   const handleSendFidelityCard = async () => {
     if (!card) return;
     
     const message = `Olá ${client.name}! 🎁\n\nSeu cartão de fidelidade ${companySettings.name} está pronto!\n\n📊 Status:\n• Pontos: ${points.totalPoints}\n• Nível: ${points.tier.toUpperCase()}\n• Número: ${card.cardNumber}\n\nAdicione ao Wallet para acompanhar em tempo real:\n${shareLink}`;
     
+    let method = 'manual';
+
     if (isWhatsAppConnected) {
-        // Bot Flow
+        method = await showOptions({
+            title: 'Enviar Cartão de Fidelidade',
+            message: 'Como deseja enviar esta mensagem?',
+            options: [
+                { label: '🤖 Automático (1 Token)', value: 'bot', variant: 'primary' },
+                { label: '📱 Manual (WhatsApp Web)', value: 'manual', variant: 'secondary' }
+            ]
+        }) || 'cancel';
+    }
+
+    if (method === 'bot') {
         if ((subscription.tokenBalance || 0) < 1) {
             await showAlert({ title: 'Saldo Insuficiente', message: 'Você precisa de 1 token para enviar via Robô.', type: 'warning' });
             return;
         }
-        
-        const confirm = await showConfirm({
-            title: 'Enviar Cartão via Robô',
-            message: 'Deseja usar 1 Token para enviar o cartão automaticamente?',
-            confirmText: 'Enviar (1 Token)',
-            type: 'info'
-        });
-
-        if (confirm) {
-            if (consumeTokens(1, `Envio Cartão Fidelidade: ${client.name}`)) {
-                await showAlert({ title: 'Enviado', message: 'Cartão enviado para a fila de disparo.', type: 'success' });
-            } else {
-                await showAlert({ title: 'Erro', message: 'Falha ao processar tokens.', type: 'error' });
-            }
+        if (consumeTokens(1, `Envio Cartão Fidelidade: ${client.name}`)) {
+            await showAlert({ title: 'Enviado', message: 'Cartão enviado para a fila de disparo.', type: 'success' });
+        } else {
+            await showAlert({ title: 'Erro', message: 'Falha ao processar tokens.', type: 'error' });
         }
-    } else {
-        // Manual Flow
+    } else if (method === 'manual') {
         const link = getWhatsappLink(client.phone, message);
         window.open(link, '_blank');
     }
@@ -279,29 +289,30 @@ Podemos agendar para esta semana?`;
   const handleSendReminder = async (reminder: any) => {
     const message = generateReminderMessage(reminder);
     
+    let method = 'manual';
+
     if (isWhatsAppConnected) {
-        // Bot Flow
+        method = await showOptions({
+            title: 'Enviar Lembrete',
+            message: 'Como deseja enviar este lembrete?',
+            options: [
+                { label: '🤖 Automático (1 Token)', value: 'bot', variant: 'primary' },
+                { label: '📱 Manual (WhatsApp Web)', value: 'manual', variant: 'secondary' }
+            ]
+        }) || 'cancel';
+    }
+
+    if (method === 'bot') {
         if ((subscription.tokenBalance || 0) < 1) {
             await showAlert({ title: 'Saldo Insuficiente', message: 'Você precisa de 1 token para enviar via Robô.', type: 'warning' });
             return;
         }
-        
-        const confirm = await showConfirm({
-            title: 'Enviar Lembrete via Robô',
-            message: 'Deseja usar 1 Token para enviar este lembrete automaticamente?',
-            confirmText: 'Enviar (1 Token)',
-            type: 'info'
-        });
-
-        if (confirm) {
-            if (consumeTokens(1, `Lembrete Manutenção: ${client.name}`)) {
-                await showAlert({ title: 'Enviado', message: 'Lembrete enviado para a fila de disparo.', type: 'success' });
-            } else {
-                await showAlert({ title: 'Erro', message: 'Falha ao processar tokens.', type: 'error' });
-            }
+        if (consumeTokens(1, `Lembrete Manutenção: ${client.name}`)) {
+            await showAlert({ title: 'Enviado', message: 'Lembrete enviado para a fila de disparo.', type: 'success' });
+        } else {
+            await showAlert({ title: 'Erro', message: 'Falha ao processar tokens.', type: 'error' });
         }
-    } else {
-        // Manual Flow
+    } else if (method === 'manual') {
         const link = getWhatsappLink(client.phone, message);
         window.open(link, '_blank');
     }
@@ -381,10 +392,10 @@ Podemos agendar para esta semana?`;
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-50/50 dark:bg-slate-950/50">
           
-          {/* TAB: OVERVIEW (EDITABLE) */}
+          {/* ... (Other tabs) ... */}
           {activeTab === 'overview' && (
-            // ... (keep existing overview code) ...
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
+              {/* ... (Overview Content - No changes) ... */}
               <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 sm:space-y-4 relative">
                 <div className="flex justify-between items-center mb-2">
                     <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Dados de Contato</h3>
@@ -404,6 +415,7 @@ Podemos agendar para esta semana?`;
 
                 {isEditing ? (
                     <div className="space-y-3 animate-in fade-in">
+                        {/* ... (Edit Form - No changes) ... */}
                         <input 
                             type="text" 
                             value={editFormData.name} 
@@ -522,18 +534,18 @@ Podemos agendar para esta semana?`;
                     <Calculator size={18} className="text-blue-600" />
                     Métricas de Valor (LTV)
                 </h3>
-                <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-3 sm:mb-4">
-                  <div className="p-2 sm:p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Total Gasto</p>
-                    <p className="text-base sm:text-2xl font-bold text-blue-700 dark:text-blue-400 break-all">{formatCurrency(client.ltv || 0)}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 mb-3 sm:mb-4">
+                  <div className="p-3 sm:p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Total Gasto</p>
+                    <p className="text-xl sm:text-2xl font-bold text-blue-700 dark:text-blue-400">{formatCurrency(client.ltv || 0)}</p>
                   </div>
-                  <div className="p-2 sm:p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                    <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Visitas</p>
-                    <p className="text-base sm:text-2xl font-bold text-green-700 dark:text-green-400">{client.visitCount || 0}</p>
+                  <div className="p-3 sm:p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Visitas</p>
+                    <p className="text-xl sm:text-2xl font-bold text-green-700 dark:text-green-400">{client.visitCount || 0}</p>
                   </div>
-                  <div className="p-2 sm:p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                    <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Ticket Médio</p>
-                    <p className="text-base sm:text-2xl font-bold text-purple-700 dark:text-purple-400 break-all">
+                  <div className="p-3 sm:p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Ticket Médio</p>
+                    <p className="text-xl sm:text-2xl font-bold text-purple-700 dark:text-purple-400">
                       {client.visitCount > 0 
                         ? formatCurrency((client.ltv || 0) / client.visitCount) 
                         : 'R$ 0,00'}
@@ -548,19 +560,16 @@ Podemos agendar para esta semana?`;
                     <div className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 p-2 sm:p-3 rounded-lg min-h-[60px] whitespace-pre-wrap">
                         {client.notes || 'Nenhuma observação registrada.'}
                     </div>
-                    <p className="text-[10px] text-slate-400 mt-1 text-right">
-                        * Para alterar as notas, clique em "Editar" acima.
-                    </p>
                     </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* TAB: VEHICLES (EDITABLE) */}
+          {/* ... (Other tabs - Vehicles, History, CRM - No changes needed) ... */}
           {activeTab === 'vehicles' && (
-            // ... (keep existing vehicles code) ...
             <div className="space-y-3 sm:space-y-4">
+              {/* ... (Vehicles content) ... */}
               <div className="flex justify-between items-center gap-2">
                 <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Veículos</h3>
                 <button 
@@ -619,11 +628,11 @@ Podemos agendar para esta semana?`;
                   )}>
                     {editingVehicleId === vehicle.id ? (
                         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg p-6 ring-2 ring-blue-500/20 animate-in fade-in zoom-in-95">
+                            {/* ... Edit Vehicle Form ... */}
                             <div className="flex items-center gap-2 mb-4 pb-2 border-b border-slate-100 dark:border-slate-800">
                                 <Car size={18} className="text-blue-600" />
                                 <h4 className="font-bold text-slate-900 dark:text-white">Editar Veículo</h4>
                             </div>
-                            
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Modelo</label>
@@ -635,6 +644,7 @@ Podemos agendar para esta semana?`;
                                         placeholder="Ex: Toyota Corolla"
                                     />
                                 </div>
+                                {/* ... other fields ... */}
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Placa</label>
                                     <input 
@@ -678,7 +688,6 @@ Podemos agendar para esta semana?`;
                                     </select>
                                 </div>
                             </div>
-
                             <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
                                 <button 
                                     onClick={() => setEditingVehicleId(null)} 
@@ -697,15 +706,12 @@ Podemos agendar para esta semana?`;
                     ) : (
                         // DISPLAY CARD
                         <div className="group relative h-full bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden">
-                            {/* Gradient Background Effect */}
                             <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none transition-transform group-hover:scale-150 duration-500" />
                             
                             <div className="flex justify-between items-start mb-4 relative z-10">
                                 <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 transition-colors duration-300">
                                     <Car size={24} strokeWidth={1.5} />
                                 </div>
-                                
-                                {/* Actions - Slide in from right or fade in */}
                                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
                                     <button 
                                         onClick={() => startEditVehicle(vehicle)} 
@@ -726,7 +732,6 @@ Podemos agendar para esta semana?`;
 
                             <div className="relative z-10">
                                 <h4 className="text-lg font-bold text-slate-900 dark:text-white mb-1 truncate">{vehicle.model}</h4>
-                                
                                 <div className="flex items-center gap-2 mb-4">
                                     <div className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs font-mono font-bold text-slate-700 dark:text-slate-300 tracking-wider">
                                         {vehicle.plate.toUpperCase()}
@@ -735,7 +740,6 @@ Podemos agendar para esta semana?`;
                                         {VEHICLE_SIZES[vehicle.size]?.split(' ')[0]}
                                     </span>
                                 </div>
-                                
                                 <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400 pt-3 border-t border-slate-100 dark:border-slate-800">
                                     <div className="flex items-center gap-1.5">
                                         <div className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600" />
@@ -761,10 +765,8 @@ Podemos agendar para esta semana?`;
 
           {/* TAB: HISTORY */}
           {activeTab === 'history' && (
-            // ... (keep existing history code) ...
             <div className="space-y-3 sm:space-y-4">
               <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Histórico de Serviços</h3>
-              
               {/* Desktop Table View */}
               <div className="hidden sm:block bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
                 <table className="w-full text-left text-sm">
@@ -833,7 +835,6 @@ Podemos agendar para esta semana?`;
 
           {/* TAB: CRM / RETENTION */}
           {activeTab === 'crm' && (
-            // ... (keep existing crm code) ...
             <div className="space-y-3 sm:space-y-6">
               <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-3 sm:p-6 rounded-lg sm:rounded-xl text-white shadow-lg">
                 <h3 className="font-bold text-sm sm:text-lg mb-1 sm:mb-2">Gestão de Ciclo de Vida</h3>
@@ -871,7 +872,7 @@ Podemos agendar para esta semana?`;
                         )}
                       >
                         {isWhatsAppConnected ? <Bot size={16} /> : <MessageCircle size={16} />}
-                        {isWhatsAppConnected ? 'Enviar via Robô (1 Token)' : 'Enviar WhatsApp (Manual)'}
+                        {isWhatsAppConnected ? 'Enviar (Híbrido)' : 'Enviar WhatsApp'}
                       </button>
                     </div>
                   )) : (
@@ -888,7 +889,7 @@ Podemos agendar para esta semana?`;
           {activeTab === 'fidelidade' && companySettings.gamification?.enabled && (
             <div className="space-y-6 max-w-4xl mx-auto">
               {card ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Left Column: Card & Actions */}
                   <div className="space-y-4">
                       <FidelityCard 
@@ -902,22 +903,31 @@ Podemos agendar para esta semana?`;
                           shopName={companySettings.name}
                       />
 
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                           <button
                               onClick={handleSendFidelityCard}
                               className={cn(
-                                "flex items-center justify-center gap-2 px-4 py-3 text-white rounded-lg font-bold text-sm transition-all",
+                                "flex items-center justify-center gap-2 px-2 py-3 text-white rounded-lg font-bold text-xs transition-all",
                                 isWhatsAppConnected ? "bg-purple-600 hover:bg-purple-700" : "bg-green-600 hover:bg-green-700"
                               )}
+                              title="Enviar para o cliente"
                           >
-                              {isWhatsAppConnected ? <Bot size={18} /> : <MessageCircle size={18} />}
-                              {isWhatsAppConnected ? 'Enviar (Robô)' : 'Enviar no Zap'}
+                              {isWhatsAppConnected ? <Bot size={16} /> : <MessageCircle size={16} />}
+                              {isWhatsAppConnected ? 'Enviar' : 'Enviar'}
+                          </button>
+                          <button
+                              onClick={handleOpenCard}
+                              className="flex items-center justify-center gap-2 px-2 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs transition-all"
+                              title="Abrir cartão na mesma aba"
+                          >
+                              <ExternalLink size={16} /> Visualizar
                           </button>
                           <button
                               onClick={handleCopyLink}
-                              className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-bold text-sm transition-all"
+                              className="flex items-center justify-center gap-2 px-2 py-3 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-bold text-xs transition-all"
+                              title="Copiar link"
                           >
-                              <Copy size={18} /> Copiar Link
+                              <Copy size={16} /> Copiar
                           </button>
                       </div>
                       <p className="text-xs text-center text-slate-500">
@@ -985,6 +995,31 @@ Podemos agendar para esta semana?`;
                                               <span className="text-[10px] bg-green-100 text-green-800 px-2 py-0.5 rounded-full">Ativo</span>
                                           </div>
                                           <p className="text-xs text-slate-500">{r.rewardName}</p>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+                      )}
+
+                      {/* Histórico de Uso */}
+                      {redemptions.filter(r => r.status === 'used').length > 0 && (
+                          <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-4 rounded-lg">
+                              <h4 className="font-bold text-slate-700 dark:text-slate-300 text-sm mb-3 flex items-center gap-2">
+                                  <History size={16} /> Histórico de Uso
+                              </h4>
+                              <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                                  {redemptions.filter(r => r.status === 'used').map(r => (
+                                      <div key={r.id} className="bg-white dark:bg-slate-900 p-3 rounded border border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                                          <div>
+                                              <p className="font-bold text-slate-900 dark:text-white text-xs">{r.rewardName}</p>
+                                              <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                  Usado em: {new Date(r.usedAt!).toLocaleDateString()} 
+                                                  {r.usedInWorkOrderId && ` • OS ${formatId(r.usedInWorkOrderId)}`}
+                                              </p>
+                                          </div>
+                                          <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full font-mono line-through opacity-70">
+                                              {r.code}
+                                          </span>
                                       </div>
                                   ))}
                               </div>

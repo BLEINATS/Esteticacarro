@@ -24,7 +24,13 @@ export default function ServiceModal({ service, onClose }: ServiceModalProps) {
 
   useEffect(() => {
     if (service) {
-      setFormData(service);
+      setFormData({
+        ...service,
+        description: service.description || '',
+        imageUrl: service.imageUrl || '',
+        returnIntervalDays: service.returnIntervalDays || 0,
+        showOnLandingPage: service.showOnLandingPage !== undefined ? service.showOnLandingPage : true
+      });
     }
   }, [service]);
 
@@ -88,7 +94,7 @@ export default function ServiceModal({ service, onClose }: ServiceModalProps) {
               <input 
                 type="text" 
                 required
-                value={formData.name}
+                value={formData.name || ''}
                 onChange={e => setFormData({...formData, name: e.target.value})}
                 placeholder="Ex: Polimento Técnico 3 Etapas"
                 className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white placeholder-slate-400"
@@ -102,7 +108,7 @@ export default function ServiceModal({ service, onClose }: ServiceModalProps) {
               <input 
                 type="text" 
                 required
-                value={formData.category}
+                value={formData.category || ''}
                 onChange={e => setFormData({...formData, category: e.target.value})}
                 placeholder="Ex: Estética"
                 className="w-full px-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white placeholder-slate-400"
@@ -115,7 +121,7 @@ export default function ServiceModal({ service, onClose }: ServiceModalProps) {
                 <input 
                   type="number" 
                   required
-                  value={formData.standardTimeMinutes}
+                  value={formData.standardTimeMinutes || 0}
                   onChange={e => setFormData({...formData, standardTimeMinutes: parseInt(e.target.value)})}
                   className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white placeholder-slate-400"
                 />
@@ -128,7 +134,7 @@ export default function ServiceModal({ service, onClose }: ServiceModalProps) {
             <div className="relative">
               <FileText className="absolute left-3 top-3 text-slate-400" size={18} />
               <textarea 
-                value={formData.description}
+                value={formData.description || ''}
                 onChange={e => setFormData({...formData, description: e.target.value})}
                 rows={3}
                 placeholder="Descreva o que está incluso neste serviço..."
@@ -145,7 +151,7 @@ export default function ServiceModal({ service, onClose }: ServiceModalProps) {
                     <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input 
                         type="text" 
-                        value={formData.imageUrl}
+                        value={formData.imageUrl || ''}
                         onChange={e => setFormData({...formData, imageUrl: e.target.value})}
                         placeholder="Cole a URL da imagem..."
                         className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white placeholder-slate-400"
@@ -171,7 +177,7 @@ export default function ServiceModal({ service, onClose }: ServiceModalProps) {
                     <RotateCcw className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input 
                     type="number" 
-                    value={formData.returnIntervalDays}
+                    value={formData.returnIntervalDays || ''}
                     onChange={e => setFormData({...formData, returnIntervalDays: parseInt(e.target.value)})}
                     placeholder="0 = Sem alerta"
                     className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white placeholder-slate-400"

@@ -16,11 +16,13 @@ import Marketing from './pages/Marketing';
 import Schedule from './pages/Schedule';
 import Settings from './pages/Settings';
 import ShopLanding from './pages/ShopLanding';
+import SaaSLanding from './pages/SaaSLanding';
 import Gamification from './pages/Gamification';
 import ClientProfile from './pages/ClientProfile';
 import OwnerLogin from './pages/OwnerLogin';
 import TermsOfService from './pages/TermsOfService';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import ServiceTracker from './pages/ServiceTracker'; 
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Super Admin Pages
@@ -31,6 +33,7 @@ import Tenants from './pages/super-admin/Tenants';
 import Plans from './pages/super-admin/Plans';
 import SaaSMetrics from './pages/super-admin/SaaSMetrics';
 import SuperAdminSettings from './pages/super-admin/SuperAdminSettings';
+import SaaSFinance from './pages/super-admin/SaaSFinance';
 
 function App() {
   return (
@@ -39,9 +42,11 @@ function App() {
         <DialogProvider>
           <BrowserRouter>
             <Routes>
+              {/* Landing Page do Produto (SaaS) */}
+              <Route path="/product" element={<SaaSLanding />} />
+              
               {/* Rotas Públicas (Acesso sem login) */}
               <Route path="/shop" element={<ShopLanding />} />
-              {/* Rota com ID da Loja (Slug) */}
               <Route path="/shop/:shopId" element={<ShopLanding />} />
               
               <Route path="/login" element={<OwnerLogin />} />
@@ -50,6 +55,9 @@ function App() {
               
               {/* ROTA PÚBLICA DO CARTÃO DE FIDELIDADE (WALLET) */}
               <Route path="/client-profile/:clientId" element={<ClientProfile />} />
+
+              {/* ROTA PÚBLICA DE RASTREAMENTO DE SERVIÇO */}
+              <Route path="/track/:orderId" element={<ServiceTracker />} />
 
               {/* Portal do Técnico (Standalone - Sem Sidebar de Admin) */}
               <Route path="/tech-portal" element={<TechPortal />} />
@@ -77,6 +85,7 @@ function App() {
               <Route path="/super-admin/login" element={<SuperAdminLogin />} />
               <Route path="/super-admin" element={<SuperAdminLayout />}>
                 <Route path="dashboard" element={<SaaSDashboard />} />
+                <Route path="finance" element={<SaaSFinance />} />
                 <Route path="tenants" element={<Tenants />} />
                 <Route path="plans" element={<Plans />} />
                 <Route path="metrics" element={<SaaSMetrics />} />
