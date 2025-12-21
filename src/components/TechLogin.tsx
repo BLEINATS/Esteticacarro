@@ -1,13 +1,19 @@
 import React, { useState } from 'react';
-import { Lock, ChevronRight, Delete } from 'lucide-react';
+import { Lock, ChevronRight, Delete, Store, Search, Loader2, LogOut } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { cn } from '../lib/utils';
+import { db } from '../lib/db';
 
 export default function TechLogin() {
-  const { employees, login } = useApp();
+  const { employees, login, reloadUserData, ownerUser, logoutOwner } = useApp();
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
+  
+  // State for "Find Shop" (Kiosk Mode Setup)
+  const [shopEmail, setShopEmail] = useState('');
+  const [isSearchingShop, setIsSearchingShop] = useState(false);
+  const [shopError, setShopError] = useState('');
 
   const handleNumClick = (num: string) => {
     if (pin.length < 4) {
@@ -29,6 +35,116 @@ export default function TechLogin() {
     }
   };
 
+  const handleFindShop = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setIsSearchingShop(true);
+      setShopError('');
+      
+      try {
+          // Try to find user by email to get tenant
+          const user = await db.findUserByEmail(shopEmail);
+          if (user) {
+              // Simulate login to load tenant data into context
+              // In a real app, we might have a public endpoint to get basic tenant info for kiosk
+              // Here we reuse the local storage mechanism for the prototype
+              localStorage.setItem('cristal_care_user', JSON.stringify({ id: user.id, name: user.name, email: user.email, shopName: user.shopName }));
+              await reloadUserData(); // Force context to reload data
+          } else {
+              setShopError('Loja não encontrada com este e-mail.');
+          }
+      } catch (err) {
+          setShopError('Erro ao buscar loja.');
+      } finally {
+          setIsSearchingShop(false);
+      }
+  };
+
+  const handleDisconnect = async () => {
+      await logoutOwner();
+      window.location.reload();
+  };
+
+  // CASE 0: SHOP CONNECTED BUT NO EMPLOYEES
+  if (ownerUser && employees.length === 0) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 animate-in fade-in">
+            <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl text-center">
+                <div className="w-16 h-16 bg-amber-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4 text-amber-500">
+                    <Store size={32} />
+                </div>
+                <h1 className="text-2xl font-bold text-white mb-2">{ownerUser.shopName}</h1>
+                <p className="text-slate-400 text-sm mb-6">
+                    Loja conectada com sucesso, mas nenhum funcionário foi encontrado.
+                </p>
+                <div className="bg-slate-800 p-4 rounded-xl text-xs text-slate-300 mb-6">
+                    Acesse o painel administrativo para cadastrar sua equipe e gerar os PINs de acesso.
+                </div>
+                <button 
+                    onClick={handleDisconnect}
+                    className="flex items-center justify-center gap-2 w-full py-3 border border-red-900/50 text-red-400 hover:bg-red-900/20 rounded-xl transition-colors font-bold"
+                >
+                    <LogOut size={16} /> Desconectar
+                </button>
+            </div>
+        </div>
+      );
+  }
+
+  // CASE 1: NO EMPLOYEES LOADED (Fresh Device / Kiosk Setup)
+  if (employees.length === 0) {
+      return (
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 animate-in fade-in">
+            <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
+                <div className="text-center mb-8">
+                    <div className="w-16 h-16 bg-blue-600/20 rounded-2xl flex items-center justify-center mx-auto mb-4 text-blue-500">
+                        <Store size={32} />
+                    </div>
+                    <h1 className="text-2xl font-bold text-white">Configurar Quiosque</h1>
+                    <p className="text-slate-400 text-sm mt-2">
+                        Este dispositivo ainda não está vinculado a uma oficina. Digite o e-mail do administrador para conectar.
+                    </p>
+                </div>
+
+                <form onSubmit={handleFindShop} className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">E-mail do Dono</label>
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                            <input 
+                                type="email" 
+                                value={shopEmail}
+                                onChange={e => setShopEmail(e.target.value)}
+                                className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-blue-500 transition-all"
+                                placeholder="admin@exemplo.com"
+                                required
+                            />
+                        </div>
+                    </div>
+
+                    {shopError && (
+                        <p className="text-red-400 text-xs text-center bg-red-500/10 p-2 rounded-lg">{shopError}</p>
+                    )}
+
+                    <button 
+                        type="submit"
+                        disabled={isSearchingShop}
+                        className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                        {isSearchingShop ? <Loader2 className="animate-spin" size={20} /> : 'Conectar Oficina'}
+                    </button>
+                </form>
+                
+                <div className="mt-6 text-center">
+                    <a href="/login" className="text-xs text-slate-500 hover:text-white transition-colors">
+                        Voltar para Login Admin
+                    </a>
+                </div>
+            </div>
+        </div>
+      );
+  }
+
+  // CASE 2: SELECT USER PROFILE
   if (!selectedUser) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 animate-in fade-in">
@@ -41,7 +157,7 @@ export default function TechLogin() {
             <p className="text-slate-500 dark:text-slate-400">Selecione seu perfil para acessar.</p>
           </div>
           
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-1 gap-3 max-h-[60vh] overflow-y-auto pr-2">
             {employees.filter(e => e.active).map(emp => (
               <button
                 key={emp.id}
@@ -59,11 +175,18 @@ export default function TechLogin() {
               </button>
             ))}
           </div>
+          
+          <div className="mt-8 text-center">
+             <button onClick={handleDisconnect} className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                 Sair do Modo Quiosque
+             </button>
+          </div>
         </div>
       </div>
     );
   }
 
+  // CASE 3: ENTER PIN
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 animate-in slide-in-from-right">
       <div className="w-full max-w-xs">

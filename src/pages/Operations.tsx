@@ -10,6 +10,7 @@ import { useApp } from '../context/AppContext';
 import WorkOrderModal from '../components/WorkOrderModal';
 import ClientModal from '../components/ClientModal';
 import { WorkOrder } from '../types';
+import { useLocation } from 'react-router-dom';
 
 const StatusBadge = ({ status }: { status: string }) => {
   const styles = {
@@ -32,6 +33,7 @@ const StatusBadge = ({ status }: { status: string }) => {
 
 export default function Operations() {
   const { workOrders, clients } = useApp();
+  const location = useLocation();
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
   const [selectedOS, setSelectedOS] = useState<WorkOrder | null>(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
@@ -43,6 +45,17 @@ export default function Operations() {
   const [scrollLeft, setScrollLeft] = useState(0);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(true);
+
+  // Handle navigation from Global Search
+  useEffect(() => {
+    if (location.state && (location.state as any).selectedOrderId) {
+      const orderId = (location.state as any).selectedOrderId;
+      const os = workOrders.find(o => o.id === orderId);
+      if (os) {
+        setSelectedOS(os);
+      }
+    }
+  }, [location.state, workOrders]);
 
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Cliente Desconhecido';
 

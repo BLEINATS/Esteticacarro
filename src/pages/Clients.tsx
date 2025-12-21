@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, UserPlus, Filter, TrendingUp, Users, AlertCircle, Trash2, Eye, Calendar, MessageCircle, Clock, Star, Heart } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Client } from '../types';
@@ -7,6 +7,7 @@ import ClientModal from '../components/ClientModal';
 import ClientDetailsModal from '../components/ClientDetailsModal';
 import { useDialog } from '../context/DialogContext';
 import { differenceInDays } from 'date-fns';
+import { useLocation } from 'react-router-dom';
 
 export default function Clients() {
   const { clients, deleteClient, getWhatsappLink, subscription, consumeTokens, companySettings } = useApp();
@@ -17,7 +18,19 @@ export default function Clients() {
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [activeFilter, setActiveFilter] = useState<'all' | 'vip' | 'risk' | 'inactive' | 'new'>('all');
 
+  const location = useLocation();
   const isWhatsAppConnected = companySettings.whatsapp.session.status === 'connected';
+
+  // Handle navigation from Global Search
+  useEffect(() => {
+    if (location.state && (location.state as any).selectedClientId) {
+      const clientId = (location.state as any).selectedClientId;
+      setSelectedClientId(clientId);
+      
+      // Optional: Clear state to prevent reopening on refresh, though React Router handles this well usually.
+      // window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   // Filter Logic
   const filteredClients = clients.filter(client => {

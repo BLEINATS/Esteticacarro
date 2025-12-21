@@ -5,11 +5,12 @@ import {
   Package, Settings, LogOut, Menu, X, 
   Bell, Search, Globe, UserCircle,
   Megaphone, DollarSign, Trophy, Tags,
-  Check, Trash2, Info, AlertTriangle, CheckCircle2, Bot, Store, Save, Loader2, RefreshCw
+  Check, Trash2, Info, AlertTriangle, CheckCircle2, Bot, Store, Save, Loader2, RefreshCw,
+  Car, FileText, ChevronRight, Tablet
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useDialog } from '../context/DialogContext';
-import { cn } from '../lib/utils';
+import { cn, formatCurrency, formatId } from '../lib/utils';
 import AIAssistant from './AIAssistant';
 
 export default function Layout() {
@@ -17,9 +18,19 @@ export default function Layout() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   
+  // Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  
   const location = useLocation();
   const navigate = useNavigate();
-  const { notifications, markNotificationAsRead, clearAllNotifications, ownerUser, logoutOwner, subscription, tenantId, createTenant, companySettings } = useApp();
+  const { 
+    notifications, markNotificationAsRead, clearAllNotifications, 
+    ownerUser, logoutOwner, subscription, tenantId, createTenant, companySettings,
+    clients, workOrders, inventory
+  } = useApp();
   const { showConfirm, showAlert } = useDialog();
 
   // Store Creation State
@@ -34,10 +45,63 @@ export default function Layout() {
       if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
         setIsNotificationsOpen(false);
       }
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowSearchResults(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    const lowerQuery = searchQuery.toLowerCase();
+    const results: any[] = [];
+
+    // Search Clients
+    clients.forEach(c => {
+      if (c.name.toLowerCase().includes(lowerQuery) || c.phone.includes(lowerQuery) || c.email?.toLowerCase().includes(lowerQuery)) {
+        results.push({ type: 'client', data: c, label: c.name, subLabel: c.phone });
+      }
+    });
+
+    // Search Work Orders & Vehicles
+    workOrders.forEach(os => {
+      if (
+        os.id.toLowerCase().includes(lowerQuery) || 
+        os.plate.toLowerCase().includes(lowerQuery) || 
+        os.vehicle.toLowerCase().includes(lowerQuery)
+      ) {
+        results.push({ type: 'order', data: os, label: `${os.vehicle} - ${os.plate}`, subLabel: `OS ${formatId(os.id)} • ${os.status}` });
+      }
+    });
+
+    // Search Inventory
+    inventory.forEach(i => {
+      if (i.name.toLowerCase().includes(lowerQuery)) {
+        results.push({ type: 'inventory', data: i, label: i.name, subLabel: `${i.stock} ${i.unit} em estoque` });
+      }
+    });
+
+    setSearchResults(results.slice(0, 8)); // Limit to 8 results
+  }, [searchQuery, clients, workOrders, inventory]);
+
+  const handleSearchResultClick = (result: any) => {
+    setShowSearchResults(false);
+    setSearchQuery('');
+
+    if (result.type === 'client') {
+      navigate('/clients', { state: { selectedClientId: result.data.id } });
+    } else if (result.type === 'order') {
+      navigate('/operations', { state: { selectedOrderId: result.data.id } });
+    } else if (result.type === 'inventory') {
+      navigate('/inventory', { state: { searchTerm: result.data.name } });
+    }
+  };
 
   const handleLogout = async () => {
     const confirm = await showConfirm({
@@ -225,6 +289,15 @@ export default function Layout() {
 
           <div className="p-3 border-t border-slate-200 dark:border-slate-800 space-y-1">
             <Link
+              to="/tech-portal"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400"
+              title="Abrir Portal do Técnico (Quiosque)"
+            >
+              <Tablet size={20} className="flex-shrink-0" />
+              <span className="font-medium text-sm">Portal do Técnico</span>
+            </Link>
+
+            <Link
               to={`/shop/${companySettings.slug || ''}`}
               className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
               title="Ver Minha Loja (Público)"
@@ -248,7 +321,7 @@ export default function Layout() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 lg:px-8">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-1">
             <button 
               onClick={() => setIsSidebarOpen(true)}
               className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
@@ -256,13 +329,56 @@ export default function Layout() {
               <Menu size={24} />
             </button>
             
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-500 dark:text-slate-400 w-64">
+            {/* GLOBAL SEARCH */}
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-500 dark:text-slate-400 w-full max-w-md relative" ref={searchRef}>
               <Search size={18} />
               <input 
                 type="text" 
-                placeholder="Buscar em todo o sistema..." 
-                className="bg-transparent border-none focus:ring-0 text-sm w-full outline-none"
+                placeholder="Buscar cliente, placa, OS ou produto..." 
+                className="bg-transparent border-none focus:ring-0 text-sm w-full outline-none text-slate-900 dark:text-white placeholder-slate-400"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setShowSearchResults(true);
+                }}
+                onFocus={() => setShowSearchResults(true)}
               />
+              
+              {/* Search Results Dropdown */}
+              {showSearchResults && searchQuery && (
+                <div className="absolute top-full left-0 w-full mt-2 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden animate-in fade-in zoom-in-95">
+                  {searchResults.length > 0 ? (
+                    <div className="py-2">
+                      <p className="px-4 py-2 text-xs font-bold text-slate-400 uppercase">Resultados</p>
+                      {searchResults.map((result, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleSearchResultClick(result)}
+                          className="w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-3 transition-colors border-b border-slate-50 dark:border-slate-800/50 last:border-0"
+                        >
+                          <div className={cn(
+                            "p-2 rounded-lg flex-shrink-0",
+                            result.type === 'client' ? "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" :
+                            result.type === 'order' ? "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400" :
+                            "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
+                          )}>
+                            {result.type === 'client' ? <Users size={18} /> : result.type === 'order' ? <Car size={18} /> : <Package size={18} />}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-900 dark:text-white">{result.label}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{result.subLabel}</p>
+                          </div>
+                          <ChevronRight size={16} className="ml-auto text-slate-300" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-6 text-center text-slate-500 dark:text-slate-400">
+                      <p className="text-sm">Nenhum resultado encontrado.</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

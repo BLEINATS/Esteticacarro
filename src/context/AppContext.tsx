@@ -585,6 +585,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
   };
 
+  const reloadUserData = async () => {
+    const storedUser = localStorage.getItem('cristal_care_user');
+    if (storedUser) {
+      const user = JSON.parse(storedUser);
+      setOwnerUser(user);
+      await loadTenantData(user.id);
+      return true;
+    }
+    return false;
+  };
+
   // --- NOTIFICATIONS ---
   const addNotification = (notification: Omit<Notification, 'id' | 'read' | 'createdAt'>) => {
       const newNotif: Notification = {
@@ -943,7 +954,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       markAlertResolved: (id) => setSystemAlerts(prev => prev.filter(a => a.id !== id)),
       login: (pin) => { const e = employees.find(emp => emp.pin === pin && emp.active); if(e) { setCurrentUser(e); return true; } return false; }, 
       logout: () => setCurrentUser(null),
-      loginOwner, registerOwner, logoutOwner, updateOwner, createTenant: async () => true, reloadUserData: async () => true,
+      loginOwner, registerOwner, logoutOwner, updateOwner, createTenant: async () => true, reloadUserData,
       addWorkOrder, updateWorkOrder, completeWorkOrder,
       recalculateClientMetrics: () => {}, updateClientLTV: (cid, amt) => { const c = clients.find(cl => cl.id === cid); if (c) updateClient(cid, { ltv: (c.ltv || 0) + amt }); },
       updateClientVisits: (cid, amt) => { const c = clients.find(cl => cl.id === cid); if (c) updateClient(cid, { visitCount: (c.visitCount || 0) + amt }); },

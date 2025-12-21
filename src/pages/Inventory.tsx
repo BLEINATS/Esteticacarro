@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Package, AlertTriangle, Search, Plus, Info, Trash2, Pencil, CheckCircle2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatCurrency, cn } from '../lib/utils';
 import InventoryModal from '../components/InventoryModal';
 import { InventoryItem } from '../types';
 import { useDialog } from '../context/DialogContext';
+import { useLocation } from 'react-router-dom';
 
 export default function Inventory() {
   const { inventory, deleteInventoryItem } = useApp();
@@ -13,6 +14,15 @@ export default function Inventory() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'critical' | 'warning'>('all');
+
+  const location = useLocation();
+
+  // Handle navigation from Global Search
+  useEffect(() => {
+    if (location.state && (location.state as any).searchTerm) {
+      setSearchTerm((location.state as any).searchTerm);
+    }
+  }, [location.state]);
 
   const filteredInventory = inventory.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || item.category.toLowerCase().includes(searchTerm.toLowerCase());

@@ -309,8 +309,8 @@ export default function TechPortal() {
                     className="w-full p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between hover:border-blue-500 transition-all text-left"
                   >
                     <div>
-                      <p className="font-bold text-slate-900 dark:text-white">{vehicle.plate}</p>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">{vehicle.model}</p>
+                      <p className="font-bold text-slate-900 dark:text-white">{vehicle.plate} - {vehicle.model}</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">{client.name}</p>
                     </div>
                     <ChevronRight className="text-slate-300" />
                   </button>

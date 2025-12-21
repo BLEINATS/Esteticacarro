@@ -38,7 +38,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const [activeTab, setActiveTab] = useState<'reception' | 'execution' | 'quality' | 'finance'>('reception');
   const [isSaving, setIsSaving] = useState(false);
 
-  // ... (rest of state definitions remain the same) ...
   const [selectedClientId, setSelectedClientId] = useState<string>(workOrder.clientId || '');
   const [clientSearch, setClientSearch] = useState('');
   const [showClientList, setShowClientList] = useState(false);
@@ -88,7 +87,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const [voucherCode, setVoucherCode] = useState('');
   const [appliedVoucher, setAppliedVoucher] = useState<string | null>(null);
   
-  // NEW: Campaign Attribution
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>(workOrder.campaignId || '');
 
   const [servicePrice, setServicePrice] = useState<number>(() => {
@@ -122,10 +120,13 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const isWhatsAppConnected = companySettings.whatsapp.session.status === 'connected';
 
   const filteredClients = clientSearch.length > 0 
-    ? clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.phone.includes(clientSearch))
+    ? clients.filter(c => 
+        c.name.toLowerCase().includes(clientSearch.toLowerCase()) || 
+        c.phone.includes(clientSearch) ||
+        c.vehicles.some(v => v.plate.toLowerCase().includes(clientSearch.toLowerCase()))
+      )
     : [];
 
-  // ... (useEffect hooks remain the same) ...
   useEffect(() => {
     if (workOrder.clientId && workOrder.clientId !== 'c1' && workOrder.clientId !== '') {
         const c = clients.find(cl => cl.id === workOrder.clientId);
@@ -202,17 +203,23 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
   }, [workOrder.service]);
 
-  // ... (handlers remain the same) ...
   const handleClientSelect = (client: any) => {
     setSelectedClientId(client.id);
     setClientSearch(client.name);
     setShowClientList(false);
-    if (client.vehicles.length > 0) {
-        const v = client.vehicles[0];
-        setSelectedVehiclePlate(v.plate);
+    
+    const matchedVehicle = client.vehicles.find((v: any) => 
+      v.plate.toLowerCase().includes(clientSearch.toLowerCase())
+    );
+
+    if (matchedVehicle) {
+      setSelectedVehiclePlate(matchedVehicle.plate);
+    } else if (client.vehicles.length > 0) {
+      const v = client.vehicles[0];
+      setSelectedVehiclePlate(v.plate);
     } else {
-        setSelectedVehiclePlate('');
-        setIsAddingVehicle(true);
+      setSelectedVehiclePlate('');
+      setIsAddingVehicle(true);
     }
   };
 
@@ -291,7 +298,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       paymentStatus: isPaid ? 'paid' : 'pending',
       paymentMethod: isPaid ? paymentMethod : undefined,
       paidAt: isPaid ? paymentDate : undefined,
-      campaignId: selectedCampaignId // Save attribution
+      campaignId: selectedCampaignId
     };
   };
 
@@ -399,9 +406,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       }
   };
 
-  // ... (Other handlers like handleRegisterPayment, handleUndoPayment, handleApplyVoucher, handleAddDamage, handleSaveDamage, handlePhotoCapture, handleLogPhotoSelect, handleAddLog, handleQuickAfterPhoto, handleStatusChange, handleNPS, handlePrint, handleSendWhatsApp) ...
-  // ... (Keeping them as is, just showing handleSendTrackingLink update) ...
-
   const handleRegisterPayment = async () => {
     const currentData = getUpdatedOrderData();
     const amountToPay = currentData.totalValue || 0;
@@ -425,7 +429,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             type: 'income',
             date: paymentDate,
             dueDate: paymentDate,
-            method: paymentMethod,
+            method: paymentMethod as any,
             status: 'paid'
         };
         
@@ -523,11 +527,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       }
       setAppliedVoucher(voucherCode);
       
-      // AUTO-LINK CAMPAIGN IF VOUCHER IS RELATED (Mock logic: if voucher code contains campaign prefix)
-      // In a real scenario, Redemption would have a campaignId field.
-      // For now, we can try to guess or just leave it.
-      // Better: Let's assume the user manually selects the campaign if not automated.
-      
       await showAlert({ title: 'Sucesso', message: `Voucher ${voucherCode} aplicado! O desconto foi configurado.`, type: 'success' });
     }
   };
@@ -614,10 +613,10 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const canComplete = qaList.every(q => !q.required || q.checked);
 
   const handleStatusChange = async (newStatus: WorkOrder['status']) => {
-    if (newStatus === 'Entregue' && !canComplete) {
+    if ((newStatus === 'Entregue' || newStatus === 'Concluído') && !canComplete) {
       await showAlert({
         title: 'Controle de Qualidade',
-        message: 'Opa! Precisamos completar o Checklist de Qualidade antes de entregar o carro.',
+        message: 'Opa! Precisamos completar o Checklist de Qualidade antes de finalizar o serviço.',
         type: 'warning'
       });
       return;
@@ -700,8 +699,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
     const htmlContent = WorkOrderPrintTemplate({ workOrder: printOrder, client: selectedClient });
     
-    // ... (Print logic inside template function or similar) ...
-    // Reusing existing print logic
     const printContent = `
       <!DOCTYPE html>
       <html>
@@ -888,7 +885,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   };
 
   const handlePreviewTracking = () => {
-      // Navegação interna para evitar bloqueio de pop-up do ambiente de desenvolvimento
       navigate(`/track/${workOrder.id}`);
   };
 
@@ -913,14 +909,11 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-2 sm:p-4">
-      {/* ... (rest of the modal content) ... */}
       {isClientModalOpen && <ClientModal onClose={() => setIsClientModalOpen(false)} />}
       {isSignaturePadOpen && <SignaturePad onSave={handleSignatureSave} onClose={() => setIsSignaturePadOpen(false)} />}
       
-      {/* ... (Damage Modal) ... */}
       {isDamageModalOpen && (
         <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          {/* ... (Damage Modal Content) ... */}
           <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
              <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold text-lg text-slate-900 dark:text-white">Registrar Avaria</h3>
@@ -976,9 +969,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
       <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl w-full max-w-5xl max-h-[98vh] sm:max-h-[95vh] flex flex-col shadow-2xl animate-in fade-in zoom-in duration-200 border border-slate-200 dark:border-slate-800">
         
-        {/* Header */}
         <div className="p-3 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start gap-2 sm:gap-0 bg-slate-50/50 dark:bg-slate-900/50">
-          {/* ... (Header content) ... */}
           <div className="w-full sm:w-auto">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-3 mb-1">
               <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">{formatId(workOrder.id)}</h2>
@@ -1072,8 +1063,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-slate-100 dark:border-slate-800 px-2 sm:px-6 overflow-x-auto">
+        <div className="flex w-full border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
           {[
             { id: 'reception', label: 'Recepção & Vistoria', mobileLabel: 'Recepção', icon: ClipboardCheck },
             { id: 'execution', label: 'Execução & Diário', mobileLabel: 'Execução', icon: Hammer },
@@ -1084,36 +1074,31 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={cn(
-                "flex items-center gap-1 sm:gap-2 px-2 sm:px-6 py-3 sm:py-4 text-[10px] sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap",
+                "flex-1 flex items-center justify-center gap-1.5 sm:gap-2 py-3 sm:py-4 text-[10px] sm:text-sm font-medium border-b-2 transition-colors relative",
                 activeTab === tab.id 
-                  ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400" 
-                  : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                  ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400 bg-blue-50/50 dark:bg-blue-900/10" 
+                  : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
               )}
             >
               <tab.icon size={14} className="hidden sm:block" />
-              <tab.icon size={12} className="sm:hidden" />
+              <tab.icon size={16} className="sm:hidden mb-0.5" />
               <span className="hidden sm:inline">{tab.label}</span>
               <span className="sm:hidden">{tab.mobileLabel}</span>
             </button>
           ))}
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-2 sm:p-6 bg-slate-50/30 dark:bg-slate-950/30">
           
-          {/* TAB: RECEPTION */}
           {activeTab === 'reception' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-8">
-              {/* ... (Client & Vehicle Selection - No changes) ... */}
               <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm mb-2">
-                 {/* ... (Client Selection Logic) ... */}
                  <h3 className="font-bold text-slate-900 dark:text-white mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
                     <User size={18} className="text-blue-600" />
                     Dados do Cliente & Veículo
                  </h3>
                  
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
-                    {/* Client Selection */}
                     <div className="relative">
                         <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1.5">Cliente</label>
                         <div className="flex gap-1 sm:gap-2">
@@ -1124,7 +1109,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                                     value={clientSearch}
                                     onChange={(e) => { setClientSearch(e.target.value); setShowClientList(true); }}
                                     onFocus={() => setShowClientList(true)}
-                                    placeholder="Buscar cliente..."
+                                    placeholder="Buscar cliente ou placa..."
                                     className="w-full pl-8 sm:pl-10 pr-2 sm:pr-4 py-2 sm:py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm text-slate-900 dark:text-white"
                                 />
                                 {showClientList && clientSearch && (
@@ -1135,7 +1120,11 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                                                 onClick={() => handleClientSelect(c)}
                                                 className="w-full text-left px-2 sm:px-4 py-1.5 sm:py-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-[10px] sm:text-sm text-slate-700 dark:text-slate-300"
                                             >
-                                                <span className="font-bold">{c.name}</span> <span className="text-[8px] sm:text-xs text-slate-500">({c.phone})</span>
+                                                <span className="font-bold">{c.name}</span> 
+                                                <span className="text-[8px] sm:text-xs text-slate-500 ml-1">
+                                                    ({c.phone}) 
+                                                    {c.vehicles.length > 0 && ` • ${c.vehicles.map(v => v.plate).join(', ')}`}
+                                                </span>
                                             </button>
                                         )) : (
                                             <div className="px-2 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-sm text-slate-500">Nenhum cliente encontrado.</div>
@@ -1153,7 +1142,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                         </div>
                     </div>
 
-                    {/* Vehicle Selection */}
                     <div>
                         <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1.5">Veículo</label>
                         {selectedClientId ? (
@@ -1184,7 +1172,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     </div>
                  </div>
 
-                 {/* Quick Add Vehicle Form */}
                  {isAddingVehicle && selectedClientId && (
                     <div className="mt-2 sm:mt-4 p-2 sm:p-4 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800 animate-in slide-in-from-top-2">
                         <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white mb-2 sm:mb-3">Novo Veículo</h4>
@@ -1205,7 +1192,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                  )}
               </div>
 
-              {/* ... (rest of reception content) ... */}
               <div className="lg:col-span-1 bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                 <h3 className="font-bold text-slate-900 dark:text-white mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
                   <Camera size={18} className="text-blue-600" />
@@ -1215,7 +1201,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
               </div>
 
               <div className="lg:col-span-2 space-y-3 sm:space-y-6">
-                {/* ... (Service Selection) ... */}
                 <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                   <h3 className="font-bold text-slate-900 dark:text-white mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
                     <Wrench size={18} className="text-blue-600" />
@@ -1223,7 +1208,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                   </h3>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
-                    {/* ... (Multi Service Selection) ... */}
                     <div className="relative" ref={dropdownRef}>
                       <label className="block text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-1.5">Serviços a Realizar</label>
                       
@@ -1298,7 +1282,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                   </div>
                 </div>
 
-                {/* ... (Inventory & Signature) ... */}
                 <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                   <h3 className="font-bold text-slate-900 dark:text-white mb-2 sm:mb-4 text-sm sm:text-base">O que ficou no carro? (Inventário)</h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 sm:gap-4">
@@ -1356,18 +1339,14 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             </div>
           )}
 
-          {/* TAB: EXECUTION (DIÁRIO DE OBRA + ESCOPO) */}
           {activeTab === 'execution' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* ... (Execution Content) ... */}
               <div className="lg:col-span-1 space-y-6">
-                 {/* ... (Scope Checklist) ... */}
                  <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                     <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                         <ListTodo size={20} className="text-blue-600" />
                         Escopo do Serviço
                     </h3>
-                    {/* ... */}
                     <div className="space-y-3">
                         {scopeList.length > 0 ? scopeList.map((item, idx) => (
                             <label key={item.id} className={cn(
@@ -1406,7 +1385,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     </div>
                  </div>
 
-                 {/* ... (Gallery) ... */}
                  <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                     <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                         <ImageIcon size={20} className="text-purple-600" />
@@ -1445,9 +1423,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                  </div>
               </div>
 
-              {/* COL 2 & 3: DIÁRIO DE BORDO */}
               <div className="lg:col-span-2 space-y-6">
-                {/* ... (Daily Log) ... */}
                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                   <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                     <CalendarClock size={20} className="text-blue-600" />
@@ -1547,8 +1523,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             </div>
           )}
 
-          {/* ... (Rest of Tabs: Quality, Finance) ... */}
-          {/* TAB: QUALITY (QA) */}
           {activeTab === 'quality' && (
             <div className="max-w-2xl mx-auto">
               <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -1605,15 +1579,14 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                   )}
                   <button 
                     disabled={!canComplete}
-                    onClick={() => handleStatusChange('Entregue')}
+                    onClick={() => handleStatusChange('Concluído')}
                     className="w-full py-4 bg-green-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl font-bold text-lg shadow-lg hover:bg-green-700 transition-all"
                   >
-                    Aprovar Qualidade e Liberar
+                    Aprovar Qualidade e Finalizar
                   </button>
                 </div>
               </div>
 
-              {/* NPS Section (Only visible if Delivered) */}
               {workOrder.status === 'Entregue' && (
                 <div className="mt-8 bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm text-center animate-in slide-in-from-bottom">
                   <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-4">Avaliação do Cliente (NPS)</h3>
@@ -1643,7 +1616,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             </div>
           )}
 
-          {/* TAB: FINANCE */}
           {activeTab === 'finance' && (
             <div className="space-y-6">
               <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -1663,7 +1635,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     </div>
                 </div>
 
-                {/* CAMPAIGN ATTRIBUTION (NEW) */}
                 <div className="mt-6 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
                     <h4 className="font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
                         <Megaphone size={16} className="text-purple-600" />
@@ -1686,7 +1657,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     </div>
                 </div>
 
-                {/* DISCOUNT SECTION */}
                 <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                   <h4 className="font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
                     <Tag size={16} className="text-blue-600" />
@@ -1694,7 +1664,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                   </h4>
                   
                   <div className="space-y-3">
-                    {/* VOUCHER INPUT */}
                     <div className="flex gap-2 items-end">
                       <div className="flex-1">
                         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">Código Promocional (Voucher)</label>
@@ -1705,7 +1674,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                             value={voucherCode}
                             onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
                             placeholder="Ex: DESC-1234"
-                            className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white uppercase"
+                            className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white uppercase"
                           />
                         </div>
                       </div>
@@ -1814,7 +1783,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                   </div>
                 </div>
 
-                {/* --- GAMIFICATION SECTION --- */}
                 {selectedClientId && companySettings.gamification?.enabled && (
                   <div className="mt-6 p-4 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg border border-indigo-100 dark:border-indigo-800">
                     <div className="flex items-center justify-between mb-4">
@@ -1833,7 +1801,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                         const missing = reward.requiredPoints - currentPoints;
                         const progress = Math.min(100, (currentPoints / reward.requiredPoints) * 100);
 
-                        // Helper to claim and apply immediately
                         const handleClaimAndApply = async () => {
                             const confirm = await showConfirm({
                                 title: 'Resgatar Recompensa',
@@ -1845,7 +1812,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                                 const result = claimReward(selectedClientId, reward.id);
                                 if (result.success && result.voucherCode) {
                                     setVoucherCode(result.voucherCode);
-                                    // Apply discount logic immediately
                                     const details = getVoucherDetails(result.voucherCode);
                                     if (details && details.reward) {
                                         if (details.reward.rewardType === 'discount') {
@@ -1876,7 +1842,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                               {canClaim ? (
                                  <button
                                    onClick={handleClaimAndApply}
-                                   disabled={!!appliedVoucher} // Disable if a voucher is already applied
+                                   disabled={!!appliedVoucher}
                                    className="px-3 py-1.5 bg-green-600 disabled:bg-slate-300 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition-colors shadow-sm flex items-center gap-1 whitespace-nowrap"
                                  >
                                    <Gift size={12} /> Usar Agora
@@ -1887,7 +1853,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                                  </span>
                               )}
                             </div>
-                            {/* Progress Bar for locked rewards */}
                             {!canClaim && (
                               <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden mt-2">
                                 <div 
@@ -1907,7 +1872,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                   </div>
                 )}
 
-                {/* FINAL TOTALS */}
                 <div className="flex flex-col gap-3 pt-4 mt-4 border-t border-slate-200 dark:border-slate-700">
                     <div className="flex justify-between py-2 px-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                       <span className="text-sm text-slate-600 dark:text-slate-300">Subtotal</span>
@@ -1930,7 +1894,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     </div>
                 </div>
 
-                {/* --- PAYMENT SECTION --- */}
                 <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
                     <h4 className="font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
                         <CreditCard size={18} className="text-green-600" />

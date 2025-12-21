@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useSuperAdmin } from '../context/SuperAdminContext';
-import { Shield, Lock, Mail, User, Store, ArrowRight, Loader2, CheckCircle2, Eye, EyeOff, AlertCircle, Wifi, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { Shield, Lock, Mail, User, Store, ArrowRight, Loader2, CheckCircle2, Eye, EyeOff, AlertCircle, Wifi, ShieldCheck, ArrowLeft, Wrench, Smartphone } from 'lucide-react';
 
 export default function OwnerLogin() {
   const { loginOwner, registerOwner, ownerUser, isAppLoading } = useApp();
@@ -218,13 +218,21 @@ export default function OwnerLogin() {
                 </button>
             </form>
             
-            <div className="mt-6 text-center space-y-3">
-                <p className="text-xs text-slate-500">
-                    Dica: Use <strong>admin@cristalcare.com</strong> / <strong>123</strong> para testar.
-                </p>
-                <div className="pt-3 border-t border-slate-800">
+            <div className="mt-8 space-y-4">
+                {/* Botão de Acesso Técnico Destacado */}
+                <Link 
+                    to="/tech-portal" 
+                    className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2 border border-slate-700 group"
+                >
+                    <div className="p-1.5 bg-blue-500/20 rounded-lg group-hover:bg-blue-500/30 transition-colors">
+                        <Wrench size={16} className="text-blue-400" />
+                    </div>
+                    <span>Acesso Funcionário / Técnico</span>
+                </Link>
+
+                <div className="text-center pt-2">
                     <Link to="/super-admin/login" className="inline-flex items-center gap-1.5 text-[10px] uppercase font-bold text-slate-600 hover:text-indigo-400 transition-colors tracking-wider">
-                        <ShieldCheck size={12} /> Acesso Super Admin (SaaS)
+                        <ShieldCheck size={12} /> Super Admin
                     </Link>
                 </div>
             </div>
