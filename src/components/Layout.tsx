@@ -6,7 +6,7 @@ import {
   Bell, Search, Globe, UserCircle,
   Megaphone, DollarSign, Trophy, Tags,
   Check, Trash2, Info, AlertTriangle, CheckCircle2, Bot, Store, Save, Loader2, RefreshCw,
-  Car, FileText, ChevronRight, Tablet
+  Car, FileText, ChevronRight, Tablet, Lock
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useDialog } from '../context/DialogContext';
@@ -29,7 +29,7 @@ export default function Layout() {
   const { 
     notifications, markNotificationAsRead, clearAllNotifications, 
     ownerUser, logoutOwner, subscription, tenantId, createTenant, companySettings,
-    clients, workOrders, inventory
+    clients, workOrders, inventory, checkPermission
   } = useApp();
   const { showConfirm, showAlert } = useDialog();
 
@@ -40,6 +40,7 @@ export default function Layout() {
 
   const unreadNotifications = notifications.filter(n => !n.read).length;
 
+  // ... (Keep existing useEffects for search and clicks) ...
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
@@ -62,14 +63,12 @@ export default function Layout() {
     const lowerQuery = searchQuery.toLowerCase();
     const results: any[] = [];
 
-    // Search Clients
     clients.forEach(c => {
       if (c.name.toLowerCase().includes(lowerQuery) || c.phone.includes(lowerQuery) || c.email?.toLowerCase().includes(lowerQuery)) {
         results.push({ type: 'client', data: c, label: c.name, subLabel: c.phone });
       }
     });
 
-    // Search Work Orders & Vehicles
     workOrders.forEach(os => {
       if (
         os.id.toLowerCase().includes(lowerQuery) || 
@@ -80,14 +79,13 @@ export default function Layout() {
       }
     });
 
-    // Search Inventory
     inventory.forEach(i => {
       if (i.name.toLowerCase().includes(lowerQuery)) {
         results.push({ type: 'inventory', data: i, label: i.name, subLabel: `${i.stock} ${i.unit} em estoque` });
       }
     });
 
-    setSearchResults(results.slice(0, 8)); // Limit to 8 results
+    setSearchResults(results.slice(0, 8));
   }, [searchQuery, clients, workOrders, inventory]);
 
   const handleSearchResultClick = (result: any) => {
@@ -202,17 +200,17 @@ export default function Layout() {
   }
 
   const menuItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-    { icon: Calendar, label: 'Agenda', path: '/schedule' },
-    { icon: Users, label: 'Clientes', path: '/clients' },
-    { icon: Wrench, label: 'Operacional', path: '/operations' },
-    { icon: DollarSign, label: 'Financeiro', path: '/finance' },
-    { icon: Package, label: 'Produtos - Estoque', path: '/inventory' },
-    { icon: Tags, label: 'Catálogo & Preços', path: '/pricing' },
-    { icon: Megaphone, label: 'Marketing', path: '/marketing' },
-    { icon: Trophy, label: 'Gamificação & Fidelidade', path: '/gamification' },
-    { icon: Users, label: 'Equipe', path: '/team' },
-    { icon: Settings, label: 'Configurações', path: '/settings' },
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/', feature: 'dashboard' },
+    { icon: Calendar, label: 'Agenda', path: '/schedule', feature: 'agenda' },
+    { icon: Users, label: 'Clientes', path: '/clients', feature: 'clients' },
+    { icon: Wrench, label: 'Operacional', path: '/operations', feature: 'operations' },
+    { icon: DollarSign, label: 'Financeiro', path: '/finance', feature: 'finance' },
+    { icon: Package, label: 'Produtos - Estoque', path: '/inventory', feature: 'inventory' },
+    { icon: Tags, label: 'Catálogo & Preços', path: '/pricing', feature: 'pricing' },
+    { icon: Megaphone, label: 'Marketing', path: '/marketing', feature: 'marketing' },
+    { icon: Trophy, label: 'Gamificação & Fidelidade', path: '/gamification', feature: 'gamification' },
+    { icon: Users, label: 'Equipe', path: '/team', feature: 'team' },
+    { icon: Settings, label: 'Configurações', path: '/settings', feature: 'settings' },
   ];
 
   const getNotificationIcon = (type: string) => {
@@ -252,20 +250,34 @@ export default function Layout() {
           <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
             {menuItems.map((item) => {
               const isActive = location.pathname === item.path;
+              // Check permission (dashboard and settings always allowed)
+              const isAllowed = item.feature === 'dashboard' || item.feature === 'settings' || checkPermission(item.feature);
+              
               return (
                 <Link
                   key={item.path}
-                  to={item.path}
-                  onClick={closeSidebar}
+                  to={isAllowed ? item.path : '#'}
+                  onClick={(e) => {
+                      if (!isAllowed) {
+                          e.preventDefault();
+                          showAlert({ title: 'Upgrade Necessário', message: `O módulo ${item.label} não está incluso no seu plano atual.`, type: 'info' });
+                          return;
+                      }
+                      closeSidebar();
+                  }}
                   className={`
-                    flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group relative
+                    flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors group relative
                     ${isActive 
                       ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' 
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'}
+                    ${!isAllowed ? 'opacity-50 cursor-not-allowed' : ''}
                   `}
                 >
-                  <item.icon size={20} className={`flex-shrink-0 ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`} />
-                  <span className="font-medium text-sm">{item.label}</span>
+                  <div className="flex items-center gap-3">
+                    <item.icon size={20} className={`flex-shrink-0 ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`} />
+                    <span className="font-medium text-sm">{item.label}</span>
+                  </div>
+                  {!isAllowed && <Lock size={14} className="text-slate-400" />}
                 </Link>
               );
             })}

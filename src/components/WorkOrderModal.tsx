@@ -648,25 +648,13 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       if (selectedClient) {
         const msg = `Olá ${selectedClient.name}! O serviço no seu ${selectedVehicleObj?.model || 'veículo'} foi concluído com sucesso. Valor Total: ${formatCurrency(fullOrderSnapshot.totalValue)}. Aguardamos sua retirada!`;
         
-        let method = 'manual';
         if (isWhatsAppConnected) {
-            method = await showOptions({
-                title: 'Avisar Cliente',
-                message: 'Serviço concluído! Como deseja avisar o cliente?',
-                options: [
-                    { label: '🤖 Robô (1 Token)', value: 'bot', variant: 'primary' },
-                    { label: '📱 Manual (WhatsApp)', value: 'manual', variant: 'secondary' }
-                ]
-            }) || 'cancel';
-        }
-
-        if (method === 'bot') {
             if (consumeTokens(1, `Aviso Conclusão OS #${workOrder.id}`)) {
-                showAlert({ title: 'Aviso Enviado', message: 'Mensagem de conclusão enviada via Robô.', type: 'success' });
+                showAlert({ title: 'Aviso Enviado', message: 'Mensagem de conclusão enviada via Robô! (1 Token usado)', type: 'success' });
             } else {
                 showAlert({ title: 'Erro no Envio', message: 'Saldo de tokens insuficiente para envio automático.', type: 'warning' });
             }
-        } else if (method === 'manual') {
+        } else {
             window.open(getWhatsappLink(selectedClient.phone, msg), '_blank');
         }
       }
@@ -815,20 +803,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
     const message = `Olá ${selectedClient.name}! 👋\n\nSua Ordem de Serviço foi registrada:\n\n📋 *OS ${formatId(workOrder.id)}*\n🚗 ${currentData.vehicle} - ${currentData.plate}\n🔧 Serviço: ${currentData.service}\n💰 Valor: ${formatCurrency(currentData.totalValue || 0)}${itemsText}\n⏱️ Prazo: ${workOrder.deadline}\n\nStatus: ${currentStatus}\n\nAguardamos sua confirmação!\n\n${companySettings.name}`;
     
-    let method = 'manual';
-
     if (isWhatsAppConnected) {
-        method = await showOptions({
-            title: 'Enviar OS',
-            message: 'Como deseja enviar esta Ordem de Serviço?',
-            options: [
-                { label: '🤖 Automático (1 Token)', value: 'bot', variant: 'primary' },
-                { label: '📱 Manual (WhatsApp Web)', value: 'manual', variant: 'secondary' }
-            ]
-        }) || 'cancel';
-    }
-
-    if (method === 'bot') {
         if ((subscription.tokenBalance || 0) < 1) {
             await showAlert({
                 title: 'Saldo Insuficiente',
@@ -839,11 +814,11 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         }
 
         if (consumeTokens(1, `Envio OS #${workOrder.id}`)) {
-            await showAlert({ title: 'Enviado', message: 'Mensagem enviada para a fila de disparo do Robô.', type: 'success' });
+            await showAlert({ title: 'Enviado', message: 'OS enviada automaticamente! (1 Token usado)', type: 'success' });
         } else {
             await showAlert({ title: 'Erro', message: 'Falha ao processar tokens.', type: 'error' });
         }
-    } else if (method === 'manual') {
+    } else {
         window.open(getWhatsappLink(selectedClient.phone, message), '_blank');
     }
   };
@@ -861,25 +836,13 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     const trackingLink = `${window.location.origin}/track/${workOrder.id}`;
     const message = `Olá ${selectedClient.name}! 🚗\n\nAcompanhe o serviço do seu ${selectedVehicleObj?.model || 'veículo'} em tempo real, com fotos e status:\n${trackingLink}\n\nQualquer dúvida, estamos à disposição!`;
 
-    let method = 'manual';
     if (isWhatsAppConnected) {
-        method = await showOptions({
-            title: 'Enviar Link de Acompanhamento',
-            message: 'Como deseja enviar o link?',
-            options: [
-                { label: '🤖 Automático (1 Token)', value: 'bot', variant: 'primary' },
-                { label: '📱 Manual (WhatsApp)', value: 'manual', variant: 'secondary' }
-            ]
-        }) || 'cancel';
-    }
-
-    if (method === 'bot') {
         if (consumeTokens(1, `Link Acompanhamento OS #${workOrder.id}`)) {
-            await showAlert({ title: 'Enviado', message: 'Link enviado com sucesso!', type: 'success' });
+            await showAlert({ title: 'Enviado', message: 'Link enviado automaticamente! (1 Token usado)', type: 'success' });
         } else {
             await showAlert({ title: 'Erro', message: 'Saldo insuficiente.', type: 'warning' });
         }
-    } else if (method === 'manual') {
+    } else {
         window.open(getWhatsappLink(selectedClient.phone, message), '_blank');
     }
   };
@@ -1054,7 +1017,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                 )}
             >
                 {isWhatsAppConnected ? <Bot size={14} /> : <Send size={14} />} 
-                <span className="hidden sm:inline">{isWhatsAppConnected ? 'Enviar (Híbrido)' : 'WhatsApp'}</span>
+                <span className="hidden sm:inline">{isWhatsAppConnected ? 'Enviar (Auto)' : 'WhatsApp'}</span>
                 <span className="sm:hidden">{isWhatsAppConnected ? 'Robô' : 'WA'}</span>
             </button>
             <button onClick={onClose} className="p-1.5 sm:p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors">
@@ -1722,7 +1685,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                             max="100"
                             value={discountAmount}
                             onChange={(e) => setDiscountAmount(Number(e.target.value))}
-                            className="flex-1 px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white"
+                            className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white"
                             placeholder="Ex: 10"
                           />
                           <span className="py-2 px-3 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm font-bold text-slate-600 dark:text-slate-300">%</span>
@@ -1743,7 +1706,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                             min="0"
                             value={discountAmount}
                             onChange={(e) => setDiscountAmount(Number(e.target.value))}
-                            className="flex-1 px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white"
+                            className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white"
                             placeholder="Ex: 50.00"
                           />
                         </div>
@@ -1758,7 +1721,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                           value={discountDescription}
                           onChange={(e) => setDiscountDescription(e.target.value)}
                           placeholder="Ex: Cliente VIP, Cortesia..."
-                          className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
+                          className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
                         />
                         <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 mt-2">Valor a Descontar (R$)</label>
                         <input 
@@ -1766,7 +1729,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                           min="0"
                           value={discountAmount}
                           onChange={(e) => setDiscountAmount(Number(e.target.value))}
-                          className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white"
+                          className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white"
                           placeholder="Ex: 100.00"
                         />
                       </div>

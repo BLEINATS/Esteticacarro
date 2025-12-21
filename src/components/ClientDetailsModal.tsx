@@ -251,36 +251,23 @@ Manter essa manutenção em dia é essencial para garantir a proteção e o bril
 Podemos agendar para esta semana?`;
   };
 
-  // --- HYBRID SENDING LOGIC ---
+  // --- AUTOMATED SENDING LOGIC ---
   const handleSendFidelityCard = async () => {
     if (!card) return;
     
     const message = `Olá ${client.name}! 🎁\n\nSeu cartão de fidelidade ${companySettings.name} está pronto!\n\n📊 Status:\n• Pontos: ${points.totalPoints}\n• Nível: ${points.tier.toUpperCase()}\n• Número: ${card.cardNumber}\n\nAdicione ao Wallet para acompanhar em tempo real:\n${shareLink}`;
     
-    let method = 'manual';
-
     if (isWhatsAppConnected) {
-        method = await showOptions({
-            title: 'Enviar Cartão de Fidelidade',
-            message: 'Como deseja enviar esta mensagem?',
-            options: [
-                { label: '🤖 Automático (1 Token)', value: 'bot', variant: 'primary' },
-                { label: '📱 Manual (WhatsApp Web)', value: 'manual', variant: 'secondary' }
-            ]
-        }) || 'cancel';
-    }
-
-    if (method === 'bot') {
         if ((subscription.tokenBalance || 0) < 1) {
             await showAlert({ title: 'Saldo Insuficiente', message: 'Você precisa de 1 token para enviar via Robô.', type: 'warning' });
             return;
         }
         if (consumeTokens(1, `Envio Cartão Fidelidade: ${client.name}`)) {
-            await showAlert({ title: 'Enviado', message: 'Cartão enviado para a fila de disparo.', type: 'success' });
+            await showAlert({ title: 'Sucesso', message: 'Cartão enviado automaticamente! (1 Token usado)', type: 'success' });
         } else {
             await showAlert({ title: 'Erro', message: 'Falha ao processar tokens.', type: 'error' });
         }
-    } else if (method === 'manual') {
+    } else {
         const link = getWhatsappLink(client.phone, message);
         window.open(link, '_blank');
     }
@@ -289,30 +276,17 @@ Podemos agendar para esta semana?`;
   const handleSendReminder = async (reminder: any) => {
     const message = generateReminderMessage(reminder);
     
-    let method = 'manual';
-
     if (isWhatsAppConnected) {
-        method = await showOptions({
-            title: 'Enviar Lembrete',
-            message: 'Como deseja enviar este lembrete?',
-            options: [
-                { label: '🤖 Automático (1 Token)', value: 'bot', variant: 'primary' },
-                { label: '📱 Manual (WhatsApp Web)', value: 'manual', variant: 'secondary' }
-            ]
-        }) || 'cancel';
-    }
-
-    if (method === 'bot') {
         if ((subscription.tokenBalance || 0) < 1) {
             await showAlert({ title: 'Saldo Insuficiente', message: 'Você precisa de 1 token para enviar via Robô.', type: 'warning' });
             return;
         }
         if (consumeTokens(1, `Lembrete Manutenção: ${client.name}`)) {
-            await showAlert({ title: 'Enviado', message: 'Lembrete enviado para a fila de disparo.', type: 'success' });
+            await showAlert({ title: 'Sucesso', message: 'Lembrete enviado automaticamente! (1 Token usado)', type: 'success' });
         } else {
             await showAlert({ title: 'Erro', message: 'Falha ao processar tokens.', type: 'error' });
         }
-    } else if (method === 'manual') {
+    } else {
         const link = getWhatsappLink(client.phone, message);
         window.open(link, '_blank');
     }
@@ -872,7 +846,7 @@ Podemos agendar para esta semana?`;
                         )}
                       >
                         {isWhatsAppConnected ? <Bot size={16} /> : <MessageCircle size={16} />}
-                        {isWhatsAppConnected ? 'Enviar (Híbrido)' : 'Enviar WhatsApp'}
+                        {isWhatsAppConnected ? 'Enviar (Automático)' : 'Enviar WhatsApp'}
                       </button>
                     </div>
                   )) : (
@@ -913,7 +887,7 @@ Podemos agendar para esta semana?`;
                               title="Enviar para o cliente"
                           >
                               {isWhatsAppConnected ? <Bot size={16} /> : <MessageCircle size={16} />}
-                              {isWhatsAppConnected ? 'Enviar' : 'Enviar'}
+                              {isWhatsAppConnected ? 'Enviar Auto' : 'Enviar'}
                           </button>
                           <button
                               onClick={handleOpenCard}

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Users, Award, TrendingUp, DollarSign, Settings, Plus, Minus, Trash2, UserPlus, Filter, Calendar, Pencil, Save, X, Briefcase, Wallet, Star, Clock } from 'lucide-react';
+import { Users, Award, TrendingUp, DollarSign, Settings, Plus, Minus, Trash2, UserPlus, Filter, Calendar, Pencil, Save, X, Briefcase, Wallet, Star, Clock, Lock } from 'lucide-react';
 import { formatCurrency, cn, formatDateToLocalInput } from '../lib/utils';
 import { useApp } from '../context/AppContext';
 import { Employee, EmployeeTransaction } from '../types';
@@ -16,7 +16,9 @@ export default function Team() {
     deleteEmployee,
     addFinancialTransaction,
     workOrders,
-    services
+    services,
+    checkLimit,
+    planLimits
   } = useApp();
   const { showConfirm, showAlert } = useDialog();
   
@@ -275,6 +277,14 @@ export default function Team() {
   };
 
   const openNewModal = () => {
+    if (!checkLimit('employees', employees.length)) {
+        showAlert({ 
+            title: 'Limite Atingido', 
+            message: `Seu plano atual permite apenas ${planLimits.maxEmployees} funcionários. Faça upgrade para adicionar mais.`, 
+            type: 'warning' 
+        });
+        return;
+    }
     setEditingEmployee(null);
     setIsEmployeeModalOpen(true);
   };
@@ -288,7 +298,7 @@ export default function Team() {
 
   return (
     <div className="space-y-6">
-      {/* Modal de Vale */}
+      {/* ... (Existing Modals) ... */}
       {isValeModalOpen && selectedEmployee && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white dark:bg-slate-900 rounded-xl w-full max-w-sm p-6 shadow-xl border border-slate-200 dark:border-slate-800">
@@ -402,6 +412,17 @@ export default function Team() {
             Novo Funcionário
         </button>
       </div>
+
+      {/* Limit Warning if applicable */}
+      {employees.length >= planLimits.maxEmployees && (
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-lg flex items-center gap-3">
+              <Lock size={20} className="text-amber-600 dark:text-amber-400" />
+              <div>
+                  <p className="text-sm font-bold text-amber-800 dark:text-amber-300">Limite de Funcionários Atingido</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400">Seu plano atual permite no máximo {planLimits.maxEmployees} funcionários. Faça upgrade para adicionar mais.</p>
+              </div>
+          </div>
+      )}
 
       {/* PERFORMANCE DASHBOARD */}
       {employeeMetrics.length > 0 && (

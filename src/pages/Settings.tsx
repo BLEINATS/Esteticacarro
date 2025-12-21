@@ -7,7 +7,7 @@ import {
   Instagram, Facebook, ChevronRight, Moon, Sun, Bell, Globe2,
   Mail, ShieldAlert, DollarSign, Monitor, AlertCircle, MessageSquare, History, MapPin,
   Eye, EyeOff, Edit2, Plus, Copy, Share2, Check, X, Calendar, Info, Lock, User, Download, Database, List, Camera,
-  Package, Zap, FileText, Scale
+  Package, Zap, FileText, Scale, Ban
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useSuperAdmin } from '../context/SuperAdminContext';
@@ -31,7 +31,8 @@ export default function Settings() {
     changePlan,
     ownerUser,
     logoutOwner,
-    updateOwner
+    updateOwner,
+    cancelSubscription
   } = useApp();
   
   const { tokenPackages, plans, saasSettings } = useSuperAdmin();
@@ -211,6 +212,21 @@ export default function Settings() {
       }
       setIsPaymentModalOpen(false);
       setPaymentItem(null);
+  };
+
+  const handleCancelSubscription = async () => {
+      const confirm = await showConfirm({
+          title: 'Cancelar Assinatura',
+          message: 'Tem certeza que deseja cancelar sua assinatura? Você perderá acesso aos recursos premium imediatamente.',
+          type: 'danger',
+          confirmText: 'Sim, Cancelar Assinatura'
+      });
+
+      if (confirm) {
+          await cancelSubscription();
+          showAlert({ title: 'Assinatura Cancelada', message: 'Sua assinatura foi cancelada com sucesso.', type: 'info' });
+          // O redirecionamento será feito pelo ProtectedRoute automaticamente
+      }
   };
 
   // --- ACCOUNT HANDLERS ---
@@ -404,6 +420,7 @@ export default function Settings() {
           {/* GENERAL TAB */}
           {activeTab === 'general' && (
              <form onSubmit={handleSave} className="space-y-6 animate-in fade-in slide-in-from-left">
+                 {/* ... (Keep existing General tab content) ... */}
                  <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-6">
                      <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                         <Building2 className="text-blue-600" size={20} /> Informações Básicas
@@ -562,169 +579,6 @@ export default function Settings() {
              </form>
           )}
 
-          {/* LEGAL TAB */}
-          {activeTab === 'legal' && (
-             <form onSubmit={handleSave} className="space-y-6 animate-in fade-in slide-in-from-right">
-                 <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-6">
-                     <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                        <Scale className="text-blue-600" size={20} /> Documentos da Plataforma
-                     </h3>
-                     <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-                        Acesse os termos que regem o uso do Cristal Care ERP.
-                     </p>
-                     
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Link to="/terms" target="_blank" className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-blue-500 transition-colors group">
-                            <div className="flex items-center gap-3">
-                                <FileText className="text-slate-400 group-hover:text-blue-500" size={24} />
-                                <div>
-                                    <p className="font-bold text-slate-900 dark:text-white">Termos de Uso</p>
-                                    <p className="text-xs text-slate-500">Regras de utilização do software</p>
-                                </div>
-                            </div>
-                            <ExternalLink size={16} className="text-slate-400 group-hover:text-blue-500" />
-                        </Link>
-                        
-                        <Link to="/privacy" target="_blank" className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-blue-500 transition-colors group">
-                            <div className="flex items-center gap-3">
-                                <ShieldAlert className="text-slate-400 group-hover:text-blue-500" size={24} />
-                                <div>
-                                    <p className="font-bold text-slate-900 dark:text-white">Política de Privacidade</p>
-                                    <p className="text-xs text-slate-500">Como tratamos seus dados</p>
-                                </div>
-                            </div>
-                            <ExternalLink size={16} className="text-slate-400 group-hover:text-blue-500" />
-                        </Link>
-                     </div>
-                 </div>
-
-                 <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-6">
-                     <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                        <FileText className="text-purple-600" size={20} /> Documentos da Sua Loja
-                     </h3>
-                     <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-                        Configure os termos que aparecerão na sua Página Web (Landing Page) para seus clientes.
-                     </p>
-
-                     <div className="space-y-6">
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Termos de Uso (Personalizado)</label>
-                            <textarea 
-                                value={formData.legal?.termsText || ''}
-                                onChange={e => setFormData({
-                                    ...formData, 
-                                    legal: { ...formData.legal, termsText: e.target.value }
-                                })}
-                                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-y min-h-[150px]"
-                                placeholder="Insira aqui os termos de uso específicos da sua loja..."
-                            />
-                        </div>
-                        
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Política de Privacidade (Personalizada)</label>
-                            <textarea 
-                                value={formData.legal?.privacyText || ''}
-                                onChange={e => setFormData({
-                                    ...formData, 
-                                    legal: { ...formData.legal, privacyText: e.target.value }
-                                })}
-                                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-y min-h-[150px]"
-                                placeholder="Insira aqui como você trata os dados dos seus clientes..."
-                            />
-                        </div>
-                     </div>
-                 </div>
-
-                 <div className="flex justify-end pt-4">
-                    <button type="submit" className="w-full sm:w-auto px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2">
-                        <Save size={20} /> Salvar Documentos
-                    </button>
-                 </div>
-             </form>
-          )}
-
-          {activeTab === 'landing' && (
-             <form onSubmit={handleSave} className="space-y-6 animate-in fade-in slide-in-from-right">
-                 <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-6">
-                     <div className="flex justify-between items-start mb-6">
-                        <div>
-                            <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-                                <Globe className="text-blue-500" size={20} /> Página Pública
-                            </h3>
-                            <p className="text-sm text-slate-500 dark:text-slate-400">Configure como seus clientes veem sua loja online.</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Publicado</span>
-                            <button 
-                                type="button"
-                                onClick={() => setFormData({...formData, landingPage: { ...formData.landingPage, enabled: !formData.landingPage.enabled }})}
-                                className={cn(
-                                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
-                                    formData.landingPage.enabled ? "bg-green-500" : "bg-slate-300 dark:bg-slate-700"
-                                )}
-                            >
-                                <span className={cn(
-                                    "inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm",
-                                    formData.landingPage.enabled ? "translate-x-6" : "translate-x-1"
-                                )} />
-                            </button>
-                        </div>
-                     </div>
-
-                     <div className="space-y-4">
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Título Principal (Hero)</label>
-                            <input 
-                                type="text" 
-                                value={formData.landingPage.heroTitle}
-                                onChange={e => setFormData({...formData, landingPage: { ...formData.landingPage, heroTitle: e.target.value }})}
-                                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Subtítulo</label>
-                            <textarea 
-                                value={formData.landingPage.heroSubtitle}
-                                onChange={e => setFormData({...formData, landingPage: { ...formData.landingPage, heroSubtitle: e.target.value }})}
-                                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                                rows={2}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Imagem de Fundo (URL)</label>
-                            <input 
-                                type="text" 
-                                value={formData.landingPage.heroImage}
-                                onChange={e => setFormData({...formData, landingPage: { ...formData.landingPage, heroImage: e.target.value }})}
-                                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Mensagem Padrão WhatsApp</label>
-                            <input 
-                                type="text" 
-                                value={formData.landingPage.whatsappMessage}
-                                onChange={e => setFormData({...formData, landingPage: { ...formData.landingPage, whatsappMessage: e.target.value }})}
-                                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                            />
-                        </div>
-                     </div>
-
-                     <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4">
-                        <Link 
-                            to={`/shop/${formData.slug || ''}`}
-                            className="text-blue-600 dark:text-blue-400 font-bold text-sm flex items-center gap-1 hover:underline"
-                        >
-                            <ExternalLink size={16} /> Visualizar Página
-                        </Link>
-                        <button type="submit" className="w-full sm:w-auto px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2">
-                            <Save size={20} /> Salvar Alterações
-                        </button>
-                     </div>
-                 </div>
-             </form>
-          )}
-
           {/* BILLING TAB */}
           {activeTab === 'billing' && (
              <div className="space-y-6 animate-in fade-in slide-in-from-right">
@@ -871,11 +725,34 @@ export default function Settings() {
                         </table>
                      </div>
                  </div>
+
+                 {/* Danger Zone - Cancel Subscription */}
+                 <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
+                    <h4 className="text-sm font-bold text-red-600 mb-2 flex items-center gap-2">
+                        <Ban size={16} /> Zona de Perigo
+                    </h4>
+                    <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/30 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+                        <div>
+                            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Cancelar Assinatura</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                Ao cancelar, você perderá acesso aos recursos premium imediatamente.
+                            </p>
+                        </div>
+                        <button 
+                            onClick={handleCancelSubscription}
+                            className="px-4 py-2 bg-white dark:bg-slate-800 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-xs font-bold rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors whitespace-nowrap"
+                        >
+                            Cancelar Assinatura
+                        </button>
+                    </div>
+                 </div>
              </div>
           )}
 
+          {/* ... (Rest of tabs: Preferences, Integrations, Account, Legal, Landing - Keeping same) ... */}
           {activeTab === 'preferences' && (
              <div className="space-y-6 animate-in fade-in slide-in-from-right">
+                 {/* ... (Preferences content) ... */}
                  <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-6">
                      <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-6 flex items-center gap-2">
                         <Layout className="text-blue-600" size={20} /> Aparência
@@ -952,8 +829,7 @@ export default function Settings() {
 
           {activeTab === 'integrations' && (
             <div className="space-y-6 animate-in fade-in slide-in-from-right">
-                
-                {/* Sub-tabs for Logs */}
+                {/* ... (Integrations content) ... */}
                 <div className="flex gap-2 mb-4">
                     <button 
                         onClick={() => setWaView('status')}
@@ -1169,6 +1045,7 @@ export default function Settings() {
           {/* TAB: ACCOUNT */}
           {activeTab === 'account' && (
              <div className="space-y-6 animate-in fade-in slide-in-from-right">
+                 {/* ... (Account content) ... */}
                  <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-6">
                      <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                         <Lock className="text-slate-600 dark:text-slate-400" size={20} /> Segurança da Conta
@@ -1233,6 +1110,171 @@ export default function Settings() {
                      </div>
                  </div>
              </div>
+          )}
+
+          {/* TAB: LEGAL */}
+          {activeTab === 'legal' && (
+             <form onSubmit={handleSave} className="space-y-6 animate-in fade-in slide-in-from-right">
+                 {/* ... (Legal content) ... */}
+                 <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-6">
+                     <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                        <Scale className="text-blue-600" size={20} /> Documentos da Plataforma
+                     </h3>
+                     <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                        Acesse os termos que regem o uso do Cristal Care ERP.
+                     </p>
+                     
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Link to="/terms" target="_blank" className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-blue-500 transition-colors group">
+                            <div className="flex items-center gap-3">
+                                <FileText className="text-slate-400 group-hover:text-blue-500" size={24} />
+                                <div>
+                                    <p className="font-bold text-slate-900 dark:text-white">Termos de Uso</p>
+                                    <p className="text-xs text-slate-500">Regras de utilização do software</p>
+                                </div>
+                            </div>
+                            <ExternalLink size={16} className="text-slate-400 group-hover:text-blue-500" />
+                        </Link>
+                        
+                        <Link to="/privacy" target="_blank" className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-blue-500 transition-colors group">
+                            <div className="flex items-center gap-3">
+                                <ShieldAlert className="text-slate-400 group-hover:text-blue-500" size={24} />
+                                <div>
+                                    <p className="font-bold text-slate-900 dark:text-white">Política de Privacidade</p>
+                                    <p className="text-xs text-slate-500">Como tratamos seus dados</p>
+                                </div>
+                            </div>
+                            <ExternalLink size={16} className="text-slate-400 group-hover:text-blue-500" />
+                        </Link>
+                     </div>
+                 </div>
+
+                 <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-6">
+                     <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                        <FileText className="text-purple-600" size={20} /> Documentos da Sua Loja
+                     </h3>
+                     <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                        Configure os termos que aparecerão na sua Página Web (Landing Page) para seus clientes.
+                     </p>
+
+                     <div className="space-y-6">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Termos de Uso (Personalizado)</label>
+                            <textarea 
+                                value={formData.legal?.termsText || ''}
+                                onChange={e => setFormData({
+                                    ...formData, 
+                                    legal: { ...formData.legal, termsText: e.target.value }
+                                })}
+                                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-y min-h-[150px]"
+                                placeholder="Insira aqui os termos de uso específicos da sua loja..."
+                            />
+                        </div>
+                        
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Política de Privacidade (Personalizada)</label>
+                            <textarea 
+                                value={formData.legal?.privacyText || ''}
+                                onChange={e => setFormData({
+                                    ...formData, 
+                                    legal: { ...formData.legal, privacyText: e.target.value }
+                                })}
+                                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm resize-y min-h-[150px]"
+                                placeholder="Insira aqui como você trata os dados dos seus clientes..."
+                            />
+                        </div>
+                     </div>
+                 </div>
+
+                 <div className="flex justify-end pt-4">
+                    <button type="submit" className="w-full sm:w-auto px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2">
+                        <Save size={20} /> Salvar Documentos
+                    </button>
+                 </div>
+             </form>
+          )}
+
+          {activeTab === 'landing' && (
+             <form onSubmit={handleSave} className="space-y-6 animate-in fade-in slide-in-from-right">
+                 {/* ... (Landing content) ... */}
+                 <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-6">
+                     <div className="flex justify-between items-start mb-6">
+                        <div>
+                            <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                                <Globe className="text-blue-500" size={20} /> Página Pública
+                            </h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Configure como seus clientes veem sua loja online.</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Publicado</span>
+                            <button 
+                                type="button"
+                                onClick={() => setFormData({...formData, landingPage: { ...formData.landingPage, enabled: !formData.landingPage.enabled }})}
+                                className={cn(
+                                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
+                                    formData.landingPage.enabled ? "bg-green-500" : "bg-slate-300 dark:bg-slate-700"
+                                )}
+                            >
+                                <span className={cn(
+                                    "inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm",
+                                    formData.landingPage.enabled ? "translate-x-6" : "translate-x-1"
+                                )} />
+                            </button>
+                        </div>
+                     </div>
+
+                     <div className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Título Principal (Hero)</label>
+                            <input 
+                                type="text" 
+                                value={formData.landingPage.heroTitle}
+                                onChange={e => setFormData({...formData, landingPage: { ...formData.landingPage, heroTitle: e.target.value }})}
+                                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Subtítulo</label>
+                            <textarea 
+                                value={formData.landingPage.heroSubtitle}
+                                onChange={e => setFormData({...formData, landingPage: { ...formData.landingPage, heroSubtitle: e.target.value }})}
+                                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                                rows={2}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Imagem de Fundo (URL)</label>
+                            <input 
+                                type="text" 
+                                value={formData.landingPage.heroImage}
+                                onChange={e => setFormData({...formData, landingPage: { ...formData.landingPage, heroImage: e.target.value }})}
+                                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Mensagem Padrão WhatsApp</label>
+                            <input 
+                                type="text" 
+                                value={formData.landingPage.whatsappMessage}
+                                onChange={e => setFormData({...formData, landingPage: { ...formData.landingPage, whatsappMessage: e.target.value }})}
+                                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                     </div>
+
+                     <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4">
+                        <Link 
+                            to={`/shop/${formData.slug || ''}`}
+                            className="text-blue-600 dark:text-blue-400 font-bold text-sm flex items-center gap-1 hover:underline"
+                        >
+                            <ExternalLink size={16} /> Visualizar Página
+                        </Link>
+                        <button type="submit" className="w-full sm:w-auto px-8 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2">
+                            <Save size={20} /> Salvar Alterações
+                        </button>
+                     </div>
+                 </div>
+             </form>
           )}
 
       </div>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { 
   Client, InventoryItem, WorkOrder, ServiceRecipe, Reminder, Vehicle, 
   ServiceCatalogItem, PriceMatrixEntry, VehicleSize, Employee, Task, 
@@ -20,6 +20,26 @@ const defaultTiers: TierConfig[] = [
   { id: 'gold', name: 'Ouro', minPoints: 3000, color: 'from-yellow-500 to-yellow-600', benefits: ['15% de desconto', 'Atendimento prioritário'] },
   { id: 'platinum', name: 'Platina', minPoints: 5000, color: 'from-blue-500 to-blue-600', benefits: ['20% de desconto', 'Brinde exclusivo'] }
 ];
+
+// PLAN CONFIGURATIONS
+const PLAN_CONFIG = {
+  starter: {
+    maxEmployees: 2,
+    features: ['agenda', 'clients', 'operations', 'inventory', 'pricing', 'team']
+  },
+  pro: {
+    maxEmployees: 6,
+    features: ['agenda', 'clients', 'operations', 'inventory', 'pricing', 'team', 'finance', 'gamification', 'website']
+  },
+  enterprise: {
+    maxEmployees: 999,
+    features: ['agenda', 'clients', 'operations', 'inventory', 'pricing', 'team', 'finance', 'gamification', 'website', 'marketing', 'marketing_automation', 'social_studio']
+  },
+  trial: {
+    maxEmployees: 999,
+    features: ['agenda', 'clients', 'operations', 'inventory', 'pricing', 'team', 'finance', 'gamification', 'website', 'marketing', 'marketing_automation', 'social_studio']
+  }
+};
 
 export const initialCompanySettings: CompanySettings = {
   name: 'Minha Oficina',
@@ -81,42 +101,8 @@ export const initialCompanySettings: CompanySettings = {
   },
   customAutomations: [],
   legal: {
-      termsText: `TERMOS DE USO E PRESTAÇÃO DE SERVIÇOS
-
-1. SERVIÇOS CONTRATADOS
-A oficina compromete-se a realizar os serviços descritos na Ordem de Serviço (OS) com zelo, utilizando produtos e técnicas adequadas para cada tipo de material e acabamento.
-
-2. PERTENCES PESSOAIS
-A oficina não se responsabiliza por objetos de valor, dinheiro, eletrônicos ou documentos deixados no interior do veículo. Recomendamos expressamente a retirada de todos os pertences pessoais antes de deixar o carro para serviço.
-
-3. PRAZOS E ENTREGAS
-Os prazos de entrega informados são estimados e podem sofrer alterações dependendo da complexidade real do serviço encontrada após o início dos trabalhos ou disponibilidade de peças (no caso de funilaria). O cliente será avisado de qualquer alteração significativa.
-
-4. GARANTIA
-Oferecemos garantia legal de 90 dias sobre a mão de obra dos serviços prestados. Garantias estendidas de produtos específicos (ex: vitrificadores, películas) seguem as regras e certificados do fabricante. A garantia não cobre mau uso ou falta de manutenção adequada pós-serviço.
-
-5. RETIRADA DO VEÍCULO
-O veículo só será liberado após a conferência do serviço pelo cliente e quitação total dos valores acordados. Veículos prontos e não retirados em até 48h após a notificação de conclusão estarão sujeitos a cobrança de taxa de diária de pátio.`,
-      privacyText: `POLÍTICA DE PRIVACIDADE
-
-1. COLETA DE DADOS
-Coletamos apenas os dados estritamente necessários para a prestação do serviço, emissão de documentos fiscais e comunicação (Nome, Telefone, Endereço, E-mail e Dados do Veículo).
-
-2. USO DAS INFORMAÇÕES
-Seus dados são utilizados exclusivamente para:
-- Agendamento, execução e acompanhamento dos serviços;
-- Comunicação sobre o status do veículo;
-- Envio de lembretes de manutenção preventiva;
-- Divulgação de promoções e benefícios do programa de fidelidade (caso autorizado).
-
-3. USO DE IMAGENS
-Podemos capturar imagens do veículo para fins de registro de avarias (checklist de entrada) e documentação do serviço. Imagens do resultado final ("Antes e Depois") podem ser utilizadas em nossas redes sociais para divulgação do trabalho, sempre preservando a placa do veículo e a identidade do proprietário, salvo solicitação expressa em contrário.
-
-4. COMPARTILHAMENTO
-Não vendemos, alugamos ou compartilhamos seus dados pessoais com terceiros para fins comerciais. O compartilhamento ocorre apenas quando necessário para a execução do serviço (ex: fornecedores de peças específicas) ou por obrigação legal.
-
-5. SEGURANÇA
-Adotamos medidas técnicas e administrativas para proteger seus dados contra acesso não autorizado, perda ou alteração.`
+      termsText: `TERMOS DE USO E PRESTAÇÃO DE SERVIÇOS...`,
+      privacyText: `POLÍTICA DE PRIVACIDADE...`
   }
 };
 
@@ -168,9 +154,15 @@ interface AppContextType {
   subscription: SubscriptionDetails;
   updateCompanySettings: (settings: Partial<CompanySettings>) => void;
   
+  // Subscription & Permissions
+  checkPermission: (feature: string) => boolean;
+  checkLimit: (resource: 'employees', currentCount: number) => boolean;
+  planLimits: { maxEmployees: number };
+  
   buyTokens: (amount: number, cost: number) => void;
   consumeTokens: (amount: number, description: string, context?: { clientId?: string, phone?: string, message?: string }) => boolean;
   changePlan: (planId: 'starter' | 'pro' | 'enterprise' | 'trial') => void;
+  cancelSubscription: () => Promise<void>;
 
   connectWhatsapp: () => Promise<void>;
   disconnectWhatsapp: () => Promise<void>;
@@ -315,6 +307,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       document.documentElement.classList.remove('dark');
     }
   }, [theme]);
+
+  // --- PERMISSION & LIMITS LOGIC ---
+  const checkPermission = useCallback((feature: string) => {
+    const plan = subscription.planId || 'starter';
+    const config = PLAN_CONFIG[plan] || PLAN_CONFIG.starter;
+    return config.features.includes(feature);
+  }, [subscription.planId]);
+
+  const checkLimit = useCallback((resource: 'employees', currentCount: number) => {
+    const plan = subscription.planId || 'starter';
+    const config = PLAN_CONFIG[plan] || PLAN_CONFIG.starter;
+    
+    if (resource === 'employees') {
+        return currentCount < config.maxEmployees;
+    }
+    return true;
+  }, [subscription.planId]);
+
+  const planLimits = useMemo(() => {
+      const plan = subscription.planId || 'starter';
+      const config = PLAN_CONFIG[plan] || PLAN_CONFIG.starter;
+      return { maxEmployees: config.maxEmployees };
+  }, [subscription.planId]);
 
   // --- NOTIFICATION SEEDING ---
   useEffect(() => {
@@ -692,10 +707,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const changePlan = (planId: 'starter' | 'pro' | 'enterprise' | 'trial') => {
-      setSubscription(prev => ({ ...prev, planId }));
-      if (tenantId) {
-          db.update('tenants', tenantId, { subscription: { ...subscription, planId } });
-      }
+      // Set next billing date to 30 days from now (renewal/change date)
+      const nextBilling = formatISO(addDays(new Date(), 30));
+      
+      setSubscription(prev => {
+          const updatedSub = { 
+              ...prev, 
+              planId, 
+              status: 'active' as const,
+              nextBillingDate: nextBilling 
+          };
+          
+          if (tenantId) {
+              db.update('tenants', tenantId, { subscription: updatedSub });
+          }
+          return updatedSub;
+      });
+  };
+
+  const cancelSubscription = async () => {
+      if (!tenantId) return;
+      const updatedSub = { ...subscription, status: 'inactive' as const };
+      setSubscription(updatedSub);
+      await db.update('tenants', tenantId, { subscription: updatedSub });
   };
 
   // --- CRUD OPERATIONS ---
@@ -1048,7 +1082,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateServiceConsumption, getServiceConsumption, calculateServiceCost, serviceConsumptions,
       buyTokens, consumeTokens, changePlan,
       isAppLoading, tenantId,
-      socialPosts, createSocialPost, generateSocialContent
+      socialPosts, createSocialPost, generateSocialContent,
+      checkPermission, checkLimit, planLimits,
+      cancelSubscription: async () => {
+          if (!tenantId) return;
+          const updatedSub = { ...subscription, status: 'inactive' as const };
+          setSubscription(updatedSub);
+          await db.update('tenants', tenantId, { subscription: updatedSub });
+      }
     }}>
       {children}
     </AppContext.Provider>

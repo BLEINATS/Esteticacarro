@@ -92,26 +92,17 @@ export default function Clients() {
           actionType = 'Contato';
       }
 
-      let method = 'manual';
-
-      if (isWhatsAppConnected && (subscription.tokenBalance || 0) > 0) {
-          method = await showOptions({
-              title: `Enviar Mensagem (${actionType})`,
-              message: 'Como deseja enviar esta mensagem?',
-              options: [
-                  { label: '🤖 Robô (1 Token)', value: 'bot', variant: 'primary' },
-                  { label: '📱 Manual (WhatsApp Web)', value: 'manual', variant: 'secondary' }
-              ]
-          }) || 'cancel';
-      }
-
-      if (method === 'bot') {
+      if (isWhatsAppConnected) {
+          if ((subscription.tokenBalance || 0) < 1) {
+              await showAlert({ title: 'Saldo Insuficiente', message: 'Você precisa de 1 token para enviar via Robô.', type: 'warning' });
+              return;
+          }
           if (consumeTokens(1, `Msg ${actionType}: ${client.name}`)) {
-              await showAlert({ title: 'Enviado', message: 'Mensagem na fila de disparo.', type: 'success' });
+              await showAlert({ title: 'Enviado', message: 'Mensagem enviada automaticamente! (1 Token usado)', type: 'success' });
           } else {
               await showAlert({ title: 'Erro', message: 'Erro ao processar tokens.', type: 'error' });
           }
-      } else if (method === 'manual') {
+      } else {
           const link = getWhatsappLink(client.phone, message);
           window.open(link, '_blank');
       }
