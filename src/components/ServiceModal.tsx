@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Tag, Clock, FileText, RotateCcw, ToggleLeft, ToggleRight, Image as ImageIcon, Upload, Eye } from 'lucide-react';
+import { X, Save, Tag, Clock, FileText, RotateCcw, ToggleLeft, ToggleRight, Image as ImageIcon, Upload, Eye, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ServiceCatalogItem } from '../types';
+import { useDialog } from '../context/DialogContext';
+import { generateUUID } from '../lib/utils';
 
 interface ServiceModalProps {
   service?: ServiceCatalogItem | null;
@@ -10,6 +12,7 @@ interface ServiceModalProps {
 
 export default function ServiceModal({ service, onClose }: ServiceModalProps) {
   const { addService, updateService } = useApp();
+  const { showAlert } = useDialog();
   
   const [formData, setFormData] = useState<Partial<ServiceCatalogItem>>({
     name: '',
@@ -43,7 +46,7 @@ export default function ServiceModal({ service, onClose }: ServiceModalProps) {
     } else {
       // Create Mode
       const newService: ServiceCatalogItem = {
-        id: `srv-${Date.now()}`,
+        id: generateUUID(), // Use valid UUID for new services
         name: formData.name || 'Novo Serviço',
         category: formData.category || 'Geral',
         description: formData.description || '',
@@ -60,10 +63,32 @@ export default function ServiceModal({ service, onClose }: ServiceModalProps) {
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const url = URL.createObjectURL(e.target.files[0]);
-      setFormData(prev => ({ ...prev, imageUrl: url }));
+      const file = e.target.files[0];
+
+      // Check file size (Limit increased to 2MB)
+      if (file.size > 2 * 1024 * 1024) {
+          showAlert({
+            title: 'Arquivo muito grande',
+            message: 'A imagem selecionada excede o limite de 2MB. Por favor, escolha uma imagem menor ou comprima-a para garantir o desempenho do sistema.',
+            type: 'warning'
+          });
+          return;
+      }
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        // This converts to Base64 string which persists in DB
+        setFormData(prev => ({ ...prev, imageUrl: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
     }
   };
+
+  const handleClearImage = () => {
+      setFormData(prev => ({ ...prev, imageUrl: '' }));
+  };
+
+  const isBase64 = formData.imageUrl?.startsWith('data:');
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -151,11 +176,22 @@ export default function ServiceModal({ service, onClose }: ServiceModalProps) {
                     <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input 
                         type="text" 
-                        value={formData.imageUrl || ''}
-                        onChange={e => setFormData({...formData, imageUrl: e.target.value})}
-                        placeholder="Cole a URL da imagem..."
-                        className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white placeholder-slate-400"
+                        value={isBase64 ? 'Imagem carregada (Base64)' : (formData.imageUrl || '')}
+                        onChange={e => !isBase64 && setFormData({...formData, imageUrl: e.target.value})}
+                        placeholder="Cole a URL da imagem ou faça upload..."
+                        className="w-full pl-10 pr-10 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white placeholder-slate-400 truncate"
+                        disabled={isBase64}
                     />
+                    {formData.imageUrl && (
+                        <button 
+                            type="button"
+                            onClick={handleClearImage}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors"
+                            title="Remover imagem"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    )}
                 </div>
                 <label className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
                     <Upload size={18} className="text-slate-600 dark:text-slate-300" />
@@ -164,7 +200,7 @@ export default function ServiceModal({ service, onClose }: ServiceModalProps) {
                 </label>
             </div>
             {formData.imageUrl && (
-                <div className="mt-2 relative h-32 w-full rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                <div className="mt-2 relative h-32 w-full rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
                     <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
                 </div>
             )}
@@ -186,7 +222,7 @@ export default function ServiceModal({ service, onClose }: ServiceModalProps) {
              </div>
              <div className="flex flex-col gap-2">
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Visibilidade</label>
-                <div className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
                     <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                         <Eye size={14} /> Exibir na Landing Page?
                     </span>

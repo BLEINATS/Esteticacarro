@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { SaaSPlan, SaaSTenant, TokenPackage, SaaSTokenTransaction, SaaSTransaction } from '../types';
-import { addDays, formatISO, subDays } from 'date-fns';
+import { addDays, formatISO } from 'date-fns';
+import { supabase } from '../lib/supabase';
+import { syncProductToStripe } from '../services/stripe';
 
 // Configurações da Plataforma SaaS
 export interface SaaSSettings {
@@ -10,7 +12,6 @@ export interface SaaSSettings {
   pixKey: string;
   apiKey: string;
   adminPassword?: string;
-  // Configuração Global do WhatsApp (w-api.app)
   whatsappGlobal?: {
     enabled: boolean;
     baseUrl: string;
@@ -27,26 +28,26 @@ interface SuperAdminContextType {
   saasTransactions: SaaSTransaction[];
   isAuthenticated: boolean;
   saasSettings: SaaSSettings;
-  login: (password: string) => boolean;
+  login: (password: string) => Promise<boolean>;
   logout: () => void;
   
-  addTenant: (tenant: Omit<SaaSTenant, 'id' | 'joinedAt' | 'status' | 'lastLogin'>) => void;
-  updateTenant: (id: string, updates: Partial<SaaSTenant>) => void;
-  deleteTenant: (id: string) => void;
-  addTokensToTenant: (tenantId: string, amount: number) => void;
+  addTenant: (tenant: Omit<SaaSTenant, 'id' | 'joinedAt' | 'status' | 'lastLogin'>) => Promise<void>;
+  updateTenant: (id: string, updates: Partial<SaaSTenant>) => Promise<void>;
+  deleteTenant: (id: string) => Promise<void>;
+  addTokensToTenant: (tenantId: string, amount: number) => Promise<void>;
   
-  addPlan: (plan: SaaSPlan) => void;
-  updatePlan: (id: string, updates: Partial<SaaSPlan>) => void;
-  deletePlan: (id: string) => void;
+  addPlan: (plan: SaaSPlan) => Promise<void>;
+  updatePlan: (id: string, updates: Partial<SaaSPlan>) => Promise<void>;
+  deletePlan: (id: string) => Promise<void>;
 
-  addTokenPackage: (pkg: TokenPackage) => void;
-  updateTokenPackage: (id: string, updates: Partial<TokenPackage>) => void;
-  deleteTokenPackage: (id: string) => void;
+  addTokenPackage: (pkg: TokenPackage) => Promise<void>;
+  updateTokenPackage: (id: string, updates: Partial<TokenPackage>) => Promise<void>;
+  deleteTokenPackage: (id: string) => Promise<void>;
 
-  addSaaSTransaction: (transaction: SaaSTransaction) => void;
-  deleteSaaSTransaction: (id: string) => void;
+  addSaaSTransaction: (transaction: SaaSTransaction) => Promise<void>;
+  deleteSaaSTransaction: (id: string) => Promise<void>;
 
-  updateSaaSSettings: (settings: Partial<SaaSSettings>) => void;
+  updateSaaSSettings: (settings: Partial<SaaSSettings>) => Promise<void>;
   
   totalMRR: number;
   activeTenantsCount: number;
@@ -63,164 +64,197 @@ interface SuperAdminContextType {
 
 const SuperAdminContext = createContext<SuperAdminContextType | undefined>(undefined);
 
-// --- MOCK DATA ---
-const initialPlans: SaaSPlan[] = [
-  {
-    id: 'starter',
-    name: 'Básico',
-    price: 62.00,
-    features: ['Agenda & OS Digital', 'Gestão de Clientes', 'Controle de Estoque Básico'],
-    includedTokens: 50,
-    maxEmployees: 2,
-    maxDiskSpace: 5,
-    active: true
-  },
-  {
-    id: 'pro',
-    name: 'Intermediário',
-    price: 107.00,
-    features: ['Financeiro Completo', 'Gamificação & Fidelidade', 'Página Web da Loja', 'Comissões Automáticas'],
-    includedTokens: 500,
-    maxEmployees: 6,
-    maxDiskSpace: 20,
-    active: true,
-    highlight: true
-  },
-  {
-    id: 'enterprise',
-    name: 'Avançado',
-    price: 206.00,
-    features: ['Social Studio AI', 'Automação de Marketing', 'Múltiplas Unidades', 'Suporte Prioritário'],
-    includedTokens: 2000,
-    maxEmployees: 999,
-    maxDiskSpace: 100,
-    active: true
-  }
-];
-
-const initialTokenPackages: TokenPackage[] = [
-  { id: 'pack-100', name: 'Pacote Start', tokens: 100, price: 29.90, active: true },
-  { id: 'pack-500', name: 'Pacote Growth', tokens: 500, price: 99.90, active: true },
-  { id: 'pack-1000', name: 'Pacote Scale', tokens: 1000, price: 149.90, active: true },
-  { id: 'pack-5000', name: 'Pacote Enterprise', tokens: 5000, price: 499.90, active: true }
-];
-
-const initialTenants: SaaSTenant[] = [
-  {
-    id: 'tenant-1',
-    name: 'Cristal Care Autodetail',
-    responsibleName: 'Anderson Silva',
-    email: 'contato@cristalcare.com.br',
-    phone: '(11) 99999-8888',
-    planId: 'pro',
-    status: 'active',
-    joinedAt: '2024-01-15T10:00:00Z',
-    nextBilling: formatISO(addDays(new Date(), 15)),
-    tokenBalance: 50,
-    mrr: 107.00,
-    lastLogin: new Date().toISOString(),
-    logoUrl: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=150&q=80'
-  }
-];
-
 const initialSaaSSettings: SaaSSettings = {
   platformName: 'Cristal Care ERP',
   supportEmail: 'suporte@cristalcare.com',
   paymentGateway: 'asaas',
-  pixKey: '00.000.000/0001-00',
+  pixKey: '',
   apiKey: '', 
   adminPassword: 'admin',
   whatsappGlobal: {
-    enabled: true,
+    enabled: false,
     baseUrl: 'https://w-api.app/api',
     apiKey: '',
-    webhookUrl: 'https://api.cristalcare.com/webhook/whatsapp'
+    webhookUrl: ''
   }
 };
 
-const generateMockLedger = (tenants: SaaSTenant[]): SaaSTokenTransaction[] => {
-  return [];
-};
-
 export function SuperAdminProvider({ children }: { children: ReactNode }) {
-  // Safe Storage Wrappers
-  const [tenants, setTenants] = useState<SaaSTenant[]>(() => {
-    try {
-        const stored = localStorage.getItem('saas_tenants');
-        return stored ? JSON.parse(stored) : initialTenants;
-    } catch (e) { return initialTenants; }
-  });
-
-  const [plans, setPlans] = useState<SaaSPlan[]>(() => {
-    try {
-        const stored = localStorage.getItem('saas_plans_v3');
-        return stored ? JSON.parse(stored) : initialPlans;
-    } catch (e) { return initialPlans; }
-  });
-
-  const [tokenPackages, setTokenPackages] = useState<TokenPackage[]>(() => {
-    try {
-        const stored = localStorage.getItem('saas_token_packages');
-        return stored ? JSON.parse(stored) : initialTokenPackages;
-    } catch (e) { return initialTokenPackages; }
-  });
-
-  const [saasSettings, setSaasSettings] = useState<SaaSSettings>(() => {
-    try {
-        const stored = localStorage.getItem('saas_settings');
-        // Merge with initial to ensure new fields exist
-        const parsed = stored ? JSON.parse(stored) : initialSaaSSettings;
-        return { ...initialSaaSSettings, ...parsed, whatsappGlobal: { ...initialSaaSSettings.whatsappGlobal, ...parsed.whatsappGlobal } };
-    } catch (e) { return initialSaaSSettings; }
-  });
-
-  const [tokenLedger, setTokenLedger] = useState<SaaSTokenTransaction[]>(() => {
-    try {
-        const stored = localStorage.getItem('saas_token_ledger');
-        return stored ? JSON.parse(stored) : generateMockLedger(initialTenants);
-    } catch (e) { return []; }
-  });
-
-  const [saasTransactions, setSaasTransactions] = useState<SaaSTransaction[]>(() => {
-    try {
-        const stored = localStorage.getItem('saas_financial_transactions');
-        return stored ? JSON.parse(stored) : [];
-    } catch (e) { return []; }
-  });
-
+  const [tenants, setTenants] = useState<SaaSTenant[]>([]);
+  const [plans, setPlans] = useState<SaaSPlan[]>([]);
+  const [tokenPackages, setTokenPackages] = useState<TokenPackage[]>([]);
+  const [saasSettings, setSaasSettings] = useState<SaaSSettings>(initialSaaSSettings);
+  const [tokenLedger, setTokenLedger] = useState<SaaSTokenTransaction[]>([]);
+  const [saasTransactions, setSaasTransactions] = useState<SaaSTransaction[]>([]);
+  
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('saas_admin_auth') === 'true';
   });
 
+  // --- DATA LOADING ---
   useEffect(() => {
-    localStorage.setItem('saas_tenants', JSON.stringify(tenants));
-  }, [tenants]);
+    if (isAuthenticated) {
+      loadAdminData();
+    } else {
+      // Load public data (Plans, Packages, Basic Settings) for Store Owners
+      loadPublicData();
+    }
+  }, [isAuthenticated]);
 
-  useEffect(() => {
-    localStorage.setItem('saas_plans_v3', JSON.stringify(plans));
-  }, [plans]);
+  const loadPublicData = async () => {
+      try {
+        // 1. Public Settings (Platform Name, Email, Gateway)
+        const { data: settingsData } = await supabase.from('saas_settings').select('platform_name, support_email, payment_gateway').single();
+        if (settingsData) {
+            setSaasSettings(prev => ({
+                ...prev,
+                platformName: settingsData.platform_name || prev.platformName,
+                supportEmail: settingsData.support_email || prev.supportEmail,
+                paymentGateway: (settingsData.payment_gateway as any) || prev.paymentGateway
+            }));
+        }
 
-  useEffect(() => {
-    localStorage.setItem('saas_token_packages', JSON.stringify(tokenPackages));
-  }, [tokenPackages]);
+        // 2. Plans (Public Read)
+        const { data: plansData } = await supabase.from('saas_plans').select('*');
+        if (plansData) {
+            setPlans(plansData.map(p => ({
+                id: p.id as any,
+                name: p.name,
+                price: p.price,
+                features: p.features,
+                includedTokens: p.included_tokens,
+                maxEmployees: p.max_employees,
+                maxDiskSpace: p.max_disk_space,
+                active: p.active,
+                highlight: p.highlight
+            })));
+        }
 
-  useEffect(() => {
-    localStorage.setItem('saas_settings', JSON.stringify(saasSettings));
-  }, [saasSettings]);
+        // 3. Token Packages (Public Read)
+        const { data: packagesData } = await supabase.from('token_packages').select('*');
+        if (packagesData) {
+            setTokenPackages(packagesData);
+        }
+      } catch (err) {
+        console.error("Error loading public data:", err);
+      }
+  };
 
-  useEffect(() => {
-    localStorage.setItem('saas_token_ledger', JSON.stringify(tokenLedger));
-  }, [tokenLedger]);
+  const loadAdminData = async () => {
+    try {
+      // 1. Settings (Full Access)
+      const { data: settingsData } = await supabase.from('saas_settings').select('*').single();
+      
+      if (settingsData) {
+        setSaasSettings({
+            platformName: settingsData.platform_name,
+            supportEmail: settingsData.support_email,
+            paymentGateway: settingsData.payment_gateway as any,
+            pixKey: settingsData.pix_key,
+            apiKey: settingsData.api_key,
+            adminPassword: settingsData.admin_password,
+            whatsappGlobal: settingsData.whatsapp_global
+        });
+      } else {
+          // Seed default settings if table is empty
+          const defaultSettings = {
+              platform_name: initialSaaSSettings.platformName,
+              support_email: initialSaaSSettings.supportEmail,
+              payment_gateway: initialSaaSSettings.paymentGateway,
+              admin_password: initialSaaSSettings.adminPassword,
+              whatsapp_global: initialSaaSSettings.whatsappGlobal
+          };
+          await supabase.from('saas_settings').insert(defaultSettings);
+      }
 
-  useEffect(() => {
-    localStorage.setItem('saas_financial_transactions', JSON.stringify(saasTransactions));
-  }, [saasTransactions]);
+      // 2. Plans
+      const { data: plansData } = await supabase.from('saas_plans').select('*');
+      if (plansData) {
+        setPlans(plansData.map(p => ({
+            id: p.id as any,
+            name: p.name,
+            price: p.price,
+            features: p.features,
+            includedTokens: p.included_tokens,
+            maxEmployees: p.max_employees,
+            maxDiskSpace: p.max_disk_space,
+            active: p.active,
+            highlight: p.highlight
+        })));
+      }
 
-  const login = (password: string) => {
-    if (password === saasSettings.adminPassword || password === 'admin123') {
-      setIsAuthenticated(true);
-      localStorage.setItem('saas_admin_auth', 'true');
-      return true;
+      // 3. Token Packages
+      const { data: packagesData } = await supabase.from('token_packages').select('*');
+      if (packagesData) {
+        setTokenPackages(packagesData);
+      }
+
+      // 4. Tenants
+      const { data: tenantsData } = await supabase.from('tenants').select('*');
+      if (tenantsData) {
+        setTenants(tenantsData.map(t => ({
+            id: t.id,
+            name: t.name,
+            responsibleName: t.settings?.responsibleName || 'Admin',
+            email: 'admin@loja.com', 
+            phone: t.settings?.phone || '',
+            planId: t.plan_id,
+            status: t.status as any,
+            joinedAt: t.created_at,
+            nextBilling: t.subscription?.nextBillingDate || new Date().toISOString(),
+            tokenBalance: t.subscription?.tokenBalance || 0,
+            mrr: 0, // Calculated later
+            lastLogin: t.created_at,
+            logoUrl: t.settings?.logoUrl
+        })));
+      }
+
+      // 5. Ledger
+      const { data: ledgerData } = await supabase.from('saas_token_ledger').select('*').order('date', { ascending: false });
+      if (ledgerData) {
+        setTokenLedger(ledgerData.map(l => ({
+            id: l.id,
+            tenantId: l.tenant_id,
+            tenantName: l.tenant_name,
+            type: l.type as any,
+            amount: l.amount,
+            value: l.value,
+            description: l.description,
+            date: l.date
+        })));
+      }
+
+      // 6. Transactions
+      const { data: transData } = await supabase.from('saas_financial_transactions').select('*').order('date', { ascending: false });
+      if (transData) {
+        setSaasTransactions(transData);
+      }
+
+    } catch (error) {
+      console.error("Error loading Super Admin data:", error);
+    }
+  };
+
+  // --- ACTIONS ---
+
+  const login = async (password: string) => {
+    try {
+        // Check against DB settings
+        const { data } = await supabase.from('saas_settings').select('admin_password').single();
+        const dbPass = data?.admin_password || 'admin123';
+        
+        if (password === dbPass) {
+        setIsAuthenticated(true);
+        localStorage.setItem('saas_admin_auth', 'true');
+        return true;
+        }
+    } catch (e) {
+        // Fallback if DB fails
+        if (password === 'admin123') {
+            setIsAuthenticated(true);
+            localStorage.setItem('saas_admin_auth', 'true');
+            return true;
+        }
     }
     return false;
   };
@@ -230,94 +264,197 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('saas_admin_auth');
   };
 
-  const addTenant = (tenantData: Omit<SaaSTenant, 'id' | 'joinedAt' | 'status' | 'lastLogin'>) => {
-    const plan = plans.find(p => p.id === tenantData.planId);
-    const newTenant: SaaSTenant = {
-      id: `tenant-${Date.now()}`,
-      ...tenantData,
-      status: 'active',
-      joinedAt: new Date().toISOString(),
-      lastLogin: new Date().toISOString(),
-      mrr: plan ? plan.price : 0
-    };
-    setTenants(prev => [...prev, newTenant]);
-  };
-
-  const updateTenant = (id: string, updates: Partial<SaaSTenant>) => {
-    setTenants(prev => prev.map(t => {
-      if (t.id === id) {
-        const updated = { ...t, ...updates };
-        if (updates.planId) {
-            const plan = plans.find(p => p.id === updates.planId);
-            if (plan) updated.mrr = plan.price;
-        }
-        return updated;
-      }
-      return t;
-    }));
-  };
-
-  const deleteTenant = (id: string) => {
-    setTenants(prev => prev.filter(t => t.id !== id));
-  };
-
-  const addTokensToTenant = (tenantId: string, amount: number) => {
-    const tenant = tenants.find(t => t.id === tenantId);
-    if (!tenant) return;
-
-    setTenants(prev => prev.map(t => 
-      t.id === tenantId ? { ...t, tokenBalance: t.tokenBalance + amount } : t
-    ));
-
-    const transaction: SaaSTokenTransaction = {
-        id: `tx-${Date.now()}`,
-        tenantId,
-        tenantName: tenant.name,
-        type: 'bonus',
-        amount: amount,
-        description: 'Bônus Administrativo',
-        date: new Date().toISOString()
-    };
-    setTokenLedger(prev => [transaction, ...prev]);
-  };
-
-  const addPlan = (plan: SaaSPlan) => {
-    setPlans(prev => [...prev, plan]);
-  };
-
-  const updatePlan = (id: string, updates: Partial<SaaSPlan>) => {
-    setPlans(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-  };
-
-  const deletePlan = (id: string) => {
-    setPlans(prev => prev.filter(p => p.id !== id));
-  };
-
-  const addTokenPackage = (pkg: TokenPackage) => {
-    setTokenPackages(prev => [...prev, pkg]);
-  };
-
-  const updateTokenPackage = (id: string, updates: Partial<TokenPackage>) => {
-    setTokenPackages(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-  };
-
-  const deleteTokenPackage = (id: string) => {
-    setTokenPackages(prev => prev.filter(p => p.id !== id));
-  };
-
-  const addSaaSTransaction = (transaction: SaaSTransaction) => {
-      setSaasTransactions(prev => [transaction, ...prev]);
-  };
-
-  const deleteSaaSTransaction = (id: string) => {
-      setSaasTransactions(prev => prev.filter(t => t.id !== id));
-  };
-
-  const updateSaaSSettings = (settings: Partial<SaaSSettings>) => {
+  const updateSaaSSettings = async (settings: Partial<SaaSSettings>) => {
     setSaasSettings(prev => ({ ...prev, ...settings }));
+    
+    // Check if row exists first
+    const { data } = await supabase.from('saas_settings').select('id').single();
+    
+    const payload = {
+        platform_name: settings.platformName,
+        support_email: settings.supportEmail,
+        payment_gateway: settings.paymentGateway,
+        pix_key: settings.pixKey,
+        api_key: settings.apiKey,
+        admin_password: settings.adminPassword,
+        whatsapp_global: settings.whatsappGlobal
+    };
+
+    if (data) {
+        await supabase.from('saas_settings').update(payload).eq('id', data.id);
+    } else {
+        await supabase.from('saas_settings').insert(payload);
+    }
   };
 
-  const totalMRR = tenants.filter(t => t.status === 'active').reduce((acc, t) => acc + t.mrr, 0);
+  // Tenants
+  const addTenant = async (tenantData: any) => {
+      console.log('Use register flow to add tenants');
+  };
+
+  const updateTenant = async (id: string, updates: Partial<SaaSTenant>) => {
+      setTenants(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+      
+      const payload: any = {};
+      if (updates.status) payload.status = updates.status;
+      if (updates.planId) payload.plan_id = updates.planId;
+      
+      if (Object.keys(payload).length > 0) {
+          await supabase.from('tenants').update(payload).eq('id', id);
+      }
+  };
+
+  const deleteTenant = async (id: string) => {
+      setTenants(prev => prev.filter(t => t.id !== id));
+      await supabase.from('tenants').delete().eq('id', id);
+  };
+
+  const addTokensToTenant = async (tenantId: string, amount: number) => {
+      const tenant = tenants.find(t => t.id === tenantId);
+      if (!tenant) return;
+
+      // Update local state
+      setTenants(prev => prev.map(t => t.id === tenantId ? { ...t, tokenBalance: t.tokenBalance + amount } : t));
+      
+      // Update DB Tenant
+      const { data } = await supabase.from('tenants').select('subscription').eq('id', tenantId).single();
+      if (data && data.subscription) {
+          const sub = data.subscription as any;
+          sub.tokenBalance = (sub.tokenBalance || 0) + amount;
+          await supabase.from('tenants').update({ subscription: sub }).eq('id', tenantId);
+      }
+
+      // Add to Ledger
+      const ledgerEntry = {
+          tenant_id: tenantId,
+          tenant_name: tenant.name,
+          type: 'bonus',
+          amount: amount,
+          description: 'Bônus Administrativo',
+          date: new Date().toISOString()
+      };
+      
+      const { data: newLedger } = await supabase.from('saas_token_ledger').insert(ledgerEntry).select().single();
+      if (newLedger) {
+          setTokenLedger(prev => [{
+              id: newLedger.id,
+              tenantId: newLedger.tenant_id,
+              tenantName: newLedger.tenant_name,
+              type: newLedger.type as any,
+              amount: newLedger.amount,
+              value: newLedger.value,
+              description: newLedger.description,
+              date: newLedger.date
+          }, ...prev]);
+      }
+  };
+
+  // Plans
+  const addPlan = async (plan: SaaSPlan) => {
+      setPlans(prev => [...prev, plan]);
+      await supabase.from('saas_plans').insert({
+          id: plan.id,
+          name: plan.name,
+          price: plan.price,
+          features: plan.features,
+          included_tokens: plan.includedTokens,
+          max_employees: plan.maxEmployees,
+          max_disk_space: plan.maxDiskSpace,
+          active: plan.active,
+          highlight: plan.highlight
+      });
+
+      // SYNC TO STRIPE (If enabled)
+      if (saasSettings.paymentGateway === 'stripe' && saasSettings.apiKey) {
+          try {
+              await syncProductToStripe(plan.name, plan.price, 'recurring', saasSettings.apiKey);
+              console.log(`Plan ${plan.name} synced to Stripe`);
+          } catch (e) {
+              console.error("Failed to sync plan to Stripe", e);
+          }
+      }
+  };
+
+  const updatePlan = async (id: string, updates: Partial<SaaSPlan>) => {
+      setPlans(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+      
+      const payload: any = {};
+      if (updates.name) payload.name = updates.name;
+      if (updates.price !== undefined) payload.price = updates.price;
+      if (updates.features) payload.features = updates.features;
+      if (updates.includedTokens !== undefined) payload.included_tokens = updates.includedTokens;
+      if (updates.active !== undefined) payload.active = updates.active;
+      
+      await supabase.from('saas_plans').update(payload).eq('id', id);
+
+      // SYNC TO STRIPE (If price or name changed)
+      if ((updates.name || updates.price) && saasSettings.paymentGateway === 'stripe' && saasSettings.apiKey) {
+          const plan = plans.find(p => p.id === id);
+          if (plan) {
+              try {
+                  await syncProductToStripe(updates.name || plan.name, updates.price || plan.price, 'recurring', saasSettings.apiKey);
+                  console.log(`Plan ${plan.name} synced update to Stripe`);
+              } catch (e) {
+                  console.error("Failed to sync plan update to Stripe", e);
+              }
+          }
+      }
+  };
+
+  const deletePlan = async (id: string) => {
+      setPlans(prev => prev.filter(p => p.id !== id));
+      await supabase.from('saas_plans').delete().eq('id', id);
+  };
+
+  // Token Packages
+  const addTokenPackage = async (pkg: TokenPackage) => {
+      setTokenPackages(prev => [...prev, pkg]);
+      await supabase.from('token_packages').insert(pkg);
+
+      // SYNC TO STRIPE (If enabled)
+      if (saasSettings.paymentGateway === 'stripe' && saasSettings.apiKey) {
+          try {
+              await syncProductToStripe(pkg.name, pkg.price, 'one_time', saasSettings.apiKey);
+              console.log(`Package ${pkg.name} synced to Stripe`);
+          } catch (e) {
+              console.error("Failed to sync package to Stripe", e);
+          }
+      }
+  };
+
+  const updateTokenPackage = async (id: string, updates: Partial<TokenPackage>) => {
+      setTokenPackages(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+      await supabase.from('token_packages').update(updates).eq('id', id);
+  };
+
+  const deleteTokenPackage = async (id: string) => {
+      setTokenPackages(prev => prev.filter(p => p.id !== id));
+      await supabase.from('token_packages').delete().eq('id', id);
+  };
+
+  // Transactions
+  const addSaaSTransaction = async (transaction: SaaSTransaction) => {
+      setSaasTransactions(prev => [transaction, ...prev]);
+      await supabase.from('saas_financial_transactions').insert(transaction);
+  };
+
+  const deleteSaaSTransaction = async (id: string) => {
+      setSaasTransactions(prev => prev.filter(t => t.id !== id));
+      await supabase.from('saas_financial_transactions').delete().eq('id', id);
+  };
+
+  // Metrics Calculations
+  const totalMRR = tenants.filter(t => t.status === 'active').reduce((acc, t) => {
+      const plan = plans.find(p => p.id === t.planId);
+      return acc + (plan ? plan.price : 0);
+  }, 0);
+
+  // Update MRR in tenants list for display
+  const tenantsWithMRR = tenants.map(t => {
+      const plan = plans.find(p => p.id === t.planId);
+      return { ...t, mrr: plan ? plan.price : 0 };
+  });
+
   const activeTenantsCount = tenants.filter(t => t.status === 'active').length;
   
   const totalTokensSold = tokenLedger
@@ -328,7 +465,6 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
     .filter(t => t.type === 'usage')
     .reduce((acc, t) => acc + t.amount, 0));
 
-  // FINANCIAL METRICS CALCULATION
   const tokenSalesRevenue = tokenLedger
     .filter(t => t.type === 'purchase')
     .reduce((acc, t) => acc + (t.value || 0), 0);
@@ -348,7 +484,7 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
 
   return (
     <SuperAdminContext.Provider value={{
-      tenants,
+      tenants: tenantsWithMRR,
       plans,
       tokenPackages,
       tokenLedger,

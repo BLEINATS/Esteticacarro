@@ -6,7 +6,8 @@ import {
   CreditCard, UploadCloud, Lock, Share2, Plus, Trash2,
   DollarSign, Wrench, Check, Smile, Star, ListTodo,
   Image as ImageIcon, Search, Car, UserPlus, ChevronDown,
-  Printer, Send, Tag, Ticket, Trophy, Gift, Sparkles, Bot, Loader2, ImagePlus, Eye, Megaphone
+  Printer, Send, Tag, Ticket, Trophy, Gift, Sparkles, Bot, Loader2, ImagePlus, Eye, Megaphone,
+  Ban
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { WorkOrder, DamagePoint, VehicleInventory, DailyLogEntry, AdditionalItem, QualityChecklistItem, ScopeItem, Vehicle, VehicleSize, VEHICLE_SIZES, FinancialTransaction } from '../types';
@@ -31,12 +32,13 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     workOrders, addVehicle, useVoucher, getVoucherDetails,
     getClientPoints, companySettings, getRewardsByLevel, claimReward,
     addFinancialTransaction, deleteFinancialTransaction, financialTransactions,
-    updateClientLTV, subscription, consumeTokens, employees, campaigns
+    updateClientLTV, subscription, consumeTokens, employees, campaigns, currentUser
   } = useApp();
   const { showConfirm, showAlert, showOptions } = useDialog();
 
   const [activeTab, setActiveTab] = useState<'reception' | 'execution' | 'quality' | 'finance'>('reception');
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingLog, setIsSavingLog] = useState(false); // State for timeline saving
 
   const [selectedClientId, setSelectedClientId] = useState<string>(workOrder.clientId || '');
   const [clientSearch, setClientSearch] = useState('');
@@ -406,6 +408,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       }
   };
 
+  // ... (Other handlers remain same) ...
   const handleRegisterPayment = async () => {
     const currentData = getUpdatedOrderData();
     const amountToPay = currentData.totalValue || 0;
@@ -565,6 +568,13 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const handleLogPhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      
+      // Validação de Tamanho (2MB)
+      if (file.size > 2 * 1024 * 1024) {
+        showAlert({ title: 'Erro', message: 'Imagem muito grande. Máximo 2MB.', type: 'error' });
+        return;
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
         setNewLogPhoto(reader.result as string);
@@ -573,20 +583,33 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
   };
 
-  const handleAddLog = () => {
+  const handleAddLog = async () => {
     if (!newLogText && !newLogPhoto) return;
     
+    setIsSavingLog(true);
     const photos = newLogPhoto ? [newLogPhoto] : [];
     
-    setDailyLog([{ 
+    const newEntry: DailyLogEntry = { 
         id: Date.now().toString(), 
         date: new Date().toISOString(), 
         stage: 'Execução', 
         description: newLogText || 'Foto registrada', 
         photos: photos, 
         author: 'Técnico' 
-    }, ...dailyLog]);
+    };
+
+    const updatedLog = [newEntry, ...dailyLog];
     
+    // Update local state immediately
+    setDailyLog(updatedLog);
+    
+    // If OS exists in DB, save log immediately
+    const exists = workOrders.some(o => o.id === workOrder.id);
+    if (exists) {
+        await updateWorkOrder(workOrder.id, { dailyLog: updatedLog });
+    }
+    
+    setIsSavingLog(false);
     setNewLogText('');
     setNewLogPhoto(null);
   };
@@ -594,17 +617,30 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const handleQuickAfterPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      
+      if (file.size > 2 * 1024 * 1024) {
+        showAlert({ title: 'Erro', message: 'Imagem muito grande. Máximo 2MB.', type: 'error' });
+        return;
+      }
+
       const reader = new FileReader();
-      reader.onloadend = () => {
+      reader.onloadend = async () => {
         const url = reader.result as string;
-        setDailyLog([{ 
+        const newEntry = { 
             id: Date.now().toString(), 
             date: new Date().toISOString(), 
             stage: 'Finalização', 
             description: 'Resultado Final', 
             photos: [url], 
             author: 'Técnico' 
-        }, ...dailyLog]);
+        };
+        const updatedLog = [newEntry, ...dailyLog];
+        setDailyLog(updatedLog);
+        
+        const exists = workOrders.some(o => o.id === workOrder.id);
+        if (exists) {
+            await updateWorkOrder(workOrder.id, { dailyLog: updatedLog });
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -687,6 +723,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
     const htmlContent = WorkOrderPrintTemplate({ workOrder: printOrder, client: selectedClient });
     
+    // ... (Keep existing print logic) ...
     const printContent = `
       <!DOCTYPE html>
       <html>
@@ -856,6 +893,54 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     setIsSignaturePadOpen(false);
   };
 
+  const handleCancelOS = async () => {
+      const reasons = [
+          { label: 'Desistência do Cliente', value: 'desistencia' },
+          { label: 'Falta de Peça/Produto', value: 'falta_peca' },
+          { label: 'Erro de Cadastro', value: 'erro_cadastro' },
+          { label: 'Outro Motivo', value: 'outro' }
+      ];
+
+      const reason = await showOptions({
+          title: 'Cancelar Ordem de Serviço',
+          message: 'Selecione o motivo do cancelamento. A OS será arquivada.',
+          type: 'danger',
+          options: reasons.map(r => ({ label: r.label, value: r.value, variant: 'secondary' }))
+      });
+
+      if (reason) {
+          setIsSaving(true);
+          
+          // Add cancellation reason to log
+          const cancelLog: DailyLogEntry = {
+              id: Date.now().toString(),
+              date: new Date().toISOString(),
+              stage: 'Cancelamento',
+              description: `OS Cancelada. Motivo: ${reasons.find(r => r.value === reason)?.label || reason}`,
+              photos: [],
+              author: currentUser?.name || 'Sistema'
+          };
+
+          const updatedLog = [cancelLog, ...dailyLog];
+          setDailyLog(updatedLog);
+
+          await updateWorkOrder(workOrder.id, { 
+              status: 'Cancelado',
+              dailyLog: updatedLog
+          });
+          
+          setIsSaving(false);
+          setCurrentStatus('Cancelado');
+          onClose();
+          
+          await showAlert({ 
+              title: 'OS Cancelada', 
+              message: 'A ordem de serviço foi cancelada e arquivada.', 
+              type: 'info' 
+          });
+      }
+  };
+
   const currentExtrasTotal = additionalItems.reduce((acc, item) => acc + item.value, 0);
   const displaySubtotal = servicePrice + currentExtrasTotal;
   
@@ -943,6 +1028,8 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                   "px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wide border-none focus:ring-2 cursor-pointer text-xs sm:text-sm",
                   currentStatus === 'Aguardando Aprovação' 
                     ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+                    : currentStatus === 'Cancelado' 
+                    ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                     : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                 )}
               >
@@ -953,6 +1040,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                 <option value="Controle de Qualidade">Controle de Qualidade</option>
                 <option value="Concluído">Concluído (Pronto)</option>
                 <option value="Entregue">Entregue ao Cliente</option>
+                <option value="Cancelado">Cancelado</option>
               </select>
 
               {selectedClientId && companySettings.gamification?.enabled && (
@@ -1006,6 +1094,19 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     <span className="hidden sm:inline">Salvar Tudo</span><span className="sm:hidden">Salvar</span>
                 </button>
             )}
+            
+            {/* Cancelar OS Button */}
+            {currentStatus !== 'Cancelado' && currentStatus !== 'Concluído' && currentStatus !== 'Entregue' && (
+                <button 
+                    onClick={handleCancelOS}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-[10px] sm:text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                    title="Cancelar OS"
+                >
+                    <Ban size={14} />
+                    <span className="hidden sm:inline">Cancelar</span>
+                </button>
+            )}
+
             <button onClick={handlePrint} className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-slate-600 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-slate-700 transition-colors">
                 <Printer size={14} /> <span className="hidden sm:inline">Imprimir</span><span className="sm:hidden">Print</span>
             </button>
@@ -1026,6 +1127,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           </div>
         </div>
 
+        {/* ... (Tabs and Content - No changes needed here) ... */}
         <div className="flex w-full border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
           {[
             { id: 'reception', label: 'Recepção & Vistoria', mobileLabel: 'Recepção', icon: ClipboardCheck },
@@ -1053,8 +1155,10 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
         <div className="flex-1 overflow-y-auto p-2 sm:p-6 bg-slate-50/30 dark:bg-slate-950/30">
           
+          {/* ... (Reception Tab - No changes) ... */}
           {activeTab === 'reception' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-8">
+              {/* ... (Reception Content) ... */}
               <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm mb-2">
                  <h3 className="font-bold text-slate-900 dark:text-white mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
                     <User size={18} className="text-blue-600" />
@@ -1428,9 +1532,10 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
                     <button 
                       onClick={handleAddLog}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 h-10"
+                      disabled={isSavingLog || (!newLogText && !newLogPhoto)}
+                      className="px-4 py-2 bg-blue-600 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white rounded-lg text-sm font-medium hover:bg-blue-700 h-10 flex items-center gap-2"
                     >
-                      Registrar
+                      {isSavingLog ? <Loader2 className="animate-spin" size={16} /> : 'Registrar'}
                     </button>
                   </div>
 

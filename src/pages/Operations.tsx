@@ -32,15 +32,19 @@ const StatusBadge = ({ status }: { status: string }) => {
 };
 
 export default function Operations() {
-  const { workOrders, clients } = useApp();
+  const { workOrders, clients, updateWorkOrder } = useApp();
   const location = useLocation();
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
   const [selectedOS, setSelectedOS] = useState<WorkOrder | null>(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
 
+  // Drag and Drop State
+  const [draggedOSId, setDraggedOSId] = useState<string | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+
   // Scroll Refs & State
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [isDraggingScroll, setIsDraggingScroll] = useState(false);
   const [startX, setStartX] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
@@ -66,11 +70,11 @@ export default function Operations() {
   });
 
   const kanbanColumns = [
-    { id: 'approval', title: 'Aprovação', statuses: ['Aguardando Aprovação'], color: 'purple', borderColor: 'border-purple-500', bgColor: 'bg-purple-50/50 dark:bg-purple-900/10', icon: AlertCircle },
-    { id: 'queue', title: 'Fila de Espera', statuses: ['Aguardando'], color: 'amber', borderColor: 'border-amber-500', bgColor: 'bg-amber-50/50 dark:bg-amber-900/10', icon: Clock },
-    { id: 'execution', title: 'Em Execução', statuses: ['Em Andamento', 'Aguardando Peças'], color: 'blue', borderColor: 'border-blue-500', bgColor: 'bg-blue-50/50 dark:bg-blue-900/10', icon: Hammer },
-    { id: 'qa', title: 'Qualidade (QA)', statuses: ['Controle de Qualidade'], color: 'indigo', borderColor: 'border-indigo-500', bgColor: 'bg-indigo-50/50 dark:bg-indigo-900/10', icon: ShieldCheck },
-    { id: 'done', title: 'Pronto / Entregue', statuses: ['Concluído', 'Entregue'], color: 'green', borderColor: 'border-green-500', bgColor: 'bg-green-50/50 dark:bg-green-900/10', icon: CheckCircle2 }
+    { id: 'approval', title: 'Aprovação', statuses: ['Aguardando Aprovação'], color: 'purple', borderColor: 'border-purple-500', bgColor: 'bg-purple-50/50 dark:bg-purple-900/10', icon: AlertCircle, targetStatus: 'Aguardando Aprovação' },
+    { id: 'queue', title: 'Fila de Espera', statuses: ['Aguardando'], color: 'amber', borderColor: 'border-amber-500', bgColor: 'bg-amber-50/50 dark:bg-amber-900/10', icon: Clock, targetStatus: 'Aguardando' },
+    { id: 'execution', title: 'Em Execução', statuses: ['Em Andamento', 'Aguardando Peças'], color: 'blue', borderColor: 'border-blue-500', bgColor: 'bg-blue-50/50 dark:bg-blue-900/10', icon: Hammer, targetStatus: 'Em Andamento' },
+    { id: 'qa', title: 'Qualidade (QA)', statuses: ['Controle de Qualidade'], color: 'indigo', borderColor: 'border-indigo-500', bgColor: 'bg-indigo-50/50 dark:bg-indigo-900/10', icon: ShieldCheck, targetStatus: 'Controle de Qualidade' },
+    { id: 'done', title: 'Pronto / Entregue', statuses: ['Concluído', 'Entregue'], color: 'green', borderColor: 'border-green-500', bgColor: 'bg-green-50/50 dark:bg-green-900/10', icon: CheckCircle2, targetStatus: 'Concluído' }
   ];
 
   // --- SCROLL LOGIC ---
@@ -98,28 +102,57 @@ export default function Operations() {
     }
   };
 
-  // Drag to Scroll Handlers
+  // Drag to Scroll Handlers (Container)
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!scrollContainerRef.current) return;
-    setIsDragging(true);
+    // Only drag scroll if not dragging a card
+    if (draggedOSId) return;
+    
+    setIsDraggingScroll(true);
     setStartX(e.pageX - scrollContainerRef.current.offsetLeft);
     setScrollLeft(scrollContainerRef.current.scrollLeft);
   };
 
   const handleMouseLeave = () => {
-    setIsDragging(false);
+    setIsDraggingScroll(false);
   };
 
   const handleMouseUp = () => {
-    setIsDragging(false);
+    setIsDraggingScroll(false);
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || !scrollContainerRef.current) return;
+    if (!isDraggingScroll || !scrollContainerRef.current) return;
     e.preventDefault();
     const x = e.pageX - scrollContainerRef.current.offsetLeft;
-    const walk = (x - startX) * 2; // Scroll speed multiplier
+    const walk = (x - startX) * 2;
     scrollContainerRef.current.scrollLeft = scrollLeft - walk;
+  };
+
+  // --- DRAG AND DROP HANDLERS (CARDS) ---
+  const handleDragStart = (e: React.DragEvent, osId: string) => {
+    setDraggedOSId(osId);
+    e.dataTransfer.effectAllowed = 'move';
+    // Set transparent drag image or custom if needed, default is fine
+  };
+
+  const handleDragOver = (e: React.DragEvent, columnId: string) => {
+    e.preventDefault(); // Necessary to allow dropping
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverColumn !== columnId) {
+        setDragOverColumn(columnId);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetStatus: WorkOrder['status']) => {
+    e.preventDefault();
+    setDragOverColumn(null);
+    
+    if (draggedOSId) {
+        // Update Status
+        await updateWorkOrder(draggedOSId, { status: targetStatus });
+        setDraggedOSId(null);
+    }
   };
 
   return (
@@ -368,7 +401,7 @@ export default function Operations() {
             ref={scrollContainerRef}
             className={cn(
               "overflow-x-auto pb-4 flex-1 scrollbar-hide cursor-grab active:cursor-grabbing",
-              isDragging ? "select-none" : ""
+              isDraggingScroll ? "select-none" : ""
             )}
             onMouseDown={handleMouseDown}
             onMouseLeave={handleMouseLeave}
@@ -380,13 +413,20 @@ export default function Operations() {
               {kanbanColumns.map((column) => {
                 const columnWorkOrders = workOrders.filter(os => column.statuses.includes(os.status));
                 const Icon = column.icon;
+                const isOver = dragOverColumn === column.id;
                 
                 return (
-                  <div key={column.id} className="flex-shrink-0 w-72 sm:w-80 flex flex-col h-full">
+                  <div 
+                    key={column.id} 
+                    className="flex-shrink-0 w-72 sm:w-80 flex flex-col h-full"
+                    onDragOver={(e) => handleDragOver(e, column.id)}
+                    onDrop={(e) => handleDrop(e, column.targetStatus as any)}
+                  >
                     {/* Column Header */}
                     <div className={cn(
-                      "flex items-center gap-2 px-3 py-3 rounded-t-xl border-t-4 bg-white dark:bg-slate-900 shadow-sm",
-                      column.borderColor
+                      "flex items-center gap-2 px-3 py-3 rounded-t-xl border-t-4 bg-white dark:bg-slate-900 shadow-sm transition-colors",
+                      column.borderColor,
+                      isOver ? "bg-blue-50 dark:bg-blue-900/20" : ""
                     )}>
                       <Icon size={18} className="flex-shrink-0 text-slate-500 dark:text-slate-400" />
                       <div className="min-w-0 flex-1">
@@ -396,13 +436,22 @@ export default function Operations() {
                     </div>
 
                     {/* Cards Container */}
-                    <div className={cn("flex-1 overflow-y-auto space-y-2 p-2 rounded-b-xl border-x border-b border-slate-200 dark:border-slate-800/50", column.bgColor)}>
+                    <div className={cn(
+                        "flex-1 overflow-y-auto space-y-2 p-2 rounded-b-xl border-x border-b border-slate-200 dark:border-slate-800/50 transition-colors", 
+                        column.bgColor,
+                        isOver ? "ring-2 ring-inset ring-blue-500 bg-white/50 dark:bg-slate-800/50" : ""
+                    )}>
                       {columnWorkOrders.length > 0 ? (
                         columnWorkOrders.map((os) => (
                           <div
                             key={os.id}
-                            onClick={() => !isDragging && setSelectedOS(os)}
-                            className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all select-none group"
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, os.id)}
+                            onClick={() => !isDraggingScroll && setSelectedOS(os)}
+                            className={cn(
+                                "bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 cursor-grab active:cursor-grabbing hover:shadow-md hover:-translate-y-0.5 transition-all select-none group",
+                                draggedOSId === os.id ? "opacity-50 border-dashed border-blue-500" : ""
+                            )}
                           >
                             <div className="flex items-start justify-between gap-2 mb-2">
                               <div className="flex-1 min-w-0">
@@ -439,7 +488,7 @@ export default function Operations() {
                           <div className="p-2 bg-white/50 dark:bg-black/20 rounded-full mb-2">
                              <column.icon size={20} />
                           </div>
-                          Vazio
+                          Arraste para cá
                         </div>
                       )}
                     </div>

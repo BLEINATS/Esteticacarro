@@ -81,10 +81,17 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
     if (!invItem) return total;
     
     let multiplier = 1;
-    if (invItem.unit.toLowerCase() === 'l' && item.usageUnit === 'ml') multiplier = 0.001;
-    else if (invItem.unit.toLowerCase() === 'kg' && item.usageUnit === 'g') multiplier = 0.001;
+    const invUnit = invItem.unit ? invItem.unit.toLowerCase() : '';
+    const usageUnit = item.usageUnit ? item.usageUnit.toLowerCase() : '';
+
+    if (invUnit === 'l' && usageUnit === 'ml') multiplier = 0.001;
+    else if (invUnit === 'kg' && usageUnit === 'g') multiplier = 0.001;
     
-    return total + (invItem.costPrice * item.quantity * multiplier);
+    // Safety check for numbers to prevent NaN
+    const cost = Number(invItem.costPrice) || 0;
+    const qty = Number(item.quantity) || 0;
+    
+    return total + (cost * qty * multiplier);
   }, 0);
 
   return (

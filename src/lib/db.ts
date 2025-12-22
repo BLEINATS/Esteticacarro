@@ -5,12 +5,13 @@ import {
 } from './mockData';
 
 const DB_NAME = 'cristal_care_idb';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Incremented version for schema changes
 const LOCAL_STORAGE_KEY = 'cristal_care_local_db_v1';
 
 // List of all object stores (collections)
 const COLLECTIONS = [
   'clients', 
+  'vehicles', // Added vehicles collection
   'work_orders', 
   'inventory', 
   'services', 
@@ -139,19 +140,33 @@ const initializeDB = async () => {
     // 2. If no local data, check if IDB is empty (Fresh Start)
     const userCount = await runTransaction<number>('users', 'readonly', store => store.count());
     
-    if (userCount === 0) {
+    // CHECK FOR SKIP SEEDING FLAG (To allow clean registration)
+    const shouldSkipSeeding = localStorage.getItem('skip_seeding') === 'true';
+    
+    if (userCount === 0 && !shouldSkipSeeding) {
       console.log('Seeding IndexedDB with Mock Data...');
       const tx = db.transaction(COLLECTIONS, 'readwrite');
       
       const seed = (col: CollectionName, data: any[]) => {
         const store = tx.objectStore(col);
         data.forEach(item => {
-           // Ensure ID is string for consistency if needed, but keeping as is for numbers
            store.put(item);
         });
       };
 
       seed('clients', MOCK_CLIENTS);
+      // Extract vehicles from clients for seeding if needed, but MOCK_CLIENTS has nested vehicles.
+      // We should ideally flatten them here for the new structure.
+      const vehicles: any[] = [];
+      MOCK_CLIENTS.forEach(c => {
+          if (c.vehicles) {
+              c.vehicles.forEach(v => {
+                  vehicles.push({ ...v, client_id: c.id, tenant_id: MOCK_TENANT.id });
+              });
+          }
+      });
+      seed('vehicles', vehicles);
+
       seed('work_orders', MOCK_WORK_ORDERS);
       seed('inventory', MOCK_INVENTORY);
       seed('services', MOCK_SERVICES);
@@ -164,16 +179,13 @@ const initializeDB = async () => {
       seed('reminders', MOCK_REMINDERS);
       seed('rewards', MOCK_REWARDS);
       
-      // Initialize empty collections
-      ['marketing_campaigns', 'redemptions', 'fidelity_cards', 'points_history', 'message_logs'].forEach(col => {
-          // No op, just ensuring transaction covers them if we added logic later
-      });
-
       await new Promise<void>((resolve, reject) => {
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
       });
       console.log('Seeding complete.');
+    } else if (userCount === 0 && shouldSkipSeeding) {
+        console.log('Skipping seed (Clean Install requested).');
     }
 
   } catch (error) {
@@ -186,14 +198,17 @@ const delay = (ms = 100) => new Promise(resolve => setTimeout(resolve, ms));
 export const db = {
   init: initializeDB,
 
-  reset: async () => {
+  reset: async (skipSeeding = false) => {
     if (dbInstance) {
       dbInstance.close();
       dbInstance = null;
     }
     const req = indexedDB.deleteDatabase(DB_NAME);
     req.onsuccess = () => {
-      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      localStorage.clear(); // Clear all local storage
+      if (skipSeeding) {
+          localStorage.setItem('skip_seeding', 'true');
+      }
       window.location.reload();
     };
   },

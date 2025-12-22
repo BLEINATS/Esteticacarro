@@ -1,22 +1,23 @@
-// Este arquivo agora é apenas um placeholder para evitar quebras de importação
-// A funcionalidade real foi movida para src/lib/db.ts usando localStorage
+import { createClient } from '@supabase/supabase-js';
+import { Database } from '../types/supabase';
 
-export const supabase = {
-  auth: {
-    getSession: async () => ({ data: { session: null }, error: null }),
-    onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-    signInWithPassword: async () => ({ error: { message: "Use o novo sistema de login" } }),
-    signOut: async () => ({ error: null }),
-    getUser: async () => ({ data: { user: null } }),
-  },
-  from: () => ({
-    select: () => ({ data: [], error: null }),
-    insert: () => ({ select: () => ({ single: () => ({ data: null, error: null }) }) }),
-    update: () => ({ eq: () => ({ error: null }) }),
-    delete: () => ({ eq: () => ({ error: null }) }),
-  })
-};
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('Supabase URL or Key not found in environment variables.');
+}
+
+export const supabase = createClient<Database>(
+  supabaseUrl || '', 
+  supabaseAnonKey || ''
+);
 
 export const checkSupabaseConnection = async () => {
-  return true; // Sempre retorna true no modo mock
+  try {
+    const { error } = await supabase.from('tenants').select('count', { count: 'exact', head: true });
+    return !error;
+  } catch (e) {
+    return false;
+  }
 };

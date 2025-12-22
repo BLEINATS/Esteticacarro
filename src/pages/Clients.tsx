@@ -6,7 +6,7 @@ import { cn, formatCurrency } from '../lib/utils';
 import ClientModal from '../components/ClientModal';
 import ClientDetailsModal from '../components/ClientDetailsModal';
 import { useDialog } from '../context/DialogContext';
-import { differenceInDays } from 'date-fns';
+import { differenceInDays, isValid, parseISO } from 'date-fns';
 import { useLocation } from 'react-router-dom';
 
 export default function Clients() {
@@ -108,9 +108,11 @@ export default function Clients() {
       }
   };
 
-  const getDaysSinceLastVisit = (dateStr: string) => {
-      if (!dateStr) return 0;
-      return differenceInDays(new Date(), new Date(dateStr));
+  const getDaysSinceLastVisit = (dateStr: string | null | undefined) => {
+      if (!dateStr) return null;
+      const date = new Date(dateStr);
+      if (!isValid(date)) return null;
+      return differenceInDays(new Date(), date);
   };
 
   return (
@@ -258,6 +260,8 @@ export default function Clients() {
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {filteredClients.map((client) => {
               const daysSince = getDaysSinceLastVisit(client.lastVisit);
+              const hasVisit = daysSince !== null;
+              
               return (
               <tr 
                 key={client.id} 
@@ -291,10 +295,14 @@ export default function Clients() {
                 <td className="px-4 sm:px-6 py-3 sm:py-4">
                   <div className="flex flex-col">
                     <span className="text-xs sm:text-sm font-medium text-slate-900 dark:text-white">
-                        {daysSince === 0 ? 'Hoje' : `Há ${daysSince} dias`}
+                        {hasVisit 
+                            ? (daysSince === 0 ? 'Hoje' : `Há ${daysSince} dias`) 
+                            : 'Novo'}
                     </span>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                        {new Date(client.lastVisit).toLocaleDateString('pt-BR')}
+                        {hasVisit && client.lastVisit
+                            ? new Date(client.lastVisit).toLocaleDateString('pt-BR') 
+                            : 'Sem visitas'}
                     </span>
                   </div>
                 </td>
@@ -341,6 +349,8 @@ export default function Clients() {
         {filteredClients.length > 0 ? (
           filteredClients.map((client) => {
             const daysSince = getDaysSinceLastVisit(client.lastVisit);
+            const hasVisit = daysSince !== null;
+
             return (
             <div 
               key={client.id}
@@ -354,7 +364,9 @@ export default function Clients() {
                   </div>
                   <div className="min-w-0">
                     <p className="font-medium text-sm text-slate-900 dark:text-white truncate">{client.name}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Há {daysSince} dias sem vir</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {hasVisit ? `Há ${daysSince} dias sem vir` : 'Novo cliente'}
+                    </p>
                   </div>
                 </div>
                 <span className={cn(

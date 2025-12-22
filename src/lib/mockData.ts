@@ -3,8 +3,9 @@ import {
   Employee, FinancialTransaction, Vehicle, CompanySettings, SystemAlert, Reminder, Reward, EmployeeTransaction
 } from '../types';
 
+// Valid UUIDs for compatibility with Supabase
 export const MOCK_USER = {
-  id: 'user-123',
+  id: '11111111-1111-4111-8111-111111111111',
   name: 'Admin Cristal Care',
   email: 'admin@cristalcare.com',
   password: '123', // Senha simples para testes
@@ -12,7 +13,7 @@ export const MOCK_USER = {
 };
 
 export const MOCK_TENANT = {
-  id: 'tenant-1',
+  id: '22222222-2222-4222-8222-222222222222',
   name: 'Cristal Care Autodetail',
   slug: 'cristal-care',
   owner_id: MOCK_USER.id,
@@ -282,7 +283,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
   }
 ];
 
-export const MOCK_EMPLOYEE_TRANSACTIONS: EmployeeTransaction[] = [
+export const MOCK_EMPLOYEES_TRANSACTIONS: EmployeeTransaction[] = [
   {
     id: 't1',
     employeeId: 'e1',
@@ -501,3 +502,5 @@ export const MOCK_REWARDS: Reward[] = [
     config: { percentage: 50 }
   }
 ];
+
+export const MOCK_EMPLOYEE_TRANSACTIONS = MOCK_EMPLOYEES_TRANSACTIONS;

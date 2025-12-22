@@ -28,16 +28,16 @@ import {
   Car,
   Wrench,
   LayoutGrid,
-  Filter,
-  Info
+  Info,
+  Bell
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { cn } from '../lib/utils';
+import { cn, formatId } from '../lib/utils';
 import WorkOrderModal from '../components/WorkOrderModal';
 import { WorkOrder } from '../types';
 
 export default function Schedule() {
-  const { workOrders, clients } = useApp();
+  const { workOrders, clients, reminders } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'list'>('week');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -103,10 +103,16 @@ export default function Schedule() {
   };
 
   const getVisualEvents = (date: Date) => {
-      return workOrders.filter(os => {
+      const osEvents = workOrders.filter(os => {
           const eventDate = getEventDate(os);
           return isSameDay(eventDate, date);
-      });
+      }).map(os => ({ type: 'os', data: os }));
+
+      const reminderEvents = reminders.filter(r => {
+          return isSameDay(parseISO(r.dueDate), date) && r.status === 'pending';
+      }).map(r => ({ type: 'reminder', data: r }));
+
+      return [...osEvents, ...reminderEvents];
   };
 
   const selectedDayEvents = getVisualEvents(selectedDate);
@@ -141,13 +147,25 @@ export default function Schedule() {
         dailyLog: [],
         qaChecklist: [],
         createdAt: new Date().toISOString(),
-        checklist: []
+        checklist: [],
+        tasks: []
     };
     setSelectedOS(newOS);
   };
 
+  const getStatusStyle = (status: string) => {
+    switch (status) {
+      case 'Aguardando Aprovação': return "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400";
+      case 'Concluído': return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400";
+      case 'Entregue': return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400";
+      case 'Aguardando': return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";
+      case 'Cancelado': return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400";
+      case 'Em Andamento': return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400";
+      default: return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400";
+    }
+  };
+
   return (
-    // FIX: Use h-auto on mobile to allow scrolling, h-full on desktop
     <div className="space-y-4 md:space-y-6 h-auto md:h-full flex flex-col animate-in fade-in duration-500">
       {selectedOS && (
         <WorkOrderModal 
@@ -156,54 +174,12 @@ export default function Schedule() {
         />
       )}
 
-      {showScheduleHelp && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
-                <div className="flex items-start gap-4 mb-4">
-                    <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400">
-                        <Info size={24} />
-                    </div>
-                    <div>
-                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">Como funciona o Agendamento?</h3>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                            No sistema Crystal Care, um agendamento é simplesmente uma <strong>Ordem de Serviço (OS)</strong> com o status definido como <strong>"Aguardando"</strong>.
-                        </p>
-                    </div>
-                </div>
-                
-                <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl mb-6 text-sm text-slate-600 dark:text-slate-300">
-                    <p className="mb-2">Ao clicar em "Criar Agendamento", o sistema irá:</p>
-                    <ul className="list-disc pl-5 space-y-1">
-                        <li>Abrir uma nova OS.</li>
-                        <li>Definir a data para <strong>{format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}</strong>.</li>
-                        <li>Definir o status como <strong>Aguardando</strong>.</li>
-                    </ul>
-                </div>
-
-                <div className="flex gap-3">
-                    <button 
-                        onClick={() => setShowScheduleHelp(false)}
-                        className="flex-1 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                    >
-                        Cancelar
-                    </button>
-                    <button 
-                        onClick={handleNewAppointment}
-                        className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20"
-                    >
-                        Criar Agendamento Agora
-                    </button>
-                </div>
-            </div>
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex flex-col gap-4 flex-shrink-0">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Agenda</h2>
-                <p className="text-slate-500 dark:text-slate-400 text-sm">Planejamento de serviços.</p>
+                <p className="text-slate-500 dark:text-slate-400 text-sm">Planejamento de serviços e retornos.</p>
             </div>
             
             <div className="flex flex-wrap items-center gap-2">
@@ -244,7 +220,7 @@ export default function Schedule() {
                 </div>
                 
                 <button 
-                    onClick={() => setShowScheduleHelp(true)}
+                    onClick={handleNewAppointment}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm transition-colors whitespace-nowrap"
                 >
                     <Plus size={18} />
@@ -330,31 +306,50 @@ export default function Schedule() {
 
                         {/* Event Pills */}
                         <div className="flex-1 flex flex-col gap-1 overflow-y-auto scrollbar-hide mt-1">
-                          {events.map(ev => (
-                            <div 
-                              key={ev.id} 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedOS(ev);
-                              }}
-                              className={cn(
-                                "text-[10px] md:text-[11px] px-1.5 py-1 md:px-2 md:py-1.5 rounded-md font-medium flex flex-col gap-0.5 border shadow-sm transition-all hover:scale-[1.02]",
-                                ev.status === 'Concluído' ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800" :
-                                ev.status === 'Aguardando' ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800" :
-                                "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800"
-                              )}
-                              title={`${ev.vehicle} - ${ev.service}`}
-                            >
-                              <div className="flex items-center gap-1">
-                                <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", 
-                                    ev.status === 'Concluído' ? "bg-green-500" : 
-                                    ev.status === 'Aguardando' ? "bg-amber-500" : "bg-blue-500"
-                                )} />
-                                <span className="font-bold truncate">{ev.vehicle}</span>
-                              </div>
-                              <span className="opacity-80 truncate pl-2.5 hidden md:block">{ev.service}</span>
-                            </div>
-                          ))}
+                          {events.map((ev: any, idx) => {
+                            if (ev.type === 'os') {
+                                const os = ev.data as WorkOrder;
+                                return (
+                                    <div 
+                                    key={os.id} 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedOS(os);
+                                    }}
+                                    className={cn(
+                                        "text-[10px] md:text-[11px] px-1.5 py-1 md:px-2 md:py-1.5 rounded-md font-medium flex flex-col gap-0.5 border shadow-sm transition-all hover:scale-[1.02]",
+                                        os.status === 'Concluído' ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800" :
+                                        os.status === 'Aguardando' ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800" :
+                                        "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800"
+                                    )}
+                                    title={`${os.vehicle} - ${os.service}`}
+                                    >
+                                    <div className="flex items-center gap-1">
+                                        <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", 
+                                            os.status === 'Concluído' ? "bg-green-500" : 
+                                            os.status === 'Aguardando' ? "bg-amber-500" : "bg-blue-500"
+                                        )} />
+                                        <span className="font-bold truncate">{os.vehicle}</span>
+                                    </div>
+                                    <span className="opacity-80 truncate pl-2.5 hidden md:block">{os.service}</span>
+                                    </div>
+                                );
+                            } else {
+                                const rem = ev.data;
+                                return (
+                                    <div 
+                                        key={rem.id}
+                                        className="text-[10px] md:text-[11px] px-1.5 py-1 md:px-2 md:py-1.5 rounded-md font-medium flex flex-col gap-0.5 border shadow-sm bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800"
+                                    >
+                                        <div className="flex items-center gap-1">
+                                            <Bell size={10} />
+                                            <span className="font-bold truncate">Lembrete</span>
+                                        </div>
+                                        <span className="opacity-80 truncate pl-2.5 hidden md:block">{rem.serviceType}</span>
+                                    </div>
+                                );
+                            }
+                          })}
                         </div>
                       </div>
                     );
@@ -381,27 +376,46 @@ export default function Schedule() {
                                 {format(day, "EEEE, d 'de' MMMM", { locale: ptBR })}
                             </h4>
                             <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                                {events.map(os => (
-                                    <div key={os.id} onClick={() => setSelectedOS(os)} className="flex items-center gap-4 p-4 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors">
-                                        <div className="text-center min-w-[50px]">
-                                            <span className="block text-xs font-bold text-slate-400">{os.deadline?.split(',')[1] || '08:00'}</span>
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="font-bold text-slate-900 dark:text-white truncate">{os.vehicle}</p>
-                                            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 truncate">
-                                                <Wrench size={12} /> {os.service}
-                                            </p>
-                                        </div>
-                                        <span className={cn(
-                                            "text-xs px-2.5 py-1 rounded-full font-bold whitespace-nowrap",
-                                            os.status === 'Concluído' ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : 
-                                            os.status === 'Aguardando' ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
-                                            "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                                        )}>
-                                            {os.status}
-                                        </span>
-                                    </div>
-                                ))}
+                                {events.map((ev: any) => {
+                                    if (ev.type === 'os') {
+                                        const os = ev.data as WorkOrder;
+                                        return (
+                                            <div key={os.id} onClick={() => setSelectedOS(os)} className="flex items-center gap-4 p-4 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors">
+                                                <div className="text-center min-w-[50px]">
+                                                    <span className="block text-xs font-bold text-slate-400">{os.deadline?.split(',')[1] || '08:00'}</span>
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-bold text-slate-900 dark:text-white truncate">{os.vehicle}</p>
+                                                    <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 truncate">
+                                                        <Wrench size={12} /> {os.service}
+                                                    </p>
+                                                </div>
+                                                <span className={cn(
+                                                    "text-xs px-2.5 py-1 rounded-full font-bold whitespace-nowrap",
+                                                    os.status === 'Concluído' ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : 
+                                                    os.status === 'Aguardando' ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
+                                                    "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                                )}>
+                                                    {os.status}
+                                                </span>
+                                            </div>
+                                        );
+                                    } else {
+                                        const rem = ev.data;
+                                        return (
+                                            <div key={rem.id} className="flex items-center gap-4 p-4 bg-purple-50/30 dark:bg-purple-900/10">
+                                                <div className="text-center min-w-[50px]">
+                                                    <Bell size={16} className="mx-auto text-purple-500" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-bold text-slate-900 dark:text-white truncate">Lembrete de Retorno</p>
+                                                    <p className="text-xs text-slate-500 dark:text-slate-400">{rem.serviceType}</p>
+                                                </div>
+                                                <button className="text-xs font-bold text-purple-600 hover:underline">Agendar</button>
+                                            </div>
+                                        );
+                                    }
+                                })}
                             </div>
                         </div>
                     )
@@ -417,42 +431,65 @@ export default function Schedule() {
               {isToday(selectedDate) ? 'Hoje' : format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR })}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1">
-              <Clock size={12} /> {selectedDayEvents.length} agendamentos
+              <Clock size={12} /> {selectedDayEvents.length} eventos
             </p>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {selectedDayEvents.length > 0 ? selectedDayEvents.map(os => (
-              <div 
-                key={os.id} 
-                onClick={() => setSelectedOS(os)}
-                className="p-3 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-all group hover:shadow-md hover:border-blue-200 dark:hover:border-blue-900"
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded">
-                    {os.deadline?.split(',')[1] || 'Dia todo'}
-                  </span>
-                  <span className={cn(
-                    "w-2 h-2 rounded-full",
-                    os.status === 'Concluído' ? "bg-green-500" : 
-                    os.status === 'Aguardando' ? "bg-amber-500" : "bg-blue-500"
-                  )} />
-                </div>
-                <h4 className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-blue-600 transition-colors truncate">
-                  {os.vehicle}
-                </h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-1 line-clamp-1">
-                    <Wrench size={10} /> {os.service}
-                </p>
-                
-                <div className="flex items-center gap-2 text-[10px] text-slate-400 border-t border-slate-100 dark:border-slate-800 pt-2">
-                   <Car size={12} />
-                   <span className="truncate max-w-[80px]">{os.plate}</span>
-                   <span className="mx-1">•</span>
-                   <span className="truncate">{clients.find(c => c.id === os.clientId)?.name.split(' ')[0]}</span>
-                </div>
-              </div>
-            )) : (
+            {selectedDayEvents.length > 0 ? selectedDayEvents.map((ev: any) => {
+                if (ev.type === 'os') {
+                    const os = ev.data as WorkOrder;
+                    return (
+                        <div 
+                            key={os.id} 
+                            onClick={() => setSelectedOS(os)}
+                            className="p-3 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-all group hover:shadow-md hover:border-blue-200 dark:hover:border-blue-900"
+                        >
+                            <div className="flex justify-between items-start mb-2">
+                            <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded">
+                                {os.deadline?.split(',')[1] || 'Dia todo'}
+                            </span>
+                            
+                            {/* STATUS BADGE (Replaces Dot) */}
+                            <span className={cn(
+                                "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide",
+                                getStatusStyle(os.status)
+                            )}>
+                                {os.status}
+                            </span>
+                            </div>
+                            
+                            <h4 className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-blue-600 transition-colors truncate">
+                            {os.vehicle}
+                            </h4>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-1 line-clamp-1">
+                                <Wrench size={10} /> {os.service}
+                            </p>
+                            
+                            <div className="flex items-center gap-2 text-[10px] text-slate-400 border-t border-slate-100 dark:border-slate-800 pt-2">
+                            <Car size={12} />
+                            <span className="truncate max-w-[80px]">{os.plate}</span>
+                            <span className="mx-1">•</span>
+                            <span className="truncate">{clients.find(c => c.id === os.clientId)?.name.split(' ')[0]}</span>
+                            </div>
+                        </div>
+                    );
+                } else {
+                    const rem = ev.data;
+                    return (
+                        <div key={rem.id} className="p-3 rounded-lg border border-purple-100 dark:border-purple-900/30 bg-purple-50/50 dark:bg-purple-900/10">
+                            <div className="flex items-center gap-2 mb-1">
+                                <Bell size={14} className="text-purple-500" />
+                                <span className="text-xs font-bold text-purple-700 dark:text-purple-300">Lembrete de Retorno</span>
+                            </div>
+                            <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{rem.serviceType}</p>
+                            <button className="mt-2 w-full py-1 bg-white dark:bg-slate-800 text-purple-600 dark:text-purple-400 text-xs font-bold rounded border border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors">
+                                Criar Agendamento
+                            </button>
+                        </div>
+                    );
+                }
+            }) : (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 py-8">
                 <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-full mb-3">
                     <CalendarIcon size={24} className="opacity-50" />

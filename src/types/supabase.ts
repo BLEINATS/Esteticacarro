@@ -9,7 +9,176 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
-      // ... (existing tables)
+      services: {
+        Row: {
+          id: string
+          tenant_id: string
+          name: string
+          category: string
+          description: string | null
+          standard_time: number
+          active: boolean
+          price_matrix: Json
+          return_interval_days: number | null
+          show_on_landing_page: boolean | null
+          image_url: string | null
+          created_at: string
+        }
+        Insert: {
+          id: string
+          tenant_id: string
+          name: string
+          category: string
+          description?: string | null
+          standard_time?: number
+          active?: boolean
+          price_matrix?: Json
+          return_interval_days?: number | null
+          show_on_landing_page?: boolean | null
+          image_url?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          name?: string
+          category?: string
+          description?: string | null
+          standard_time?: number
+          active?: boolean
+          price_matrix?: Json
+          return_interval_days?: number | null
+          show_on_landing_page?: boolean | null
+          image_url?: string | null
+          created_at?: string
+        }
+      }
+      // ... (other tables remain unchanged, but for brevity I am only showing the changed one. 
+      // In a real scenario I would keep the full file content or just the changed part if the system merges it. 
+      // Since I must provide full file content for replacement, I will include the rest of the file as it was in context)
+      reminders: {
+        Row: {
+          id: string
+          tenant_id: string
+          client_id: string
+          vehicle_id: string | null
+          service_type: string
+          due_date: string
+          status: string
+          auto_generated: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          client_id: string
+          vehicle_id?: string | null
+          service_type: string
+          due_date: string
+          status?: string
+          auto_generated?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          client_id?: string
+          vehicle_id?: string | null
+          service_type?: string
+          due_date?: string
+          status?: string
+          auto_generated?: boolean
+          created_at?: string
+        }
+      }
+      employee_transactions: {
+        Row: {
+          id: string
+          tenant_id: string
+          employee_id: string
+          type: string
+          amount: number
+          description: string | null
+          date: string
+          related_work_order_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          employee_id: string
+          type: string
+          amount: number
+          description?: string | null
+          date: string
+          related_work_order_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          employee_id?: string
+          type?: string
+          amount?: number
+          description?: string | null
+          date?: string
+          related_work_order_id?: string | null
+          created_at?: string
+        }
+      }
+      message_logs: {
+        Row: {
+          id: string
+          tenant_id: string
+          client_id: string | null
+          client_name: string | null
+          client_phone: string | null
+          type: string
+          content: string | null
+          status: string
+          cost_in_tokens: number
+          sent_at: string
+          delivered_at: string | null
+          read_at: string | null
+          channel: string | null
+          trigger: string | null
+          created_at: string
+        }
+        Insert: {
+          id: string
+          tenant_id: string
+          client_id?: string | null
+          client_name?: string | null
+          client_phone?: string | null
+          type?: string
+          content?: string | null
+          status?: string
+          cost_in_tokens?: number
+          sent_at?: string
+          delivered_at?: string | null
+          read_at?: string | null
+          channel?: string | null
+          trigger?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          client_id?: string | null
+          client_name?: string | null
+          client_phone?: string | null
+          type?: string
+          content?: string | null
+          status?: string
+          cost_in_tokens?: number
+          sent_at?: string
+          delivered_at?: string | null
+          read_at?: string | null
+          channel?: string | null
+          trigger?: string | null
+          created_at?: string
+        }
+      }
       alerts: {
         Row: {
           id: string
@@ -45,7 +214,6 @@ export interface Database {
           created_at?: string
         }
       }
-      // ... (rest of existing tables)
       tenants: {
         Row: {
           id: string
@@ -286,41 +454,6 @@ export interface Database {
           date?: string
           method?: string
           status?: string
-          created_at?: string
-        }
-      }
-      services: {
-        Row: {
-          id: string
-          tenant_id: string
-          name: string
-          category: string
-          description: string | null
-          standard_time: number
-          active: boolean
-          price_matrix: Json
-          created_at: string
-        }
-        Insert: {
-          id: string
-          tenant_id: string
-          name: string
-          category: string
-          description?: string | null
-          standard_time?: number
-          active?: boolean
-          price_matrix?: Json
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          tenant_id?: string
-          name?: string
-          category?: string
-          description?: string | null
-          standard_time?: number
-          active?: boolean
-          price_matrix?: Json
           created_at?: string
         }
       }

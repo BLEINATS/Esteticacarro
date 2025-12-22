@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, User, Phone, Mail, MapPin, Save, FileText, Car, Plus, Trash2, Search, Loader2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { Client, Vehicle } from '../types';
+import { Client, Vehicle, VEHICLE_SIZES, VehicleSize } from '../types';
 import { cn } from '../lib/utils';
 import { useDialog } from '../context/DialogContext';
 
@@ -16,6 +16,7 @@ interface VehicleForm {
   plate: string;
   color: string;
   year: string;
+  size: VehicleSize;
 }
 
 export default function ClientModal({ client, onClose }: ClientModalProps) {
@@ -44,7 +45,8 @@ export default function ClientModal({ client, onClose }: ClientModalProps) {
     model: '',
     plate: '',
     color: '',
-    year: new Date().getFullYear().toString()
+    year: new Date().getFullYear().toString(),
+    size: 'medium'
   });
 
   useEffect(() => {
@@ -52,7 +54,7 @@ export default function ClientModal({ client, onClose }: ClientModalProps) {
         setFormData({
             name: client.name,
             phone: client.phone,
-            email: client.email,
+            email: client.email || '',
             cep: client.cep || '',
             street: client.street || '',
             number: client.number || '',
@@ -147,18 +149,18 @@ export default function ClientModal({ client, onClose }: ClientModalProps) {
             }
 
             // Add vehicles if any were added in the form AND we have a valid client ID
-            if (newClient && newClient.id) {
+            if (newClient && newClient.id && vehicles.length > 0) {
                 for (const v of vehicles) {
                     await addVehicle(newClient.id, {
                         model: `${v.brand} ${v.model}`,
                         plate: v.plate,
                         color: v.color,
                         year: v.year,
-                        size: 'medium' // Default size
+                        size: v.size
                     });
                 }
             }
-            await showAlert({ title: 'Sucesso', message: 'Cliente cadastrado com sucesso!', type: 'success' });
+            await showAlert({ title: 'Sucesso', message: 'Cliente e veículos cadastrados com sucesso!', type: 'success' });
         }
         onClose();
     } catch (error: any) {
@@ -178,7 +180,7 @@ export default function ClientModal({ client, onClose }: ClientModalProps) {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleVehicleChange = (e: React.ChangeEvent<HTMLInputElement>, field: keyof VehicleForm) => {
+  const handleVehicleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>, field: keyof VehicleForm) => {
     setNewVehicle(prev => ({ ...prev, [field]: e.target.value }));
   };
 
@@ -190,7 +192,8 @@ export default function ClientModal({ client, onClose }: ClientModalProps) {
         model: '',
         plate: '',
         color: '',
-        year: new Date().getFullYear().toString()
+        year: new Date().getFullYear().toString(),
+        size: 'medium'
       });
     }
   };
@@ -385,7 +388,7 @@ export default function ClientModal({ client, onClose }: ClientModalProps) {
                     Veículos ({vehicles.length})
                 </h3>
 
-                {/* Lista de carros adicionados - NOVO DESIGN */}
+                {/* Lista de carros adicionados */}
                 <div className="grid grid-cols-1 gap-3 mb-4">
                     {vehicles.map((vehicle, index) => (
                     <div key={index} className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm hover:shadow-md transition-all group">
@@ -399,6 +402,9 @@ export default function ClientModal({ client, onClose }: ClientModalProps) {
                                     <div className="flex items-center gap-2 mt-0.5">
                                         <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 uppercase tracking-wide border border-slate-200 dark:border-slate-700">
                                             {vehicle.plate}
+                                        </span>
+                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 uppercase tracking-wide">
+                                            {VEHICLE_SIZES[vehicle.size]?.split(' ')[0]}
                                         </span>
                                     </div>
                                 </div>
@@ -475,17 +481,31 @@ export default function ClientModal({ client, onClose }: ClientModalProps) {
                     </div>
                     </div>
 
-                    <div>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Ano</label>
-                    <input 
-                        type="number" 
-                        value={newVehicle.year}
-                        onChange={(e) => handleVehicleChange(e, 'year')}
-                        placeholder="2024"
-                        min="1990"
-                        max={new Date().getFullYear() + 1}
-                        className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white text-sm"
-                    />
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Ano</label>
+                            <input 
+                                type="number" 
+                                value={newVehicle.year}
+                                onChange={(e) => handleVehicleChange(e, 'year')}
+                                placeholder="2024"
+                                min="1990"
+                                max={new Date().getFullYear() + 1}
+                                className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white text-sm"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Tamanho</label>
+                            <select
+                                value={newVehicle.size}
+                                onChange={(e) => handleVehicleChange(e, 'size')}
+                                className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white text-sm"
+                            >
+                                {Object.entries(VEHICLE_SIZES).map(([key, label]) => (
+                                    <option key={key} value={key}>{label}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
 
                     <button

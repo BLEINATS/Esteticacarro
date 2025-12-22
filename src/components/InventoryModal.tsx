@@ -114,7 +114,7 @@ export default function InventoryModal({ item, onClose }: InventoryModalProps) {
                   type="number" 
                   required
                   value={formData.stock}
-                  onChange={e => setFormData({...formData, stock: parseFloat(e.target.value)})}
+                  onChange={e => setFormData({...formData, stock: parseFloat(e.target.value) || 0})}
                   className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white placeholder-slate-400"
                 />
               </div>
@@ -127,7 +127,7 @@ export default function InventoryModal({ item, onClose }: InventoryModalProps) {
                   type="number" 
                   required
                   value={formData.minStock}
-                  onChange={e => setFormData({...formData, minStock: parseFloat(e.target.value)})}
+                  onChange={e => setFormData({...formData, minStock: parseFloat(e.target.value) || 0})}
                   className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white placeholder-slate-400"
                 />
               </div>
@@ -142,7 +142,10 @@ export default function InventoryModal({ item, onClose }: InventoryModalProps) {
                 type="number" 
                 step="0.01"
                 value={formData.costPrice}
-                onChange={e => setFormData({...formData, costPrice: parseFloat(e.target.value)})}
+                onChange={e => {
+                    const val = parseFloat(e.target.value);
+                    setFormData({...formData, costPrice: isNaN(val) ? 0 : val});
+                }}
                 placeholder="0.00"
                 className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white placeholder-slate-400"
               />

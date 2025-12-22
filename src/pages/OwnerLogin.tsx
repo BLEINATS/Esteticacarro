@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useSuperAdmin } from '../context/SuperAdminContext';
-import { Shield, Lock, Mail, User, Store, ArrowRight, Loader2, CheckCircle2, Eye, EyeOff, AlertCircle, Wifi, ShieldCheck, ArrowLeft, Wrench, Smartphone } from 'lucide-react';
+import { Shield, Lock, Mail, User, Store, ArrowRight, Loader2, CheckCircle2, Eye, EyeOff, AlertCircle, Wifi, ShieldCheck, ArrowLeft, Wrench, Smartphone, Trash2 } from 'lucide-react';
+import { db } from '../lib/db';
 
 export default function OwnerLogin() {
   const { loginOwner, registerOwner, ownerUser, isAppLoading } = useApp();
@@ -57,6 +58,12 @@ export default function OwnerLogin() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleHardReset = async () => {
+      if (confirm("ATENÇÃO: Isso apagará TODOS os dados locais e permitirá um cadastro do zero sem dados de exemplo. \n\nTem certeza que deseja continuar?")) {
+          await db.reset(true);
+      }
   };
 
   return (
@@ -230,10 +237,17 @@ export default function OwnerLogin() {
                     <span>Acesso Funcionário / Técnico</span>
                 </Link>
 
-                <div className="text-center pt-2">
+                <div className="flex justify-between items-center pt-2">
                     <Link to="/super-admin/login" className="inline-flex items-center gap-1.5 text-[10px] uppercase font-bold text-slate-600 hover:text-indigo-400 transition-colors tracking-wider">
                         <ShieldCheck size={12} /> Super Admin
                     </Link>
+                    
+                    <button 
+                        onClick={handleHardReset}
+                        className="inline-flex items-center gap-1.5 text-[10px] uppercase font-bold text-slate-600 hover:text-red-400 transition-colors tracking-wider"
+                    >
+                        <Trash2 size={12} /> Limpar Dados (Reset)
+                    </button>
                 </div>
             </div>
         </div>

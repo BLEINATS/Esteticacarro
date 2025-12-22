@@ -38,6 +38,7 @@ export interface Client {
   segment: 'vip' | 'recurring' | 'new' | 'inactive';
   notes?: string;
   tenant_id?: string;
+  created_at?: string;
 }
 
 export interface DamagePoint {
@@ -128,7 +129,7 @@ export interface WorkOrder {
   paymentMethod?: string;
   paidAt?: string;
   npsScore?: number;
-  npsComment?: string; // Added for feedback tracking
+  npsComment?: string;
   clientSignature?: string;
   tenant_id?: string;
   json_data?: any;
@@ -410,6 +411,7 @@ export interface CompanySettings {
   facebook?: string;
   primaryColor?: string;
   initialBalance: number;
+  hourlyRate?: number; // Added for Service Pricing
   whatsapp: WhatsappConfig;
   landingPage: LandingPageConfig;
   preferences: CompanyPreferences;

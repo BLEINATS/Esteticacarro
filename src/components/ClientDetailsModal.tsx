@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, User, Phone, Mail, MapPin, Calendar, Car, 
   History, TrendingUp, MessageCircle, Plus, Zap, Gift, Copy, DollarSign, Save, Loader2,
-  Edit2, Trash2, StickyNote, Calculator, Bot, RefreshCw, ExternalLink
+  Edit2, Trash2, StickyNote, Calculator, Bot, RefreshCw, ExternalLink, Palette
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
@@ -29,7 +29,16 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
   const [activeTab, setActiveTab] = useState<'overview' | 'vehicles' | 'history' | 'crm' | 'fidelidade'>('overview');
   const [showAddVehicle, setShowAddVehicle] = useState(false);
   const [shareLink, setShareLink] = useState('');
-  const [newVehicle, setNewVehicle] = useState<Partial<Vehicle>>({ model: '', plate: '', color: '', year: '', size: 'medium' });
+  
+  // New Vehicle State (Split Brand/Model for better UX)
+  const [newVehicle, setNewVehicle] = useState({ 
+    brand: '', 
+    model: '', 
+    plate: '', 
+    color: '', 
+    year: '', 
+    size: 'medium' as VehicleSize 
+  });
   
   // Editing State for Overview
   const [isEditing, setIsEditing] = useState(false);
@@ -50,6 +59,8 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
   // Editing State for Vehicles
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
   const [editVehicleData, setEditVehicleData] = useState<Partial<Vehicle>>({});
+  const [editBrand, setEditBrand] = useState('');
+  const [editModel, setEditModel] = useState('');
 
   // Manual Points State
   const [manualSpend, setManualSpend] = useState('');
@@ -166,16 +177,16 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
   // --- VEHICLE LOGIC ---
   const handleAddVehicle = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newVehicle.model && newVehicle.plate) {
+    if (newVehicle.brand && newVehicle.model && newVehicle.plate) {
       addVehicle(client.id, {
         id: `v-${Date.now()}`,
-        model: newVehicle.model || '',
-        plate: newVehicle.plate || '',
-        color: newVehicle.color || '',
-        year: newVehicle.year || '',
-        size: newVehicle.size as VehicleSize || 'medium'
+        model: `${newVehicle.brand} ${newVehicle.model}`,
+        plate: newVehicle.plate,
+        color: newVehicle.color,
+        year: newVehicle.year,
+        size: newVehicle.size
       });
-      setNewVehicle({ model: '', plate: '', color: '', year: '', size: 'medium' });
+      setNewVehicle({ brand: '', model: '', plate: '', color: '', year: '', size: 'medium' });
       setShowAddVehicle(false);
     }
   };
@@ -183,13 +194,26 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
   const startEditVehicle = (vehicle: Vehicle) => {
     setEditingVehicleId(vehicle.id);
     setEditVehicleData(vehicle);
+    
+    // Split Brand and Model heuristically
+    const parts = vehicle.model.split(' ');
+    if (parts.length > 1) {
+        setEditBrand(parts[0]);
+        setEditModel(parts.slice(1).join(' '));
+    } else {
+        setEditBrand('');
+        setEditModel(vehicle.model);
+    }
   };
 
   const saveEditVehicle = () => {
-    if (editingVehicleId && editVehicleData.model && editVehicleData.plate) {
-        updateVehicle(client.id, editVehicleData as Vehicle);
+    if (editingVehicleId && editModel && editVehicleData.plate) {
+        const fullModel = editBrand ? `${editBrand} ${editModel}` : editModel;
+        updateVehicle(client.id, { ...editVehicleData, model: fullModel } as Vehicle);
         setEditingVehicleId(null);
         setEditVehicleData({});
+        setEditBrand('');
+        setEditModel('');
         showAlert({ title: 'Sucesso', message: 'Veículo atualizado.', type: 'success' });
     }
   };
@@ -239,7 +263,6 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
   };
 
   const handleOpenCard = () => {
-    // Navigate internally to avoid new tab issues in WebContainer
     navigate(`/client-profile/${client.id}`);
   };
 
@@ -326,7 +349,16 @@ Podemos agendar para esta semana?`;
                 </span>
                 <span className="text-slate-400 text-xs hidden sm:inline">•</span>
                 <span className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm flex items-center gap-1 whitespace-nowrap">
-                  <Calendar size={12} className="hidden sm:block" /> {new Date(client.lastVisit).toLocaleDateString('pt-BR')}
+                  <Calendar size={12} className="hidden sm:block" /> 
+                  {(() => {
+                      const dateStr = client.created_at || (client as any).createdAt;
+                      if (!dateStr) return <span className="italic">Novo</span>;
+                      
+                      const date = new Date(dateStr);
+                      if (isNaN(date.getTime())) return <span className="italic">Data Inválida</span>;
+                      
+                      return `Cadastro: ${date.toLocaleDateString('pt-BR')}`;
+                  })()}
                 </span>
               </div>
             </div>
@@ -556,40 +588,69 @@ Podemos agendar para esta semana?`;
 
               {showAddVehicle && (
                 <form onSubmit={handleAddVehicle} className="bg-slate-100 dark:bg-slate-800 p-3 sm:p-4 rounded-lg sm:rounded-xl mb-3 sm:mb-4 animate-in slide-in-from-top-2">
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 mb-2 sm:mb-3">
-                    <input 
-                      type="text" placeholder="Modelo" required
-                      value={newVehicle.model} onChange={e => setNewVehicle({...newVehicle, model: e.target.value})}
-                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm"
-                    />
-                    <input 
-                      type="text" placeholder="Placa" required
-                      value={newVehicle.plate} onChange={e => setNewVehicle({...newVehicle, plate: e.target.value})}
-                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm"
-                    />
-                    <input 
-                      type="text" placeholder="Cor"
-                      value={newVehicle.color} onChange={e => setNewVehicle({...newVehicle, color: e.target.value})}
-                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm"
-                    />
-                    <input 
-                      type="text" placeholder="Ano"
-                      value={newVehicle.year} onChange={e => setNewVehicle({...newVehicle, year: e.target.value})}
-                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm"
-                    />
-                    <select
-                      value={newVehicle.size}
-                      onChange={e => setNewVehicle({...newVehicle, size: e.target.value as VehicleSize})}
-                      className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm col-span-2 sm:col-span-1"
-                    >
-                      {Object.entries(VEHICLE_SIZES).map(([key, label]) => (
-                        <option key={key} value={key}>{label}</option>
-                      ))}
-                    </select>
+                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 sm:gap-3 mb-2 sm:mb-3">
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Marca</label>
+                        <input 
+                          type="text" placeholder="Ex: Toyota" required
+                          value={newVehicle.brand} onChange={e => setNewVehicle({...newVehicle, brand: e.target.value})}
+                          className="w-full px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Modelo</label>
+                        <input 
+                          type="text" placeholder="Ex: Corolla" required
+                          value={newVehicle.model} onChange={e => setNewVehicle({...newVehicle, model: e.target.value})}
+                          className="w-full px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Placa</label>
+                        <input 
+                          type="text" placeholder="ABC-1234" required
+                          value={newVehicle.plate} onChange={e => setNewVehicle({...newVehicle, plate: e.target.value})}
+                          className="w-full px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm uppercase"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Cor</label>
+                        <input 
+                          type="text" placeholder="Ex: Prata"
+                          value={newVehicle.color} onChange={e => setNewVehicle({...newVehicle, color: e.target.value})}
+                          className="w-full px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Ano</label>
+                        <input 
+                          type="text" placeholder="Ex: 2024"
+                          value={newVehicle.year} onChange={e => setNewVehicle({...newVehicle, year: e.target.value})}
+                          className="w-full px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Tamanho</label>
+                        <select
+                          value={newVehicle.size}
+                          onChange={e => setNewVehicle({...newVehicle, size: e.target.value as VehicleSize})}
+                          className="w-full px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm"
+                        >
+                          {Object.entries(VEHICLE_SIZES).map(([key, label]) => (
+                            <option key={key} value={key}>{label}</option>
+                          ))}
+                        </select>
+                    </div>
                   </div>
                   <div className="flex justify-end gap-1 sm:gap-2">
                     <button type="button" onClick={() => setShowAddVehicle(false)} className="text-xs font-bold text-slate-500 px-2 sm:px-3 py-1.5 sm:py-2">Cancelar</button>
-                    <button type="submit" className="text-xs font-bold bg-blue-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg">Salvar</button>
+                    <button 
+                        type="submit" 
+                        disabled={!newVehicle.brand || !newVehicle.model || !newVehicle.plate}
+                        className="text-xs font-bold bg-blue-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Salvar
+                    </button>
                   </div>
                 </form>
               )}
@@ -609,16 +670,25 @@ Podemos agendar para esta semana?`;
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
+                                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Marca</label>
+                                    <input 
+                                        type="text" 
+                                        value={editBrand} 
+                                        onChange={e => setEditBrand(e.target.value)}
+                                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        placeholder="Ex: Toyota"
+                                    />
+                                </div>
+                                <div>
                                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Modelo</label>
                                     <input 
                                         type="text" 
-                                        value={editVehicleData.model} 
-                                        onChange={e => setEditVehicleData({...editVehicleData, model: e.target.value})}
+                                        value={editModel} 
+                                        onChange={e => setEditModel(e.target.value)}
                                         className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                        placeholder="Ex: Toyota Corolla"
+                                        placeholder="Ex: Corolla"
                                     />
                                 </div>
-                                {/* ... other fields ... */}
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Placa</label>
                                     <input 
@@ -679,49 +749,62 @@ Podemos agendar para esta semana?`;
                         </div>
                     ) : (
                         // DISPLAY CARD
-                        <div className="group relative h-full bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none transition-transform group-hover:scale-150 duration-500" />
-                            
-                            <div className="flex justify-between items-start mb-4 relative z-10">
-                                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 transition-colors duration-300">
-                                    <Car size={24} strokeWidth={1.5} />
-                                </div>
-                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
-                                    <button 
-                                        onClick={() => startEditVehicle(vehicle)} 
-                                        className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-blue-600 hover:text-white transition-colors shadow-sm"
-                                        title="Editar"
-                                    >
-                                        <Edit2 size={14} />
-                                    </button>
-                                    <button 
-                                        onClick={() => handleDeleteVehicle(vehicle.id)} 
-                                        className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-red-600 hover:text-white transition-colors shadow-sm"
-                                        title="Excluir"
-                                    >
-                                        <Trash2 size={14} />
-                                    </button>
-                                </div>
+                        <div className="group relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-xl hover:border-blue-500/30 transition-all duration-300 overflow-hidden">
+                            {/* Background Pattern */}
+                            <div className="absolute -right-6 -top-6 text-slate-50 dark:text-slate-800/50 transform rotate-12 transition-transform group-hover:scale-110 duration-500">
+                                <Car size={120} strokeWidth={1} />
                             </div>
-
+                            
                             <div className="relative z-10">
-                                <h4 className="text-lg font-bold text-slate-900 dark:text-white mb-1 truncate">{vehicle.model}</h4>
-                                <div className="flex items-center gap-2 mb-4">
-                                    <div className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs font-mono font-bold text-slate-700 dark:text-slate-300 tracking-wider">
-                                        {vehicle.plate.toUpperCase()}
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-0.5">{vehicle.model.split(' ')[0]}</span>
+                                        <h4 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">
+                                            {vehicle.model.substring(vehicle.model.indexOf(' ') + 1) || vehicle.model}
+                                        </h4>
                                     </div>
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase border border-slate-100 dark:border-slate-800 px-1.5 py-0.5 rounded">
+                                    
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => startEditVehicle(vehicle)} className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors">
+                                            <Edit2 size={16} />
+                                        </button>
+                                        <button onClick={() => handleDeleteVehicle(vehicle.id)} className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 mb-6">
+                                    {/* Plate Badge */}
+                                    <div className="bg-white border border-slate-300 rounded px-2.5 py-1 shadow-sm flex flex-col items-center min-w-[80px]">
+                                        <div className="w-full h-1.5 bg-blue-700 rounded-t-sm mb-0.5"></div>
+                                        <span className="font-mono font-bold text-slate-900 text-sm tracking-widest">{vehicle.plate.toUpperCase()}</span>
+                                    </div>
+                                    
+                                    {/* Size Badge */}
+                                    <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold border border-slate-200 dark:border-slate-700">
                                         {VEHICLE_SIZES[vehicle.size]?.split(' ')[0]}
                                     </span>
                                 </div>
-                                <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400 pt-3 border-t border-slate-100 dark:border-slate-800">
-                                    <div className="flex items-center gap-1.5">
-                                        <div className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600" />
-                                        <span>{vehicle.color || 'Cor N/A'}</span>
+
+                                <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                                            <div className="w-4 h-4 rounded-full border border-slate-300 shadow-sm" style={{ backgroundColor: vehicle.color.toLowerCase() === 'branco' ? '#fff' : vehicle.color.toLowerCase() === 'preto' ? '#000' : 'gray' }}></div>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] text-slate-400 uppercase font-bold">Cor</p>
+                                            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{vehicle.color}</p>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-1.5">
-                                        <div className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600" />
-                                        <span>{vehicle.year || 'Ano N/A'}</span>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                                            <Calendar size={16} />
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] text-slate-400 uppercase font-bold">Ano</p>
+                                            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{vehicle.year}</p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

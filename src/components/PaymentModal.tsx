@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, QrCode, Copy, CheckCircle2, Loader2, CreditCard, Lock, Calendar, User, ShieldCheck, Globe, Info } from 'lucide-react';
+import { X, QrCode, Copy, CheckCircle2, Loader2, CreditCard, Lock, Calendar, User, ShieldCheck, Globe, Info, Repeat, ExternalLink } from 'lucide-react';
 import { formatCurrency, cn, copyToClipboard } from '../lib/utils';
 import { createPixCharge, createCreditCardCharge, AsaasPayment } from '../services/asaas';
-import { createStripePixPaymentIntent, createStripeCardPaymentIntent } from '../services/stripe';
+import { createStripePixPaymentIntent, createStripeCardPaymentIntent, createRealStripeSession } from '../services/stripe';
 import QRCode from 'qrcode';
 
 interface PaymentModalProps {
@@ -11,17 +11,19 @@ interface PaymentModalProps {
   amount: number;
   description: string;
   onSuccess: () => void;
-  gateway?: 'asaas' | 'stripe'; // Prop para definir o gateway
+  gateway?: 'asaas' | 'stripe';
 }
 
 export default function PaymentModal({ isOpen, onClose, amount, description, onSuccess, gateway = 'asaas' }: PaymentModalProps) {
-  const [step, setStep] = useState<'method' | 'card_details' | 'processing' | 'payment' | 'success'>('method');
+  const [step, setStep] = useState<'method' | 'card_details' | 'stripe_redirect' | 'processing' | 'payment' | 'success'>('method');
   const [paymentData, setPaymentData] = useState<AsaasPayment | null>(null);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
   const [error, setError] = useState('');
+  const [realStripeUrl, setRealStripeUrl] = useState<string | null>(null);
 
-  // Card Data State
+  const isSubscription = description.toLowerCase().includes('plano') || description.toLowerCase().includes('assinatura');
+
   const [cardData, setCardData] = useState({
     number: '',
     holderName: '',
@@ -29,7 +31,6 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
     cvv: ''
   });
 
-  // Reset state when opening
   useEffect(() => {
     if (isOpen) {
       setStep('method');
@@ -37,10 +38,10 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
       setQrCodeDataUrl('');
       setCardData({ number: '', holderName: '', expiry: '', cvv: '' });
       setError('');
+      setRealStripeUrl(null);
     }
   }, [isOpen]);
 
-  // Generate QR Code image when payload is available
   useEffect(() => {
     if (paymentData?.pix?.payload) {
       QRCode.toDataURL(paymentData.pix.payload, { width: 300, margin: 2 })
@@ -49,23 +50,47 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
     }
   }, [paymentData]);
 
-  // --- PIX HANDLERS ---
+  // --- STRIPE REAL CHECKOUT ---
+  const initStripeCheckout = async () => {
+      setStep('processing');
+      // Tenta criar sessão real
+      const session = await createRealStripeSession(
+          description, 
+          amount, 
+          isSubscription ? 'subscription' : 'payment'
+      );
+
+      if (session && session.url) {
+          setRealStripeUrl(session.url);
+          setStep('stripe_redirect');
+      } else {
+          // Fallback para simulação se não tiver backend configurado
+          setStep('stripe_redirect'); // Vai para a tela de "Simulação"
+      }
+  };
+
   const handleSelectPix = async () => {
+    if (gateway === 'stripe') {
+        await initStripeCheckout();
+        return;
+    }
+    
     setStep('processing');
     try {
-      let data;
-      // Lógica de seleção do Gateway
-      if (gateway === 'stripe') {
-        data = await createStripePixPaymentIntent(amount, description);
-      } else {
-        data = await createPixCharge(amount, description);
-      }
+      const data = await createPixCharge(amount, description);
       setPaymentData(data);
       setStep('payment');
     } catch (error) {
-      console.error("Erro ao gerar Pix", error);
       setError("Falha ao conectar com o gateway de pagamento.");
       setStep('method');
+    }
+  };
+
+  const handleSelectCard = async () => {
+    if (gateway === 'stripe') {
+        await initStripeCheckout();
+    } else {
+        setStep('card_details');
     }
   };
 
@@ -90,15 +115,76 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
     }, 1500);
   };
 
-  // --- CARD HANDLERS ---
-  const handleSelectCard = () => {
-    setStep('card_details');
+  const handleStripeRedirect = () => {
+      if (realStripeUrl) {
+          // Redirecionamento REAL
+          window.location.href = realStripeUrl;
+      } else {
+          // Simulação
+          const width = 600;
+          const height = 700;
+          const left = (window.screen.width - width) / 2;
+          const top = (window.screen.height - height) / 2;
+          
+          const popup = window.open('', 'Stripe Checkout', `width=${width},height=${height},top=${top},left=${left}`);
+          
+          if (popup) {
+              popup.document.write(`
+                <html>
+                  <head>
+                    <title>Stripe Checkout (Simulação)</title>
+                    <style>
+                      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f7f9fc; }
+                      .card { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 100%; }
+                      .logo { color: #635bff; font-weight: 900; font-size: 24px; margin-bottom: 20px; display: block; text-decoration: none; }
+                      .amount { font-size: 32px; font-weight: bold; color: #1a1f36; margin: 10px 0 30px; }
+                      .btn { background: #635bff; color: white; border: none; padding: 12px 24px; border-radius: 4px; font-weight: 600; cursor: pointer; width: 100%; font-size: 16px; transition: background 0.2s; }
+                      .btn:hover { background: #5449e8; }
+                      .desc { color: #697386; margin-bottom: 20px; font-size: 14px; }
+                    </style>
+                  </head>
+                  <body>
+                    <div class="card">
+                      <a href="#" class="logo">stripe</a>
+                      <div class="desc">${description}</div>
+                      <div class="amount">${formatCurrency(amount)}</div>
+                      <button class="btn" onclick="window.close()">Pagar agora</button>
+                      <p style="margin-top: 20px; font-size: 12px; color: #8792a2;">Modo de Teste</p>
+                    </div>
+                  </body>
+                </html>
+              `);
+              
+              const timer = setInterval(() => {
+                  if (popup.closed) {
+                      clearInterval(timer);
+                      setStep('processing');
+                      setTimeout(() => {
+                          setStep('success');
+                          setTimeout(() => {
+                              onSuccess();
+                              onClose();
+                          }, 2000);
+                      }, 1000);
+                  }
+              }, 500);
+          } else {
+              setStep('processing');
+              setTimeout(() => {
+                  setStep('success');
+                  setTimeout(() => {
+                      onSuccess();
+                      onClose();
+                  }, 2000);
+              }, 2000);
+          }
+      }
   };
 
   const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, '');
     value = value.replace(/(\d{4})/g, '$1 ').trim();
-    setCardData({ ...cardData, number: value.substring(0, 19) }); // Limit to 16 digits + spaces
+    setCardData({ ...cardData, number: value.substring(0, 19) });
   };
 
   const handleExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -115,12 +201,7 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
     setStep('processing');
 
     try {
-      // Lógica de seleção do Gateway para Cartão
-      if (gateway === 'stripe') {
-        await createStripeCardPaymentIntent(amount, cardData, description);
-      } else {
-        await createCreditCardCharge(amount, cardData, description);
-      }
+      await createCreditCardCharge(amount, cardData, description);
       setStep('success');
       setTimeout(() => {
         onSuccess();
@@ -132,7 +213,6 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
     }
   };
 
-  // Helper para preencher dados de teste
   const fillTestData = () => {
       setCardData({
           number: '4242 4242 4242 4242',
@@ -148,7 +228,6 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
     <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
         
-        {/* Header */}
         <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
           <div>
             <h3 className="font-bold text-lg text-slate-900 dark:text-white">Checkout Seguro</h3>
@@ -170,16 +249,21 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-6 flex-1 overflow-y-auto">
           
-          {/* STEP 1: SELECT METHOD */}
           {step === 'method' && (
             <div className="space-y-4">
               <div className="text-center mb-6">
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">Valor a pagar</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">
+                    {isSubscription ? 'Assinatura Mensal' : 'Valor a pagar'}
+                </p>
                 <p className="text-3xl font-bold text-slate-900 dark:text-white">{formatCurrency(amount)}</p>
                 <p className="text-xs text-slate-400 mt-1">{description}</p>
+                {isSubscription && (
+                    <div className="mt-2 inline-flex items-center gap-1 px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs font-bold rounded-full">
+                        <Repeat size={12} /> Renovação Automática
+                    </div>
+                )}
               </div>
 
               {error && (
@@ -215,7 +299,9 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
                     </div>
                     <div className="text-left">
                       <p className="font-bold text-slate-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-400">Cartão de Crédito</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Até 12x sem juros</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {isSubscription ? 'Cobrança mensal automática' : 'Até 12x sem juros'}
+                      </p>
                     </div>
                   </div>
                   <div className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-600 group-hover:border-blue-500 group-hover:bg-blue-500" />
@@ -228,7 +314,34 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
             </div>
           )}
 
-          {/* STEP 1.5: CARD DETAILS */}
+          {step === 'stripe_redirect' && (
+              <div className="flex flex-col items-center justify-center py-6 text-center space-y-6 animate-in slide-in-from-right">
+                  <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                      <Globe size={40} />
+                  </div>
+                  <div>
+                      <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Redirecionando para Stripe</h3>
+                      <p className="text-slate-500 dark:text-slate-400 text-sm max-w-xs mx-auto">
+                          {realStripeUrl 
+                            ? "Clique abaixo para finalizar o pagamento na página segura do Stripe."
+                            : "Você será levado para a página segura de checkout do Stripe (Modo Simulação)."
+                          }
+                      </p>
+                  </div>
+                  
+                  <button 
+                      onClick={handleStripeRedirect}
+                      className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-indigo-900/20 flex items-center justify-center gap-2"
+                  >
+                      <ExternalLink size={18} /> Ir para Pagamento Seguro
+                  </button>
+
+                  <button onClick={() => setStep('method')} className="text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+                      Voltar e escolher outro método
+                  </button>
+              </div>
+          )}
+
           {step === 'card_details' && (
             <form onSubmit={handleProcessCardPayment} className="space-y-4 animate-in slide-in-from-right">
                 <div className="flex items-center justify-between mb-2">
@@ -238,7 +351,6 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
                     <span className="text-xs font-bold text-slate-500 uppercase">Dados do Cartão</span>
                 </div>
 
-                {/* TEST DATA HELPER */}
                 <div 
                     onClick={fillTestData}
                     className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2 flex items-start gap-2 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
@@ -323,12 +435,12 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
                     type="submit"
                     className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-2 mt-4"
                 >
-                    <Lock size={18} /> Pagar {formatCurrency(amount)}
+                    <Lock size={18} /> 
+                    {isSubscription ? 'Assinar Agora' : `Pagar ${formatCurrency(amount)}`}
                 </button>
             </form>
           )}
 
-          {/* STEP 2: PROCESSING (LOADING) */}
           {step === 'processing' && (
             <div className="flex flex-col items-center justify-center py-12 animate-in fade-in">
               <Loader2 size={48} className="text-blue-600 animate-spin mb-4" />
@@ -337,7 +449,6 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
             </div>
           )}
 
-          {/* STEP 3: PIX PAYMENT (QR CODE) */}
           {step === 'payment' && paymentData && (
             <div className="text-center space-y-6 animate-in slide-in-from-right">
               <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg inline-block">
@@ -381,7 +492,6 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
                 <p className="text-xs text-slate-400 mb-3">
                   Após o pagamento, a liberação é automática em alguns segundos.
                 </p>
-                {/* Botão de Simulação para o Protótipo */}
                 <button 
                   onClick={handleSimulatePixPayment}
                   className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-green-900/20 flex items-center justify-center gap-2"
@@ -392,15 +502,16 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
             </div>
           )}
 
-          {/* STEP 4: SUCCESS */}
           {step === 'success' && (
             <div className="flex flex-col items-center justify-center py-8 text-center animate-in zoom-in duration-300">
               <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-6 text-green-600 dark:text-green-400">
                 <CheckCircle2 size={48} />
               </div>
-              <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Pagamento Confirmado!</h3>
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+                  {isSubscription ? 'Assinatura Ativa!' : 'Pagamento Confirmado!'}
+              </h3>
               <p className="text-slate-500 dark:text-slate-400">
-                Transação aprovada com sucesso.
+                {isSubscription ? 'Seu plano foi atualizado com sucesso.' : 'Transação aprovada com sucesso.'}
               </p>
             </div>
           )}

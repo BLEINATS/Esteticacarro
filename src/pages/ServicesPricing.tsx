@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Tags, Filter, Plus, ArrowUpRight, Calculator, Info,
   CheckCircle2, Clock, RotateCcw, ToggleLeft, ToggleRight, Image as ImageIcon, Upload,
   Search, Trash2, Beaker, DollarSign, TrendingUp, TrendingDown, BarChart3, AlertTriangle, Timer,
-  Settings
+  Settings, Save, Loader2, HelpCircle
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatCurrency, cn } from '../lib/utils';
@@ -12,8 +12,87 @@ import ServiceModal from '../components/ServiceModal';
 import ServiceConsumptionModal from '../components/ServiceConsumptionModal';
 import { useDialog } from '../context/DialogContext';
 
+// --- HELPER COMPONENT FOR CURRENCY INPUT ---
+interface MoneyInputProps {
+  value: number;
+  onSave: (val: number) => void;
+  className?: string;
+}
+
+const MoneyInput: React.FC<MoneyInputProps> = ({ value, onSave, className }) => {
+  const [displayValue, setDisplayValue] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
+
+  // Sync external value to display value when not focused
+  useEffect(() => {
+    if (!isFocused) {
+      // Format as PT-BR currency (e.g. 1.200,50) without symbol
+      setDisplayValue(value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    }
+  }, [value, isFocused]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = e.target.value;
+    
+    // Remove everything that is not a digit or comma
+    val = val.replace(/[^0-9,]/g, '');
+    
+    // Prevent multiple commas
+    const parts = val.split(',');
+    if (parts.length > 2) return;
+
+    setDisplayValue(val);
+  };
+
+  const handleFocus = () => {
+    setIsFocused(true);
+    // On focus, show raw number with comma for easier editing (e.g. 1200,50)
+    setDisplayValue(value.toString().replace('.', ','));
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+    
+    // Parse to number for parent state
+    // Replace comma with dot for parsing
+    let numericVal = parseFloat(displayValue.replace(/\./g, '').replace(',', '.'));
+    
+    if (isNaN(numericVal)) {
+        numericVal = 0;
+    }
+
+    // Only trigger save if value actually changed
+    if (numericVal !== value) {
+        onSave(numericVal);
+    } else {
+        // Revert display if no change
+        setDisplayValue(value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+        e.currentTarget.blur();
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      value={displayValue}
+      onChange={handleChange}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      className={className}
+      inputMode="decimal"
+      placeholder="0,00"
+    />
+  );
+};
+
 export default function ServicesPricing() {
-  const { services, priceMatrix, updatePrice, bulkUpdatePrices, updateServiceInterval, deleteService, calculateServiceCost, workOrders } = useApp();
+  const { services, priceMatrix, updatePrice, bulkUpdatePrices, updateServiceInterval, deleteService, calculateServiceCost, workOrders, companySettings, updateCompanySettings } = useApp();
   const { showConfirm, showAlert } = useDialog();
   const [activeTab, setActiveTab] = useState<'matrix' | 'catalog' | 'profitability'>('matrix');
   const [bulkPercentage, setBulkPercentage] = useState<number>(10);
@@ -21,9 +100,17 @@ export default function ServicesPricing() {
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Shop Hourly Cost State (Local for now, could be in CompanySettings)
-  const [shopHourlyCost, setShopHourlyCost] = useState<number>(50); // Default R$ 50/h
+  // Saving State Indicator
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  
+  // Shop Hourly Cost State (Now from Context)
   const [isEditingHourlyCost, setIsEditingHourlyCost] = useState(false);
+  const [tempHourlyCost, setTempHourlyCost] = useState<number>(companySettings.hourlyRate || 50);
+
+  // Sync local temp state with context when context changes
+  useEffect(() => {
+      setTempHourlyCost(companySettings.hourlyRate || 50);
+  }, [companySettings.hourlyRate]);
 
   // Modal States
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
@@ -37,8 +124,36 @@ export default function ServicesPricing() {
     s.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleSaveHourlyCost = () => {
+      updateCompanySettings({ hourlyRate: tempHourlyCost });
+      setIsEditingHourlyCost(false);
+      showAlert({ title: 'Salvo', message: 'Custo hora da oficina atualizado.', type: 'success' });
+  };
+
+  // --- MANUAL PRICE CHANGE (AUTO-SAVE SILENTLY) ---
+  const handleManualPriceChange = async (serviceId: string, size: VehicleSize, currentPrice: number, newPrice: number) => {
+      if (currentPrice === newPrice) return;
+
+      setSaveStatus('saving');
+      
+      try {
+          // Update directly without confirmation dialog
+          await updatePrice(serviceId, size, newPrice);
+          
+          setSaveStatus('saved');
+          // Reset status after 2 seconds
+          setTimeout(() => setSaveStatus('idle'), 2000);
+      } catch (error) {
+          setSaveStatus('idle');
+          console.error("Error saving price:", error);
+          showAlert({ title: 'Erro', message: 'Falha ao salvar preço. Tente novamente.', type: 'error' });
+      }
+  };
+
   // --- PROFITABILITY ANALYSIS LOGIC ---
   const profitabilityData = useMemo(() => {
+    const hourlyRate = companySettings.hourlyRate || 50;
+
     return services.map(service => {
         // 1. Revenue (Use Medium size as baseline reference)
         const price = priceMatrix.find(p => p.serviceId === service.id && p.size === 'medium')?.price || 0;
@@ -46,35 +161,36 @@ export default function ServicesPricing() {
         // 2. Cost (CMV from Consumption)
         const cost = calculateServiceCost(service.id);
         
-        // 3. Margin Bruta
+        // 3. Margin Bruta (Preço - Produtos)
         const grossMargin = price - cost;
         const marginPercent = price > 0 ? (grossMargin / price) * 100 : 0;
         
-        // 4. Efficiency (Profit per Hour)
+        // 4. Efficiency (Time)
         const timeHours = (service.standardTimeMinutes || 60) / 60;
-        const profitPerHour = timeHours > 0 ? grossMargin / timeHours : 0;
 
         // 5. Net Profit (Considering Shop Hourly Cost)
-        const laborCost = timeHours * shopHourlyCost;
+        const laborCost = timeHours * hourlyRate;
         const netProfit = grossMargin - laborCost;
         const netMarginPercent = price > 0 ? (netProfit / price) * 100 : 0;
 
-        // 6. Volume (Real usage from WorkOrders)
+        // 6. Profit Per Hour (NET)
+        const profitPerHour = timeHours > 0 ? netProfit / timeHours : 0;
+
+        // 7. Volume (Real usage from WorkOrders)
         const usageCount = workOrders.filter(os => 
             os.serviceId === service.id || (os.serviceIds && os.serviceIds.includes(service.id))
         ).length;
 
-        // 7. Classification
+        // 8. Classification
         let status: 'star' | 'cash_cow' | 'question' | 'dog' = 'question';
         
-        // Simple BCG-like Logic
-        if (marginPercent > 50 && usageCount > 5) status = 'star'; // High Margin, High Vol
-        else if (marginPercent > 50 && usageCount <= 5) status = 'question'; // High Margin, Low Vol (Potential)
-        else if (marginPercent <= 50 && usageCount > 5) status = 'cash_cow'; // Low Margin, High Vol
-        else status = 'dog'; // Low Margin, Low Vol
+        if (netMarginPercent > 30 && usageCount > 5) status = 'star'; 
+        else if (netMarginPercent > 30 && usageCount <= 5) status = 'question'; 
+        else if (netMarginPercent <= 30 && usageCount > 5) status = 'cash_cow'; 
+        else status = 'dog'; 
 
-        // Schedule Hog Check (Low Profit/Hour + High Time)
-        const isScheduleHog = profitPerHour < shopHourlyCost && service.standardTimeMinutes > 120;
+        // CRITÉRIO DE GARGALO: Lucro/h menor que o Custo/h E demora mais de 2 horas
+        const isScheduleHog = profitPerHour < hourlyRate && service.standardTimeMinutes > 120;
 
         return {
             ...service,
@@ -89,19 +205,29 @@ export default function ServicesPricing() {
                 status,
                 isScheduleHog,
                 netProfit,
-                netMarginPercent
+                netMarginPercent,
+                laborCost
             }
         };
-    }).sort((a, b) => b.metrics.grossMargin - a.metrics.grossMargin); // Default sort by margin
-  }, [services, priceMatrix, workOrders, calculateServiceCost, shopHourlyCost]);
+    }).sort((a, b) => b.metrics.netProfit - a.metrics.netProfit);
+  }, [services, priceMatrix, workOrders, calculateServiceCost, companySettings.hourlyRate]);
 
   const topProfitable = [...profitabilityData].sort((a, b) => b.metrics.profitPerHour - a.metrics.profitPerHour).slice(0, 3);
   const scheduleHogs = profitabilityData.filter(s => s.metrics.isScheduleHog).sort((a, b) => a.metrics.profitPerHour - b.metrics.profitPerHour).slice(0, 3);
 
 
   const handleBulkUpdate = () => {
-    bulkUpdatePrices(bulkTarget, bulkPercentage);
-    setShowBulkConfirm(false);
+    setSaveStatus('saving');
+    bulkUpdatePrices(bulkTarget, bulkPercentage).then(() => {
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
+        setShowBulkConfirm(false);
+        showAlert({
+            title: 'Preços Atualizados',
+            message: `Os preços foram reajustados em ${bulkPercentage}% com sucesso.`,
+            type: 'success'
+        });
+    });
   };
 
   const handleNewService = () => {
@@ -168,7 +294,20 @@ export default function ServicesPricing() {
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Catálogo & Precificação</h2>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+            Catálogo & Precificação
+            {/* Save Status Indicator */}
+            {saveStatus === 'saving' && (
+                <span className="text-xs font-medium text-blue-500 flex items-center gap-1 animate-pulse bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full">
+                    <Loader2 size={12} className="animate-spin" /> Salvando...
+                </span>
+            )}
+            {saveStatus === 'saved' && (
+                <span className="text-xs font-medium text-green-500 flex items-center gap-1 bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded-full animate-in fade-in">
+                    <CheckCircle2 size={12} /> Salvo
+                </span>
+            )}
+          </h2>
           <p className="text-slate-500 dark:text-slate-400">Gerencie serviços, preços e análise de lucro.</p>
         </div>
         <div className="flex gap-2">
@@ -258,14 +397,14 @@ export default function ServicesPricing() {
                                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">R$</span>
                                 <input 
                                     type="number" 
-                                    value={shopHourlyCost}
-                                    onChange={(e) => setShopHourlyCost(Number(e.target.value))}
+                                    value={tempHourlyCost}
+                                    onChange={(e) => setTempHourlyCost(Number(e.target.value))}
                                     className="w-24 pl-6 pr-2 py-1.5 bg-slate-50 dark:bg-slate-800 border border-blue-500 rounded-lg text-sm font-bold text-slate-900 dark:text-white focus:outline-none"
                                     autoFocus
                                 />
                             </div>
                             <button 
-                                onClick={() => setIsEditingHourlyCost(false)}
+                                onClick={handleSaveHourlyCost}
                                 className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700"
                             >
                                 Salvar
@@ -273,7 +412,7 @@ export default function ServicesPricing() {
                         </>
                     ) : (
                         <>
-                            <span className="text-xl font-bold text-slate-900 dark:text-white">{formatCurrency(shopHourlyCost)}</span>
+                            <span className="text-xl font-bold text-slate-900 dark:text-white">{formatCurrency(companySettings.hourlyRate || 50)}</span>
                             <button 
                                 onClick={() => setIsEditingHourlyCost(true)}
                                 className="p-1.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
@@ -290,7 +429,7 @@ export default function ServicesPricing() {
                 {/* Top Performers */}
                 <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/20 dark:to-emerald-900/10 rounded-xl p-6 border border-emerald-200 dark:border-emerald-800">
                     <h3 className="text-emerald-800 dark:text-emerald-300 font-bold flex items-center gap-2 mb-4">
-                        <TrendingUp size={20} /> Campeões de Lucro (Por Hora)
+                        <TrendingUp size={20} /> Campeões de Lucro (Líquido/Hora)
                     </h3>
                     <div className="space-y-3">
                         {topProfitable.length > 0 ? topProfitable.map((s, idx) => (
@@ -316,9 +455,18 @@ export default function ServicesPricing() {
 
                 {/* Schedule Hogs */}
                 <div className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-900/10 rounded-xl p-6 border border-red-200 dark:border-red-800">
-                    <h3 className="text-red-800 dark:text-red-300 font-bold flex items-center gap-2 mb-4">
-                        <Timer size={20} /> Gargalos de Agenda (Baixo Lucro/Hora)
-                    </h3>
+                    <div className="flex justify-between items-start mb-4">
+                        <h3 className="text-red-800 dark:text-red-300 font-bold flex items-center gap-2">
+                            <Timer size={20} /> Gargalos de Agenda
+                        </h3>
+                        <div className="group relative">
+                            <HelpCircle size={16} className="text-red-600 dark:text-red-400 cursor-help" />
+                            <div className="absolute right-0 top-6 w-48 p-2 bg-slate-900 text-white text-xs rounded-lg shadow-xl z-50 hidden group-hover:block">
+                                Serviços com duração &gt; 2h e lucro/hora menor que o custo da oficina.
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div className="space-y-3">
                         {scheduleHogs.length > 0 ? scheduleHogs.map((s, idx) => (
                             <div key={s.id} className="bg-white/60 dark:bg-slate-900/60 p-3 rounded-lg flex justify-between items-center shadow-sm">
@@ -336,9 +484,14 @@ export default function ServicesPricing() {
                                 </div>
                             </div>
                         )) : (
-                            <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
-                                <CheckCircle2 size={18} />
-                                <p className="text-sm font-medium">Sua agenda está otimizada!</p>
+                            <div className="flex flex-col items-center justify-center py-4 text-center">
+                                <div className="flex items-center gap-2 text-green-700 dark:text-green-400 mb-1">
+                                    <CheckCircle2 size={24} />
+                                    <p className="text-sm font-bold">Sua agenda está otimizada!</p>
+                                </div>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-[200px]">
+                                    Nenhum serviço longo (&gt;2h) está com rentabilidade abaixo do custo hora.
+                                </p>
                             </div>
                         )}
                     </div>
@@ -349,7 +502,7 @@ export default function ServicesPricing() {
             <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
                 <div className="p-4 border-b border-slate-200 dark:border-slate-800">
                     <h3 className="font-bold text-slate-900 dark:text-white">Detalhamento Financeiro por Serviço</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Preço Médio - (Custo Produtos + Custo Hora). Lucro Líquido Real.</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Preço Médio - (Custo Produtos + Custo Hora) = Lucro Líquido Real.</p>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
@@ -357,10 +510,10 @@ export default function ServicesPricing() {
                             <tr>
                                 <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300">Serviço</th>
                                 <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Preço Médio</th>
-                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Custo Prod.</th>
-                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Margem Bruta</th>
-                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">Lucro Liq.</th>
-                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-center">Margem Liq. %</th>
+                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">(-) Custo Prod.</th>
+                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">(-) Custo Hora</th>
+                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-right">(=) Lucro Liq.</th>
+                                <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-center">Margem %</th>
                                 <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 text-center">Ações</th>
                             </tr>
                         </thead>
@@ -378,8 +531,8 @@ export default function ServicesPricing() {
                                         </div>
                                     </td>
                                     <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-300">{formatCurrency(s.metrics.price)}</td>
-                                    <td className="px-4 py-3 text-right text-slate-500 dark:text-slate-400">{formatCurrency(s.metrics.cost)}</td>
-                                    <td className="px-4 py-3 text-right font-medium text-slate-700 dark:text-slate-300">{formatCurrency(s.metrics.grossMargin)}</td>
+                                    <td className="px-4 py-3 text-right text-red-500 dark:text-red-400 text-xs font-medium">-{formatCurrency(s.metrics.cost)}</td>
+                                    <td className="px-4 py-3 text-right text-red-500 dark:text-red-400 text-xs font-medium">-{formatCurrency(s.metrics.laborCost)}</td>
                                     <td className="px-4 py-3 text-right font-bold text-green-600 dark:text-green-400">{formatCurrency(s.metrics.netProfit)}</td>
                                     <td className="px-4 py-3 text-center">
                                         <div className="flex items-center justify-center gap-2">
@@ -413,7 +566,7 @@ export default function ServicesPricing() {
       {activeTab === 'matrix' && (
         <div className="space-y-6 animate-in fade-in slide-in-from-left duration-300">
           {/* ... (Existing Matrix Content) ... */}
-          <div className="bg-gradient-to-r from-slate-800 to-slate-900 dark:from-slate-900 dark:to-slate-950 p-6 rounded-xl text-white shadow-lg border border-slate-700">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl text-white shadow-lg">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
               <div className="flex items-start gap-4">
                 <div className="p-3 bg-blue-600/20 rounded-lg text-blue-400">
@@ -427,13 +580,13 @@ export default function ServicesPricing() {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-end gap-3 bg-white/5 p-3 sm:p-4 rounded-lg border border-white/10">
+              <div className="flex flex-col sm:flex-row sm:items-end gap-3 bg-slate-950/50 p-4 rounded-lg border border-slate-800">
                 <div className="flex-1 sm:flex-none">
                   <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Categoria Alvo</label>
                   <select 
                     value={bulkTarget}
                     onChange={(e) => setBulkTarget(e.target.value as any)}
-                    className="w-full sm:w-40 bg-slate-800 border border-slate-600 text-white text-xs sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 sm:p-2.5"
+                    className="w-full sm:w-40 bg-slate-800 border border-slate-700 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5"
                   >
                     <option value="all">Todas as Categorias</option>
                     {sizes.map(s => (
@@ -448,16 +601,16 @@ export default function ServicesPricing() {
                       type="number" 
                       value={bulkPercentage}
                       onChange={(e) => setBulkPercentage(Number(e.target.value))}
-                      className="w-full sm:w-24 bg-slate-800 border border-slate-600 text-white text-xs sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 sm:p-2.5 pr-8"
+                      className="w-full sm:w-24 bg-slate-800 border border-slate-700 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 pr-8"
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
                   </div>
                 </div>
                 <button 
                   onClick={() => setShowBulkConfirm(true)}
-                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 sm:py-2.5 px-3 sm:px-4 rounded-lg transition-colors flex items-center justify-center gap-1 sm:gap-2 text-sm sm:text-base"
+                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm"
                 >
-                  <ArrowUpRight size={16} className="sm:w-[18px] sm:h-[18px]" />
+                  <ArrowUpRight size={16} />
                   Aplicar
                 </button>
               </div>
@@ -486,7 +639,7 @@ export default function ServicesPricing() {
                   <tr>
                     <th className="px-2 sm:px-6 py-3 sm:py-4 font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider min-w-[140px]">Serviço</th>
                     {sizes.map(size => (
-                      <th key={size} className="px-1 sm:px-6 py-3 sm:py-4 font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-center whitespace-nowrap min-w-[80px]">
+                      <th key={size} className="px-1 sm:px-6 py-3 sm:py-4 font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-center whitespace-nowrap min-w-[120px]">
                         {VEHICLE_SIZES[size]}
                       </th>
                     ))}
@@ -509,12 +662,11 @@ export default function ServicesPricing() {
                         return (
                           <td key={size} className="px-1 sm:px-6 py-2 sm:py-4 text-center">
                             <div className="relative inline-block">
-                              <span className="absolute left-1 sm:left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] sm:text-xs">R$</span>
-                              <input 
-                                type="number"
+                              <span className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] sm:text-xs font-bold">R$</span>
+                              <MoneyInput 
                                 value={price}
-                                onChange={(e) => updatePrice(service.id, size, Number(e.target.value))}
-                                className="w-16 sm:w-24 pl-5 sm:pl-8 pr-1 sm:pr-2 py-1.5 bg-slate-100 dark:bg-slate-800 border border-transparent hover:border-slate-300 dark:hover:border-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg text-right font-medium text-slate-900 dark:text-white transition-all text-xs sm:text-sm"
+                                onSave={(newVal) => handleManualPriceChange(service.id, size, price, newVal)}
+                                className="w-32 sm:w-44 pl-7 sm:pl-9 pr-2 py-2 bg-slate-100 dark:bg-slate-800 border border-transparent hover:border-slate-300 dark:hover:border-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg text-right font-bold text-slate-900 dark:text-white transition-all text-xs sm:text-sm"
                               />
                             </div>
                           </td>
@@ -553,11 +705,10 @@ export default function ServicesPricing() {
                           <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{sizeLabel}</label>
                           <div className="relative">
                             <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">R$</span>
-                            <input 
-                              type="number"
+                            <MoneyInput 
                               value={price}
-                              onChange={(e) => updatePrice(service.id, size, Number(e.target.value))}
-                              className="w-full pl-6 pr-2 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded text-right font-medium text-slate-900 dark:text-white text-sm"
+                              onSave={(newVal) => handleManualPriceChange(service.id, size, price, newVal)}
+                              className="w-full pl-7 pr-2 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded text-right font-medium text-slate-900 dark:text-white text-sm"
                             />
                           </div>
                         </div>
@@ -653,7 +804,7 @@ export default function ServicesPricing() {
                             type="number"
                             value={service.returnIntervalDays || ''}
                             onChange={(e) => updateServiceInterval(service.id, parseInt(e.target.value) || 0)}
-                            placeholder="Ex: 30 dias"
+                            placeholder="0 = Sem alerta"
                             className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                         />
                         <p className="text-[10px] text-slate-400 mt-1">
