@@ -350,7 +350,9 @@ export const MOCK_WORK_ORDERS: WorkOrder[] = [
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // Ontem
     paymentStatus: 'paid',
     paymentMethod: 'Pix',
-    paidAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString()
+    paidAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+    npsScore: 10,
+    npsComment: "Serviço impecável! O carro ficou novo de novo."
   },
   {
     id: 'OS-1002',
@@ -373,6 +375,32 @@ export const MOCK_WORK_ORDERS: WorkOrder[] = [
     checklist: [],
     createdAt: new Date().toISOString(),
     paymentStatus: 'pending'
+  },
+  {
+    id: 'OS-1000',
+    clientId: 'c3',
+    vehicle: 'Honda Civic',
+    plate: 'DEF-5678',
+    service: 'Higienização Interna',
+    serviceId: 's3',
+    serviceIds: ['s3'],
+    status: 'Concluído',
+    technician: 'Maria Gerente',
+    deadline: 'Semana passada',
+    priority: 'low',
+    totalValue: 350.00,
+    damages: [],
+    vehicleInventory: { estepe: true, macaco: true, chaveRoda: true, tapetes: true, manual: true, antena: true, pertences: '' },
+    dailyLog: [],
+    qaChecklist: [],
+    tasks: [],
+    checklist: [],
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
+    paymentStatus: 'paid',
+    paymentMethod: 'Cartão Crédito',
+    paidAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
+    npsScore: 9,
+    npsComment: "Muito bom, atendimento rápido."
   }
 ];
 

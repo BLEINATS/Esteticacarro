@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { ArrowLeft, Smartphone, Wallet, QrCode, Copy, Share2, Loader2, Gift } from 'lucide-react';
+import { ArrowLeft, Smartphone, Wallet, QrCode, Copy, Share2, Loader2, Gift, CheckCircle2 } from 'lucide-react';
 import FidelityCard from '../components/FidelityCard';
 import QRCode from 'qrcode';
 import { ClientPoints } from '../types';
@@ -32,6 +32,7 @@ export default function ClientProfile() {
   const [googleWalletUrl, setGoogleWalletUrl] = useState('');
   const [shareLink, setShareLink] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // Ensure card exists if gamification is enabled
   useEffect(() => {
@@ -96,6 +97,14 @@ export default function ClientProfile() {
     window.open(whatsappLink, '_blank');
   };
 
+  const handleCopyCode = () => {
+    if (card?.cardNumber) {
+        navigator.clipboard.writeText(card.cardNumber);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   const availableRewards = points.tier ? getRewardsByLevel(points.tier as 'bronze' | 'silver' | 'gold' | 'platinum') : [];
 
   return (
@@ -153,7 +162,29 @@ export default function ClientProfile() {
             {qrCodeUrl ? (
               <>
                 <img src={qrCodeUrl} alt="QR Code" className="w-48 h-48 rounded-lg border-2 border-slate-200 dark:border-slate-700" />
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-4 text-center">Apresente no caixa para pontuar</p>
+                
+                {/* Code Display for Manual Entry */}
+                <div className="mt-6 w-full max-w-xs">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-2 text-center uppercase font-bold tracking-wider">
+                        Código do Cartão
+                    </p>
+                    <button 
+                        onClick={handleCopyCode}
+                        className="w-full flex items-center justify-center gap-3 bg-slate-100 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-500 transition-all group active:scale-95"
+                    >
+                        <span className="font-mono text-lg font-bold text-slate-900 dark:text-white tracking-widest break-all">
+                            {card.cardNumber}
+                        </span>
+                        {copied ? (
+                            <CheckCircle2 size={20} className="text-green-500 flex-shrink-0" />
+                        ) : (
+                            <Copy size={20} className="text-slate-400 group-hover:text-blue-500 transition-colors flex-shrink-0" />
+                        )}
+                    </button>
+                    <p className="text-[10px] text-slate-400 mt-3 text-center">
+                        Apresente este código caso o scanner não funcione.
+                    </p>
+                </div>
               </>
             ) : (
               <div className="w-48 h-48 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center">

@@ -8,13 +8,16 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase URL or Key not found in environment variables.');
 }
 
+// Fix: Provide placeholders to prevent createClient from throwing an error with empty strings
+// This allows the app to load in "offline mode" using IndexedDB if env vars are missing
 export const supabase = createClient<Database>(
-  supabaseUrl || '', 
-  supabaseAnonKey || ''
+  supabaseUrl || 'https://placeholder.supabase.co', 
+  supabaseAnonKey || 'placeholder'
 );
 
 export const checkSupabaseConnection = async () => {
   try {
+    // Simple check to see if we can reach the server
     const { error } = await supabase.from('tenants').select('count', { count: 'exact', head: true });
     return !error;
   } catch (e) {

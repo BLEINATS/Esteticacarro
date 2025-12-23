@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Package, AlertTriangle, DollarSign, Layers } from 'lucide-react';
+import { X, Save, Package, AlertTriangle, DollarSign, Layers, Loader2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { InventoryItem } from '../types';
+import { useDialog } from '../context/DialogContext';
 
 interface InventoryModalProps {
   item?: InventoryItem | null;
@@ -10,6 +11,8 @@ interface InventoryModalProps {
 
 export default function InventoryModal({ item, onClose }: InventoryModalProps) {
   const { addInventoryItem, updateInventoryItem } = useApp();
+  const { showAlert } = useDialog();
+  const [isSaving, setIsSaving] = useState(false);
   
   const [formData, setFormData] = useState<Partial<InventoryItem>>({
     name: '',
@@ -26,17 +29,27 @@ export default function InventoryModal({ item, onClose }: InventoryModalProps) {
     }
   }, [item]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true);
     
-    if (item) {
-      // Edit Mode
-      updateInventoryItem(item.id, formData);
-    } else {
-      // Create Mode
-      addInventoryItem(formData as any);
+    try {
+        if (item) {
+          // Edit Mode
+          await updateInventoryItem(item.id, formData);
+          await showAlert({ title: 'Sucesso', message: 'Item atualizado com sucesso.', type: 'success' });
+        } else {
+          // Create Mode
+          await addInventoryItem(formData as any);
+          await showAlert({ title: 'Sucesso', message: 'Novo item adicionado ao estoque.', type: 'success' });
+        }
+        onClose();
+    } catch (error) {
+        console.error("Erro ao salvar item:", error);
+        await showAlert({ title: 'Erro', message: 'Não foi possível salvar o item. Tente novamente.', type: 'error' });
+    } finally {
+        setIsSaving(false);
     }
-    onClose();
   };
 
   return (
@@ -156,16 +169,18 @@ export default function InventoryModal({ item, onClose }: InventoryModalProps) {
             <button 
               type="button" 
               onClick={onClose}
-              className="flex-1 px-4 py-3 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              disabled={isSaving}
+              className="flex-1 px-4 py-3 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
             >
               Cancelar
             </button>
             <button 
               type="submit"
-              className="flex-1 px-4 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 transition-all flex items-center justify-center gap-2"
+              disabled={isSaving}
+              className="flex-1 px-4 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              <Save size={20} />
-              Salvar Item
+              {isSaving ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+              {isSaving ? 'Salvando...' : 'Salvar Item'}
             </button>
           </div>
 

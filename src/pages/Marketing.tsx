@@ -30,7 +30,7 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'
 
 export default function Marketing() {
   const { 
-    clients, campaigns, createCampaign, deleteCampaign, updateCampaign, seedDefaultCampaigns, seedMockReviews,
+    clients, campaigns, createCampaign, deleteCampaign, updateCampaign, seedDefaultCampaigns,
     getWhatsappLink, workOrders, reminders, subscription, consumeTokens, systemAlerts,
     socialPosts, createSocialPost, generateSocialContent, companySettings, updateCompanySettings,
     messageLogs
@@ -637,15 +637,6 @@ export default function Marketing() {
                         <div className="col-span-full text-center py-8 text-slate-400">
                             <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
                             <p className="mb-4">Nenhuma avaliação recebida ainda.</p>
-                            <button 
-                                onClick={async () => {
-                                    await seedMockReviews();
-                                    showAlert({ title: 'Sucesso', message: 'Avaliações de exemplo geradas!', type: 'success' });
-                                }}
-                                className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-3 py-2 rounded-lg font-bold hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
-                            >
-                                Gerar Avaliações de Teste
-                            </button>
                         </div>
                     )}
                 </div>
@@ -781,7 +772,7 @@ export default function Marketing() {
                              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Formato</label>
                              <div className="grid grid-cols-3 gap-2">
                                  {['feed', 'story', 'reel'].map(type => (
-                                     <button key={type} onClick={() => setContentType(type as any)} className={cn("py-2 rounded-lg text-sm font-medium border transition-all capitalize", contentType === type ? "bg-purple-50 dark:bg-purple-900/20 border-purple-500 text-purple-700 dark:text-purple-300" : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800")}>{type}</button>
+                                     <button key={type} onClick={() => setContentType(type as any)} className={cn("py-2 rounded-lg text-sm font-medium border transition-all capitalize", contentType === type ? "bg-purple-50 dark:bg-purple-900/20 border-purple-50 text-purple-700 dark:text-purple-300" : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800")}>{type}</button>
                                  ))}
                              </div>
                          </div>

@@ -26,9 +26,6 @@ export default function Clients() {
     if (location.state && (location.state as any).selectedClientId) {
       const clientId = (location.state as any).selectedClientId;
       setSelectedClientId(clientId);
-      
-      // Optional: Clear state to prevent reopening on refresh, though React Router handles this well usually.
-      // window.history.replaceState({}, document.title);
     }
   }, [location.state]);
 
@@ -260,7 +257,7 @@ export default function Clients() {
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {filteredClients.map((client) => {
               const daysSince = getDaysSinceLastVisit(client.lastVisit);
-              const hasVisit = daysSince !== null;
+              const hasVisit = daysSince !== null && client.visitCount > 0;
               
               return (
               <tr 
@@ -349,7 +346,7 @@ export default function Clients() {
         {filteredClients.length > 0 ? (
           filteredClients.map((client) => {
             const daysSince = getDaysSinceLastVisit(client.lastVisit);
-            const hasVisit = daysSince !== null;
+            const hasVisit = daysSince !== null && client.visitCount > 0;
 
             return (
             <div 

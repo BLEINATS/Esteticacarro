@@ -1,16 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   CheckCircle2, Clock, Wrench, ShieldCheck, MapPin, Phone, 
   MessageCircle, ChevronRight, Camera, Calendar, ArrowLeft,
-  Star, Send, ThumbsUp, Frown, Meh, Smile, Heart
+  Star, Send, ThumbsUp, Frown, Meh, Smile, Heart, Moon, Sun,
+  CreditCard, Check
 } from 'lucide-react';
 import { db } from '../lib/db';
 import { WorkOrder, CompanySettings } from '../types';
 import { cn, formatCurrency, formatId } from '../lib/utils';
+import { useApp } from '../context/AppContext';
+import { supabase } from '../lib/supabase';
 
 export default function ServiceTracker() {
   const { orderId } = useParams();
+  const navigate = useNavigate();
+  const { updateWorkOrder, ownerUser, theme, toggleTheme } = useApp();
   const [order, setOrder] = useState<WorkOrder | null>(null);
   const [settings, setSettings] = useState<CompanySettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,13 +65,20 @@ export default function ServiceTracker() {
       
       setIsSubmittingRating(true);
       try {
-          // Update local DB (Simulating API call)
-          // We save npsComment in json_data AND top level for type safety if possible, 
-          // but AppContext loads json_data into root, so saving to json_data is enough for persistence in this mock structure.
-          await db.update('work_orders', order.id, { 
-              nps_score: rating,
-              json_data: { ...order.json_data, npsComment: comment } 
+          // 1. Update Context State (for immediate UI reflection if in same session)
+          await updateWorkOrder(order.id, { 
+              npsScore: rating, 
+              npsComment: comment 
           });
+
+          // 2. Explicit Supabase Update (for public access where context tenantId might be null)
+          if (order.tenant_id) {
+               await supabase.from('work_orders').update({
+                  nps_score: rating,
+                  json_data: { ...order.json_data, npsScore: rating, npsComment: comment }
+              }).eq('id', order.id);
+          }
+
           setRatingSubmitted(true);
       } catch (error) {
           console.error("Erro ao salvar avaliação", error);
@@ -76,9 +88,14 @@ export default function ServiceTracker() {
       }
   };
 
+  const handleBackToOS = () => {
+      // Tenta voltar para a tela anterior (provavelmente o modal ou a lista)
+      navigate(-1);
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
@@ -86,12 +103,12 @@ export default function ServiceTracker() {
 
   if (!order) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center mb-4">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 bg-slate-200 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
           <Wrench className="text-slate-400" size={32} />
         </div>
-        <h1 className="text-xl font-bold text-slate-900 mb-2">Ordem de Serviço não encontrada</h1>
-        <p className="text-slate-500">Verifique o link e tente novamente.</p>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Ordem de Serviço não encontrada</h1>
+        <p className="text-slate-500 dark:text-slate-400">Verifique o link e tente novamente.</p>
       </div>
     );
   }
@@ -133,26 +150,45 @@ export default function ServiceTracker() {
   const ReactionIcon = reaction.icon;
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20 transition-colors duration-300">
       {/* Header */}
-      <div className="bg-white shadow-sm sticky top-0 z-10">
+      <div className="bg-white dark:bg-slate-900 shadow-sm sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800">
         <div className="max-w-md mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
+            {ownerUser && (
+                <button 
+                    onClick={handleBackToOS}
+                    className="p-2 -ml-2 mr-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                    title="Voltar para OS (Admin)"
+                >
+                    <ArrowLeft size={20} />
+                </button>
+            )}
+            
             {settings?.logoUrl ? (
-              <img src={settings.logoUrl} alt="Logo" className="w-10 h-10 rounded-full object-cover bg-slate-100" />
+              <img src={settings.logoUrl} alt="Logo" className="w-10 h-10 rounded-full object-cover bg-slate-100 dark:bg-slate-800" />
             ) : (
               <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
                 {settings?.name?.charAt(0) || 'C'}
               </div>
             )}
             <div>
-              <h1 className="font-bold text-slate-900 text-sm leading-tight">{settings?.name || 'Cristal Care'}</h1>
-              <p className="text-xs text-slate-500">Acompanhamento Online</p>
+              <h1 className="font-bold text-slate-900 dark:text-white text-sm leading-tight">{settings?.name || 'Cristal Care'}</h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Acompanhamento Online</p>
             </div>
           </div>
-          <div className="text-right">
-            <span className="text-xs font-bold text-slate-400 block">OS</span>
-            <span className="text-sm font-mono font-bold text-slate-900">{formatId(order.id)}</span>
+          <div className="flex items-center gap-3">
+            <button 
+                onClick={toggleTheme}
+                className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                title={theme === 'dark' ? 'Modo Claro' : 'Modo Escuro'}
+            >
+                {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+            <div className="text-right hidden sm:block">
+                <span className="text-xs font-bold text-slate-400 block">OS</span>
+                <span className="text-sm font-mono font-bold text-slate-900 dark:text-white">{formatId(order.id)}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -160,38 +196,46 @@ export default function ServiceTracker() {
       <div className="max-w-md mx-auto p-4 space-y-6">
         
         {/* Vehicle Card */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-sm border border-slate-100 dark:border-slate-800">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <h2 className="text-2xl font-bold text-slate-900">{order.vehicle}</h2>
-              <span className="inline-block bg-slate-100 text-slate-600 text-xs font-bold px-2 py-1 rounded mt-1">
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{order.vehicle}</h2>
+              <span className="inline-block bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold px-2 py-1 rounded mt-1 border border-slate-200 dark:border-slate-700">
                 {order.plate}
               </span>
             </div>
-            <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-600">
+            <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400">
               <Wrench size={24} />
             </div>
           </div>
           
-          <div className="border-t border-slate-100 pt-4">
-            <p className="text-xs text-slate-500 uppercase font-bold mb-1">Serviço Principal</p>
-            <p className="text-sm font-medium text-slate-800">{order.service}</p>
+          <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
+            <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold mb-1">Serviço Principal</p>
+            <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{order.service}</p>
           </div>
 
-          {order.deadline && (
-            <div className="mt-3 flex items-center gap-2 text-sm text-blue-600 bg-blue-50 p-3 rounded-lg">
-              <Calendar size={16} />
-              <span className="font-bold">Previsão: {order.deadline}</span>
-            </div>
-          )}
+          <div className="mt-3 flex gap-2">
+            {order.deadline && (
+                <div className="flex-1 flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-100 dark:border-blue-800/50">
+                <Calendar size={16} />
+                <span className="font-bold">Previsão: {order.deadline}</span>
+                </div>
+            )}
+            {order.paymentStatus === 'paid' && (
+                <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-100 dark:border-green-800/50" title="Pagamento Confirmado">
+                    <CreditCard size={16} />
+                    <span className="font-bold">Pago</span>
+                </div>
+            )}
+          </div>
         </div>
 
         {/* Status Progress */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-          <h3 className="font-bold text-slate-900 mb-6">Status Atual</h3>
+        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
+          <h3 className="font-bold text-slate-900 dark:text-white mb-6">Status Atual</h3>
           <div className="relative">
             {/* Connecting Line */}
-            <div className="absolute left-[15px] top-0 bottom-0 w-0.5 bg-slate-100" />
+            <div className="absolute left-[15px] top-0 bottom-0 w-0.5 bg-slate-100 dark:bg-slate-800" />
             
             <div className="space-y-6 relative">
               {steps.map((step, idx) => {
@@ -201,22 +245,26 @@ export default function ServiceTracker() {
                 return (
                   <div key={step.id} className="flex items-center gap-4">
                     <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center z-10 transition-colors duration-500",
-                      isStepCompleted ? "bg-green-500 text-white" : "bg-slate-200 text-slate-400"
+                      "w-8 h-8 rounded-full flex items-center justify-center z-10 transition-colors duration-500 border-2",
+                      isStepCompleted 
+                        ? "bg-green-500 border-green-500 text-white" 
+                        : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400"
                     )}>
                       <step.icon size={14} />
                     </div>
                     <div className={cn("flex-1 transition-opacity duration-500", isStepCompleted ? "opacity-100" : "opacity-40")}>
-                      <p className={cn("text-sm font-bold", isCurrent ? "text-green-600" : "text-slate-900")}>
+                      <p className={cn("text-sm font-bold", isCurrent ? "text-green-600 dark:text-green-400" : "text-slate-900 dark:text-white")}>
                         {step.label}
                       </p>
                       {isCurrent && (
-                        <p className="text-xs text-green-600 animate-pulse font-medium">
-                          {order.status === 'Entregue' ? 'Veículo Entregue' : 'Em andamento...'}
+                        <p className="text-xs text-green-600 dark:text-green-400 animate-pulse font-medium">
+                          {order.status === 'Entregue' ? 'Veículo Entregue' : 
+                           order.status === 'Concluído' ? 'Pronto para Retirada' : 
+                           'Em andamento...'}
                         </p>
                       )}
                     </div>
-                    {isStepCompleted && <CheckCircle2 size={16} className="text-green-500" />}
+                    {isStepCompleted && <CheckCircle2 size={16} className="text-green-500 dark:text-green-400" />}
                   </div>
                 );
               })}
@@ -227,20 +275,20 @@ export default function ServiceTracker() {
         {/* Timeline / Daily Log */}
         {order.dailyLog && order.dailyLog.length > 0 && (
           <div className="space-y-4">
-            <h3 className="font-bold text-slate-900 px-2">Linha do Tempo</h3>
+            <h3 className="font-bold text-slate-900 dark:text-white px-2">Linha do Tempo</h3>
             {order.dailyLog.map((log) => (
-              <div key={log.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+              <div key={log.id} className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-2 h-2 rounded-full bg-blue-500" />
-                  <span className="text-xs font-bold text-slate-500">
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
                     {new Date(log.date).toLocaleDateString('pt-BR')} às {new Date(log.date).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
                   </span>
                 </div>
-                <p className="text-sm text-slate-800 mb-3">{log.description}</p>
+                <p className="text-sm text-slate-800 dark:text-slate-200 mb-3">{log.description}</p>
                 {log.photos && log.photos.length > 0 && (
                   <div className="flex gap-2 overflow-x-auto pb-2">
                     {log.photos.map((photo, i) => (
-                      <img key={i} src={photo} className="w-24 h-24 object-cover rounded-lg border border-slate-200" alt="Progresso" />
+                      <img key={i} src={photo} className="w-24 h-24 object-cover rounded-lg border border-slate-200 dark:border-slate-700" alt="Progresso" />
                     ))}
                   </div>
                 )}
@@ -251,13 +299,13 @@ export default function ServiceTracker() {
 
         {/* Gallery Grid */}
         {allPhotos.length > 0 && (
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-            <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-              <Camera size={18} className="text-purple-600" /> Galeria de Fotos
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-sm border border-slate-100 dark:border-slate-800">
+            <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+              <Camera size={18} className="text-purple-600 dark:text-purple-400" /> Galeria de Fotos
             </h3>
             <div className="grid grid-cols-2 gap-2">
               {allPhotos.map((photo, idx) => (
-                <div key={idx} className="relative group aspect-square rounded-lg overflow-hidden bg-slate-100">
+                <div key={idx} className="relative group aspect-square rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800">
                   <img src={photo.url} alt={photo.desc} className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
                     <p className="text-[10px] text-white font-medium truncate">{photo.desc}</p>

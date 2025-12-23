@@ -62,7 +62,7 @@ import { isSameDay, isSameMonth, startOfMonth, endOfMonth, isWithinInterval, sub
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
 
 export default function Dashboard() {
-  const { theme, workOrders, clients, inventory, financialTransactions, companySettings, systemAlerts, markAlertResolved, employees, services, seedMockReviews, showAlert } = useApp();
+  const { theme, workOrders, clients, inventory, financialTransactions, companySettings, systemAlerts, markAlertResolved, employees, services, showAlert } = useApp();
   const isDark = theme === 'dark';
   const [selectedOS, setSelectedOS] = useState<WorkOrder | null>(null);
   const navigate = useNavigate();
@@ -328,7 +328,8 @@ export default function Dashboard() {
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         <div className="space-y-6">
           
-          {/* --- SECTION 0: PÁTIO AGORA (YARD STATUS - MODERN DARK GLASS) --- */}
+          {/* ... (SECTIONS 0, 1, 2, 3 remain unchanged) ... */}
+          {/* --- SECTION 0: PÁTIO AGORA --- */}
           <div className="rounded-2xl overflow-hidden shadow-2xl relative bg-slate-900 border border-slate-800">
               {/* Background Effect */}
               <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
@@ -428,9 +429,10 @@ export default function Dashboard() {
               </div>
           </div>
 
+          {/* ... (SECTIONS 1, 2, 3 - Keeping them as they are) ... */}
           {/* --- SECTION 1: DAILY PULSE & KPIs --- */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Agenda Hoje (CORRIGIDO) */}
+              {/* Agenda Hoje */}
               <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
                   <div className="flex justify-between items-start mb-2">
                       <div>
@@ -505,9 +507,8 @@ export default function Dashboard() {
               </div>
           </div>
 
-          {/* --- SECTION 2: SUPER KPIs --- */}
+          {/* ... (SECTION 2 & 3) ... */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            
             {/* Card 1: Receita do Mês */}
             <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
                 <div className="flex justify-between items-start mb-2">
@@ -579,13 +580,11 @@ export default function Dashboard() {
                     <span className="text-red-500 font-bold">{inactiveClients} inativos</span>
                     <span className="text-slate-400">total</span>
                 </div>
-                <div className="absolute bottom-0 left-0 h-1 bg-red-500 transition-all duration-500" style={{ width: `${Math.min(churnRate, 100)}%` }} />
+                <div className="absolute bottom-0 left-0 h-1 bg-red-500 transition-all duration-500" style={{ width: `${Math.min(churnRate * 5, 100)}%` }} />
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* --- SECTION 2: CLIENTE DO MÊS & RANKING --- */}
             <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Destaque: Cliente do Mês */}
                 <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden flex flex-col justify-between">
@@ -659,7 +658,7 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            {/* --- SECTION 3: REVENUE BREAKDOWN --- */}
+            {/* Faturamento por Categoria */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 flex flex-col">
                 <h3 className="font-bold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
                     <BarChart3 className="text-blue-600" size={18} /> Faturamento por Categoria
@@ -816,15 +815,6 @@ export default function Dashboard() {
                         <div className="col-span-full text-center py-8 text-slate-400">
                             <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
                             <p className="mb-4">Nenhuma avaliação recebida ainda.</p>
-                            <button 
-                                onClick={async () => {
-                                    await seedMockReviews();
-                                    showAlert({ title: 'Sucesso', message: 'Avaliações de exemplo geradas!', type: 'success' });
-                                }}
-                                className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-3 py-2 rounded-lg font-bold hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
-                            >
-                                Gerar Avaliações de Teste
-                            </button>
                         </div>
                     )}
                 </div>

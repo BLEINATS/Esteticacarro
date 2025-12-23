@@ -1015,17 +1015,23 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         </div>
       )}
 
-      <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl w-full max-w-5xl max-h-[98vh] sm:max-h-[95vh] flex flex-col shadow-2xl animate-in fade-in zoom-in duration-200 border border-slate-200 dark:border-slate-800">
+      <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl w-full max-w-6xl h-[90vh] flex flex-col shadow-2xl animate-in fade-in zoom-in duration-200 border border-slate-200 dark:border-slate-800 overflow-hidden">
         
-        <div className="p-3 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start gap-2 sm:gap-0 bg-slate-50/50 dark:bg-slate-900/50">
-          <div className="w-full sm:w-auto">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-3 mb-1">
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">{formatId(workOrder.id)}</h2>
+        {/* HEADER */}
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex-shrink-0">
+          
+          {/* Top Row: OS ID, Status, Points, Buttons */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-2">
+            
+            {/* Left Group */}
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">{formatId(workOrder.id)}</h2>
+              
               <select 
                 value={currentStatus}
                 onChange={(e) => handleStatusChange(e.target.value as any)}
                 className={cn(
-                  "px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wide border-none focus:ring-2 cursor-pointer text-xs sm:text-sm",
+                  "px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide border-none focus:ring-2 cursor-pointer",
                   currentStatus === 'Aguardando Aprovação' 
                     ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
                     : currentStatus === 'Cancelado' 
@@ -1045,90 +1051,91 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
               {selectedClientId && companySettings.gamification?.enabled && (
                 <span className={cn(
-                  "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wide text-white",
+                  "flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide text-white shadow-sm",
                   `bg-gradient-to-r ${clientTierConfig.color}`
                 )}>
-                  <Trophy size={10} />
+                  <Trophy size={12} />
                   {clientTierConfig.name} • {currentPoints} pts
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 mt-1">
-                <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm line-clamp-1">
-                    {selectedVehicleObj ? selectedVehicleObj.model : 'Veículo não selecionado'} • {selectedVehiclePlate || 'Placa?'}
-                </p>
-                <span className="text-slate-300 dark:text-slate-600">|</span>
-                <div className="flex items-center gap-1">
-                    <User size={12} className="text-slate-400" />
-                    <select 
-                        value={assignedTechnician}
-                        onChange={(e) => setAssignedTechnician(e.target.value)}
-                        className="bg-transparent border-none text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-medium focus:ring-0 cursor-pointer hover:text-blue-600"
+
+            {/* Right Group (Buttons) */}
+            <div className="flex flex-wrap items-center gap-2">
+                {currentStatus === 'Aguardando Aprovação' ? (
+                    <button 
+                        onClick={handleApprove} 
+                        disabled={isSaving}
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20 disabled:opacity-50"
                     >
-                        <option value="A Definir">Técnico: A Definir</option>
-                        {employees.filter(e => e.active).map(emp => (
-                            <option key={emp.id} value={emp.name}>{emp.name}</option>
-                        ))}
-                    </select>
-                </div>
+                        {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} 
+                        Aprovar
+                    </button>
+                ) : (
+                    <button 
+                        onClick={handleSave} 
+                        disabled={isSaving}
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                        {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} 
+                        Salvar Tudo
+                    </button>
+                )}
+                
+                {currentStatus !== 'Cancelado' && currentStatus !== 'Concluído' && currentStatus !== 'Entregue' && (
+                    <button 
+                        onClick={handleCancelOS}
+                        className="flex items-center justify-center gap-2 px-4 py-2 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 rounded-lg text-sm font-bold hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    >
+                        <Ban size={16} /> Cancelar
+                    </button>
+                )}
+
+                <button onClick={handlePrint} className="flex items-center justify-center gap-2 px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                    <Printer size={16} /> Imprimir
+                </button>
+                
+                <button 
+                    onClick={handleSendWhatsApp} 
+                    className={cn(
+                        "flex items-center justify-center gap-2 px-4 py-2 text-white rounded-lg text-sm font-bold transition-colors",
+                        isWhatsAppConnected ? "bg-purple-600 hover:bg-purple-700" : "bg-green-500 hover:bg-green-600"
+                    )}
+                >
+                    {isWhatsAppConnected ? <Bot size={16} /> : <Send size={16} />} 
+                    {isWhatsAppConnected ? 'Enviar (Auto)' : 'WhatsApp'}
+                </button>
+                
+                <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg text-slate-400 transition-colors ml-2">
+                  <X size={20} />
+                </button>
             </div>
           </div>
 
-          <div className="flex gap-1 sm:gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
-            {currentStatus === 'Aguardando Aprovação' ? (
-                <button 
-                    onClick={handleApprove} 
-                    disabled={isSaving}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-green-600 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-green-700 transition-colors shadow-lg shadow-green-900/20 animate-pulse disabled:opacity-50"
+          {/* Bottom Row: Vehicle Info & Technician */}
+          <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+             <span className="font-medium text-slate-700 dark:text-slate-300">
+                {selectedVehicleObj ? `${selectedVehicleObj.model} • ${selectedVehiclePlate}` : 'Veículo não selecionado'}
+             </span>
+             <span className="text-slate-300 dark:text-slate-600">|</span>
+             <div className="flex items-center gap-2">
+                <User size={14} />
+                <select 
+                    value={assignedTechnician}
+                    onChange={(e) => setAssignedTechnician(e.target.value)}
+                    className="bg-transparent border-none text-sm font-medium text-slate-700 dark:text-slate-300 focus:ring-0 cursor-pointer hover:text-blue-600 p-0"
                 >
-                    {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} 
-                    <span className="hidden sm:inline">Aprovar & Definir Preço</span><span className="sm:hidden">Aprovar</span>
-                </button>
-            ) : (
-                <button 
-                    onClick={handleSave} 
-                    disabled={isSaving}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                    {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} 
-                    <span className="hidden sm:inline">Salvar Tudo</span><span className="sm:hidden">Salvar</span>
-                </button>
-            )}
-            
-            {/* Cancelar OS Button */}
-            {currentStatus !== 'Cancelado' && currentStatus !== 'Concluído' && currentStatus !== 'Entregue' && (
-                <button 
-                    onClick={handleCancelOS}
-                    className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-[10px] sm:text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
-                    title="Cancelar OS"
-                >
-                    <Ban size={14} />
-                    <span className="hidden sm:inline">Cancelar</span>
-                </button>
-            )}
-
-            <button onClick={handlePrint} className="flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-slate-600 text-white rounded-lg text-[10px] sm:text-sm font-medium hover:bg-slate-700 transition-colors">
-                <Printer size={14} /> <span className="hidden sm:inline">Imprimir</span><span className="sm:hidden">Print</span>
-            </button>
-            <button 
-                onClick={handleSendWhatsApp} 
-                className={cn(
-                    "flex-1 sm:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-white rounded-lg text-[10px] sm:text-sm font-medium transition-colors",
-                    isWhatsAppConnected ? "bg-purple-600 hover:bg-purple-700" : "bg-green-500 hover:bg-green-600"
-                )}
-            >
-                {isWhatsAppConnected ? <Bot size={14} /> : <Send size={14} />} 
-                <span className="hidden sm:inline">{isWhatsAppConnected ? 'Enviar (Auto)' : 'WhatsApp'}</span>
-                <span className="sm:hidden">{isWhatsAppConnected ? 'Robô' : 'WA'}</span>
-            </button>
-            <button onClick={onClose} className="p-1.5 sm:p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors">
-              <X size={18} />
-            </button>
+                    <option value="A Definir">Técnico: A Definir</option>
+                    {employees.filter(e => e.active).map(emp => (
+                        <option key={emp.id} value={emp.name}>{emp.name}</option>
+                    ))}
+                </select>
+             </div>
           </div>
         </div>
 
         {/* ... (Tabs and Content - No changes needed here) ... */}
-        <div className="flex w-full border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div className="flex w-full border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex-shrink-0">
           {[
             { id: 'reception', label: 'Recepção & Vistoria', mobileLabel: 'Recepção', icon: ClipboardCheck },
             { id: 'execution', label: 'Execução & Diário', mobileLabel: 'Execução', icon: Hammer },

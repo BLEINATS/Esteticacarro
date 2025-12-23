@@ -17,7 +17,10 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
   const [items, setItems] = useState<ServiceConsumptionItem[]>([]);
   const [selectedInventoryId, setSelectedInventoryId] = useState<number | ''>('');
   const [quantity, setQuantity] = useState('');
-  const [unit, setUnit] = useState<'ml' | 'g' | 'un' | 'L' | 'kg'>('ml');
+  const [unit, setUnit] = useState<string>('un');
+  const [availableUnits, setAvailableUnits] = useState<{value: string, label: string}[]>([
+      { value: 'un', label: 'Unidade (un)' }
+  ]);
   const [isSaving, setIsSaving] = useState(false);
 
   // Load existing consumption on mount
@@ -27,6 +30,42 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
       setItems(existing.items);
     }
   }, [service.id, getServiceConsumption]);
+
+  const handleInventoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const id = Number(e.target.value);
+      setSelectedInventoryId(id);
+      setQuantity(''); // Reset quantity on item change
+      
+      const item = inventory.find(i => i.id === id);
+      if (item) {
+          const u = item.unit.toLowerCase();
+          
+          // Lógica inteligente de unidades compatíveis
+          if (u === 'l' || u === 'ml') {
+              setAvailableUnits([
+                  { value: 'ml', label: 'Mililitros (ml)' },
+                  { value: 'L', label: 'Litros (L)' }
+              ]);
+              setUnit('ml'); // Default mais comum para uso
+          } else if (u === 'kg' || u === 'g') {
+              setAvailableUnits([
+                  { value: 'g', label: 'Gramas (g)' },
+                  { value: 'kg', label: 'Quilos (kg)' }
+              ]);
+              setUnit('g'); // Default mais comum para uso
+          } else {
+              setAvailableUnits([
+                  { value: 'un', label: 'Unidade (un)' },
+                  { value: 'cx', label: 'Caixa (cx)' }
+              ]);
+              setUnit('un');
+          }
+      } else {
+          // Fallback
+          setAvailableUnits([{ value: 'un', label: 'Unidade (un)' }]);
+          setUnit('un');
+      }
+  };
 
   const handleAddItem = () => {
     if (!selectedInventoryId || !quantity) return;
@@ -50,6 +89,7 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
     // Reset form
     setSelectedInventoryId('');
     setQuantity('');
+    setAvailableUnits([{ value: 'un', label: 'Unidade (un)' }]);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -86,6 +126,8 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
 
     if (invUnit === 'l' && usageUnit === 'ml') multiplier = 0.001;
     else if (invUnit === 'kg' && usageUnit === 'g') multiplier = 0.001;
+    else if (invUnit === 'ml' && usageUnit === 'l') multiplier = 1000;
+    else if (invUnit === 'g' && usageUnit === 'kg') multiplier = 1000;
     
     // Safety check for numbers to prevent NaN
     const cost = Number(invItem.costPrice) || 0;
@@ -125,16 +167,7 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
               <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Produto do Estoque</label>
               <select 
                 value={selectedInventoryId}
-                onChange={(e) => {
-                    setSelectedInventoryId(Number(e.target.value));
-                    // Auto-set unit based on inventory unit
-                    const item = inventory.find(i => i.id === Number(e.target.value));
-                    if (item) {
-                        if (item.unit.toLowerCase() === 'l') setUnit('ml');
-                        else if (item.unit.toLowerCase() === 'kg') setUnit('g');
-                        else setUnit('un');
-                    }
-                }}
+                onChange={handleInventoryChange}
                 className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white"
               >
                 <option value="">Selecione um produto...</option>
@@ -161,14 +194,13 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Unidade de Uso</label>
                 <select 
                   value={unit}
-                  onChange={(e) => setUnit(e.target.value as any)}
+                  onChange={(e) => setUnit(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white"
+                  disabled={!selectedInventoryId} // Desabilita se não tiver produto selecionado
                 >
-                  <option value="ml">Mililitros (ml)</option>
-                  <option value="g">Gramas (g)</option>
-                  <option value="un">Unidade (un)</option>
-                  <option value="L">Litros (L)</option>
-                  <option value="kg">Quilos (kg)</option>
+                  {availableUnits.map(u => (
+                      <option key={u.value} value={u.value}>{u.label}</option>
+                  ))}
                 </select>
               </div>
             </div>
