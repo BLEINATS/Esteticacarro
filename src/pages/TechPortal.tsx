@@ -6,11 +6,12 @@ import {
   DollarSign, Box, FileText, ShieldCheck, Loader2
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { cn, formatCurrency } from '../lib/utils';
+import { cn, formatCurrency, generateUUID } from '../lib/utils';
 import VehicleDamageMap from '../components/VehicleDamageMap';
 import { DamagePoint, WorkOrder, VehicleInventory } from '../types';
 import TechLogin from '../components/TechLogin';
 import WorkOrderModal from '../components/WorkOrderModal';
+import { LicensePlate } from '../components/ui/LicensePlate';
 
 export default function TechPortal() {
   const { 
@@ -115,7 +116,7 @@ export default function TechPortal() {
     const serviceNameCombined = selectedServicesList.map(s => s.name).join(' + ');
     
     const newOS: WorkOrder = {
-      id: `OS-${Math.floor(Math.random() * 10000)}`,
+      id: generateUUID(),
       clientId: selectedClient.id,
       vehicle: selectedVehicle.model,
       plate: selectedVehicle.plate,
@@ -248,7 +249,9 @@ export default function TechPortal() {
                   <div className="flex justify-between items-start mb-3">
                     <div>
                       <h3 className="font-bold text-slate-900 dark:text-white text-lg">{os.vehicle}</h3>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">{os.plate}</p>
+                      <div className="mt-1">
+                        <LicensePlate plate={os.plate} size="sm" />
+                      </div>
                     </div>
                     <span className={cn(
                       "text-xs font-bold px-2 py-1 rounded",
@@ -309,7 +312,10 @@ export default function TechPortal() {
                     className="w-full p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between hover:border-blue-500 transition-all text-left"
                   >
                     <div>
-                      <p className="font-bold text-slate-900 dark:text-white">{vehicle.plate} - {vehicle.model}</p>
+                      <div className="flex items-center gap-3 mb-1">
+                        <LicensePlate plate={vehicle.plate} size="sm" />
+                        <span className="font-bold text-slate-900 dark:text-white">{vehicle.model}</span>
+                      </div>
                       <p className="text-sm text-slate-500 dark:text-slate-400">{client.name}</p>
                     </div>
                     <ChevronRight className="text-slate-300" />

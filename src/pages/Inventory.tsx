@@ -50,7 +50,7 @@ export default function Inventory() {
     });
 
     if (confirmed) {
-      deleteInventoryItem(id);
+      await deleteInventoryItem(id);
       await showAlert({
         title: 'Item Removido',
         message: 'O item foi removido do estoque com sucesso.',

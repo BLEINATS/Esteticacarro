@@ -5,7 +5,7 @@ import {
   UserPlus, AlertCircle, CheckCircle2, 
   Hammer, ShieldCheck, PackageX, ChevronLeft, ChevronRight
 } from 'lucide-react';
-import { cn, formatId } from '../lib/utils';
+import { cn, formatId, generateUUID } from '../lib/utils';
 import { useApp } from '../context/AppContext';
 import WorkOrderModal from '../components/WorkOrderModal';
 import ClientModal from '../components/ClientModal';
@@ -205,7 +205,7 @@ export default function Operations() {
           <button 
             onClick={() => {
                 const newOS: WorkOrder = {
-                    id: `OS-${Math.floor(Math.random() * 10000)}`,
+                    id: generateUUID(),
                     clientId: '',
                     vehicle: 'Veículo Novo',
                     plate: '',

@@ -32,7 +32,7 @@ import {
   Bell
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { cn, formatId } from '../lib/utils';
+import { cn, formatId, generateUUID } from '../lib/utils';
 import WorkOrderModal from '../components/WorkOrderModal';
 import { WorkOrder } from '../types';
 
@@ -132,7 +132,7 @@ export default function Schedule() {
     else if (isSameDay(selectedDate, addDays(new Date(), 1))) deadlineStr = "Amanhã";
 
     const newOS: WorkOrder = {
-        id: `OS-${Math.floor(Math.random() * 10000)}`,
+        id: generateUUID(),
         clientId: '',
         vehicle: 'Veículo Novo',
         plate: '',

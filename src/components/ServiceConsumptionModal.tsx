@@ -15,7 +15,7 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
   const { showAlert } = useDialog();
   
   const [items, setItems] = useState<ServiceConsumptionItem[]>([]);
-  const [selectedInventoryId, setSelectedInventoryId] = useState<number | ''>('');
+  const [selectedInventoryId, setSelectedInventoryId] = useState<string>('');
   const [quantity, setQuantity] = useState('');
   const [unit, setUnit] = useState<string>('un');
   const [availableUnits, setAvailableUnits] = useState<{value: string, label: string}[]>([
@@ -23,36 +23,39 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
   ]);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Load existing consumption on mount
+  // Load existing consumption on mount ONLY ONCE
   useEffect(() => {
     const existing = getServiceConsumption(service.id);
     if (existing) {
       setItems(existing.items);
     }
-  }, [service.id, getServiceConsumption]);
+  }, []); 
+
+  const getInventoryItem = (id: number | string) => {
+    return inventory.find(i => String(i.id) === String(id));
+  };
 
   const handleInventoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const id = Number(e.target.value);
+      const id = e.target.value;
       setSelectedInventoryId(id);
-      setQuantity(''); // Reset quantity on item change
+      setQuantity('');
       
-      const item = inventory.find(i => i.id === id);
+      const item = getInventoryItem(id);
+      
       if (item) {
           const u = item.unit.toLowerCase();
-          
-          // Lógica inteligente de unidades compatíveis
           if (u === 'l' || u === 'ml') {
               setAvailableUnits([
                   { value: 'ml', label: 'Mililitros (ml)' },
                   { value: 'L', label: 'Litros (L)' }
               ]);
-              setUnit('ml'); // Default mais comum para uso
+              setUnit('ml');
           } else if (u === 'kg' || u === 'g') {
               setAvailableUnits([
                   { value: 'g', label: 'Gramas (g)' },
                   { value: 'kg', label: 'Quilos (kg)' }
               ]);
-              setUnit('g'); // Default mais comum para uso
+              setUnit('g');
           } else {
               setAvailableUnits([
                   { value: 'un', label: 'Unidade (un)' },
@@ -61,7 +64,6 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
               setUnit('un');
           }
       } else {
-          // Fallback
           setAvailableUnits([{ value: 'un', label: 'Unidade (un)' }]);
           setUnit('un');
       }
@@ -70,14 +72,16 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
   const handleAddItem = () => {
     if (!selectedInventoryId || !quantity) return;
     
+    const inventoryIdToSave = isNaN(Number(selectedInventoryId)) ? selectedInventoryId : Number(selectedInventoryId);
+
     const newItem: ServiceConsumptionItem = {
-      inventoryId: Number(selectedInventoryId),
+      inventoryId: inventoryIdToSave as number, 
       quantity: parseFloat(quantity),
       usageUnit: unit
     };
 
-    // Check if item already exists, if so, update it
-    const existingIndex = items.findIndex(i => i.inventoryId === newItem.inventoryId);
+    const existingIndex = items.findIndex(i => String(i.inventoryId) === String(newItem.inventoryId));
+    
     if (existingIndex >= 0) {
       const updatedItems = [...items];
       updatedItems[existingIndex] = newItem;
@@ -86,36 +90,38 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
       setItems([...items, newItem]);
     }
 
-    // Reset form
     setSelectedInventoryId('');
     setQuantity('');
     setAvailableUnits([{ value: 'un', label: 'Unidade (un)' }]);
   };
 
   const handleRemoveItem = (index: number) => {
-    setItems(items.filter((_, i) => i !== index));
+    setItems(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSave = async () => {
+    if (isSaving) return;
     setIsSaving(true);
-    const success = await updateServiceConsumption({
-      serviceId: service.id,
-      items: items
-    });
-    setIsSaving(false);
     
-    if (success) {
-        await showAlert({ title: 'Sucesso', message: 'Ficha técnica salva com sucesso!', type: 'success' });
-        onClose();
-    } else {
+    try {
+        const success = await updateServiceConsumption({
+          serviceId: service.id,
+          items: items
+        });
+        
+        if (success) {
+            await showAlert({ title: 'Sucesso', message: 'Ficha técnica salva com sucesso!', type: 'success' });
+            onClose();
+        } else {
+            throw new Error("Falha ao salvar");
+        }
+    } catch (error) {
         await showAlert({ title: 'Erro', message: 'Não foi possível salvar a ficha técnica. Tente novamente.', type: 'error' });
+    } finally {
+        setIsSaving(false);
     }
   };
 
-  // Helper to get inventory item details
-  const getInventoryItem = (id: number) => inventory.find(i => i.id === id);
-
-  // Calculate estimated cost for current items
   const currentCost = items.reduce((total, item) => {
     const invItem = getInventoryItem(item.inventoryId);
     if (!invItem) return total;
@@ -129,7 +135,6 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
     else if (invUnit === 'ml' && usageUnit === 'l') multiplier = 1000;
     else if (invUnit === 'g' && usageUnit === 'kg') multiplier = 1000;
     
-    // Safety check for numbers to prevent NaN
     const cost = Number(invItem.costPrice) || 0;
     const qty = Number(item.quantity) || 0;
     
@@ -140,8 +145,8 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800 max-h-[90vh]">
         
-        {/* Header */}
-        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+        {/* Header (Fixo) */}
+        <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50 flex-shrink-0">
           <div>
             <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <Beaker className="text-blue-600" size={24} />
@@ -156,8 +161,8 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6 overflow-y-auto space-y-6">
+        {/* Content (Rolável) */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
           
           {/* Add Item Form */}
           <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
@@ -196,7 +201,7 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
                   value={unit}
                   onChange={(e) => setUnit(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white"
-                  disabled={!selectedInventoryId} // Desabilita se não tiver produto selecionado
+                  disabled={!selectedInventoryId} 
                 >
                   {availableUnits.map(u => (
                       <option key={u.value} value={u.value}>{u.label}</option>
@@ -223,14 +228,20 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
                 </span>
             </div>
             
-            <div className="space-y-2 max-h-48 overflow-y-auto">
+            <div className="space-y-2">
               {items.length > 0 ? (
                 items.map((item, index) => {
                   const invItem = getInventoryItem(item.inventoryId);
                   return (
-                    <div key={index} className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
+                    <div key={`${item.inventoryId}-${index}`} className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg">
                       <div>
-                        <p className="text-sm font-bold text-slate-900 dark:text-white">{invItem?.name || 'Item removido'}</p>
+                        {invItem ? (
+                            <p className="text-sm font-bold text-slate-900 dark:text-white">{invItem.name}</p>
+                        ) : (
+                            <p className="text-sm font-bold text-red-500 flex items-center gap-1">
+                                <AlertCircle size={14} /> Item removido do estoque
+                            </p>
+                        )}
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           Consumo: {item.quantity} {item.usageUnit}
                         </p>
@@ -268,8 +279,8 @@ export default function ServiceConsumptionModal({ service, onClose }: ServiceCon
 
         </div>
 
-        {/* Footer */}
-        <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex gap-3 bg-slate-50/50 dark:bg-slate-900/50">
+        {/* Footer (Fixo) */}
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex gap-3 bg-white dark:bg-slate-900 flex-shrink-0">
           <button 
             onClick={onClose}
             disabled={isSaving}

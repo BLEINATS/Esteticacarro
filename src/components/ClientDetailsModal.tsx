@@ -2,19 +2,45 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, User, Phone, Mail, MapPin, Calendar, Car, 
   History, TrendingUp, MessageCircle, Plus, Zap, Gift, Copy, DollarSign, Save, Loader2,
-  Edit2, Trash2, StickyNote, Calculator, Bot, RefreshCw, ExternalLink, Palette, Star
+  Edit2, Trash2, StickyNote, Calculator, Bot, RefreshCw, ExternalLink, Palette, Star, CheckCircle2, AlertTriangle, Clock,
+  ChevronRight
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { Client, Vehicle, VEHICLE_SIZES, VehicleSize, ClientPoints } from '../types';
+import { Client, Vehicle, VEHICLE_SIZES, VehicleSize, ClientPoints, WorkOrder } from '../types';
 import { cn, formatCurrency, copyToClipboard, formatId } from '../lib/utils';
 import FidelityCard from './FidelityCard';
 import { useDialog } from '../context/DialogContext';
+import { LicensePlate } from './ui/LicensePlate';
+import WorkOrderModal from './WorkOrderModal';
 
 interface ClientDetailsModalProps {
   client: Client;
   onClose: () => void;
 }
+
+// Helper para mapear cores em PT-BR para CSS
+const getVehicleColor = (colorName: string) => {
+  const map: Record<string, string> = {
+    'preto': '#1a1a1a',
+    'branco': '#f8fafc',
+    'prata': '#94a3b8',
+    'cinza': '#475569',
+    'vermelho': '#ef4444',
+    'azul': '#3b82f6',
+    'verde': '#22c55e',
+    'amarelo': '#eab308',
+    'dourado': '#d97706',
+    'marrom': '#78350f',
+    'bege': '#f5f5dc',
+    'laranja': '#f97316',
+    'roxo': '#a855f7',
+    'rosa': '#ec4899',
+    'vinho': '#881337',
+    'grafite': '#374151'
+  };
+  return map[colorName.toLowerCase()] || colorName;
+};
 
 export default function ClientDetailsModal({ client, onClose }: ClientDetailsModalProps) {
   const navigate = useNavigate();
@@ -25,12 +51,11 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
     addPointsToClient, subscription, consumeTokens 
   } = useApp();
   
-  const { showConfirm, showAlert, showOptions } = useDialog();
+  const { showConfirm, showAlert } = useDialog();
   const [activeTab, setActiveTab] = useState<'overview' | 'vehicles' | 'history' | 'crm' | 'fidelidade'>('overview');
   const [showAddVehicle, setShowAddVehicle] = useState(false);
   const [shareLink, setShareLink] = useState('');
   
-  // ... (Existing state for vehicles/edit) ...
   const [newVehicle, setNewVehicle] = useState({ 
     brand: '', 
     model: '', 
@@ -42,9 +67,9 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
   
   const [isEditing, setIsEditing] = useState(false);
   const [editFormData, setEditFormData] = useState({
-    name: client.name,
-    phone: client.phone,
-    email: client.email,
+    name: client.name || '',
+    phone: client.phone || '',
+    email: client.email || '',
     cep: client.cep || '',
     street: client.street || '',
     number: client.number || '',
@@ -54,6 +79,8 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
     notes: client.notes || ''
   });
   const [isLoadingCep, setIsLoadingCep] = useState(false);
+  
+  // Vehicle Edit State
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
   const [editVehicleData, setEditVehicleData] = useState<Partial<Vehicle>>({});
   const [editBrand, setEditBrand] = useState('');
@@ -66,6 +93,9 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
   // Card Generation State
   const [isGeneratingCard, setIsGeneratingCard] = useState(false);
   const [cardGenerationError, setCardGenerationError] = useState(false);
+
+  // Selected Work Order for Modal
+  const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrder | null>(null);
 
   // WhatsApp Status
   const isWhatsAppConnected = companySettings.whatsapp.session.status === 'connected';
@@ -85,7 +115,6 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
   const card = getFidelityCard(client.id);
   const redemptions = getClientRedemptions(client.id);
   
-  // ... (Existing useEffects) ...
   useEffect(() => {
     let mounted = true;
     if (!card && companySettings.gamification?.enabled && !isGeneratingCard && !cardGenerationError) {
@@ -113,9 +142,9 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
 
   useEffect(() => {
     setEditFormData({
-        name: client.name,
-        phone: client.phone,
-        email: client.email,
+        name: client.name || '',
+        phone: client.phone || '',
+        email: client.email || '',
         cep: client.cep || '',
         street: client.street || '',
         number: client.number || '',
@@ -126,10 +155,10 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
     });
   }, [client]);
 
-  const clientWorkOrders = workOrders.filter(os => os.clientId === client.id);
-  const clientReminders = reminders.filter(r => r.clientId === client.id);
+  const clientWorkOrders = workOrders
+    .filter(os => os.clientId === client.id)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  // ... (Existing handlers: fetchAddress, handleCepChange, handleSaveClient, handleAddVehicle, etc.) ...
   const fetchAddress = async (cep: string) => {
     const cleanCep = cep.replace(/\D/g, '');
     if (cleanCep.length !== 8) return;
@@ -159,7 +188,7 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
     const fullAddress = `${editFormData.street}, ${editFormData.number} - ${editFormData.neighborhood}, ${editFormData.city} - ${editFormData.state}, ${editFormData.cep}`;
     updateClient(client.id, { ...editFormData, address: fullAddress });
     setIsEditing(false);
-    showAlert({ title: 'Sucesso', message: 'Dados do cliente atualizados.', type: 'success' });
+    showAlert({ title: 'Sucesso', message: 'Dados do cliente atualizados e salvos.', type: 'success' });
   };
 
   const handleAddVehicle = (e: React.FormEvent) => {
@@ -175,6 +204,7 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
       });
       setNewVehicle({ brand: '', model: '', plate: '', color: '', year: '', size: 'medium' });
       setShowAddVehicle(false);
+      showAlert({ title: 'Sucesso', message: 'Veículo adicionado.', type: 'success' });
     }
   };
 
@@ -221,7 +251,9 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
         const pointsToAdd = Math.floor(value * multiplier);
         const description = manualDesc || 'Compra em Loja / Avulso';
         
-        addPointsToClient(client.id, 'manual', pointsToAdd, description);
+        // Use a dummy work order ID for manual points if needed, or update logic to accept null
+        const dummyWorkOrderId = `manual-${Date.now()}`;
+        addPointsToClient(client.id, dummyWorkOrderId, pointsToAdd, description);
         
         updateClient(client.id, {
             ltv: (client.ltv || 0) + value,
@@ -263,24 +295,6 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
     }
   };
 
-  const handleSendReminder = async (reminder: any) => {
-    const vehicle = client.vehicles.find(v => v.id === reminder.vehicleId)?.model || 'seu veículo';
-    const message = `Olá ${client.name}! Aqui é da Cristal Care. Passando para lembrar que a ${reminder.serviceType} do ${vehicle} vence em ${new Date(reminder.dueDate).toLocaleDateString('pt-BR')}.`;
-    
-    if (isWhatsAppConnected) {
-        if ((subscription.tokenBalance || 0) < 1) {
-            await showAlert({ title: 'Saldo Insuficiente', message: 'Você precisa de 1 token.', type: 'warning' });
-            return;
-        }
-        if (consumeTokens(1, `Lembrete: ${client.name}`)) {
-            await showAlert({ title: 'Sucesso', message: 'Lembrete enviado!', type: 'success' });
-        }
-    } else {
-        const link = getWhatsappLink(client.phone, message);
-        window.open(link, '_blank');
-    }
-  };
-
   const handleRetryCard = () => {
       setCardGenerationError(false);
       setIsGeneratingCard(true);
@@ -290,8 +304,19 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
         .finally(() => setIsGeneratingCard(false));
   };
 
+  const displayAddress = client.address || (client.street ? `${client.street}, ${client.number} - ${client.city}/${client.state}` : 'Endereço não cadastrado');
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
+      
+      {/* Nested Modal for Work Order Details */}
+      {selectedWorkOrder && (
+        <WorkOrderModal 
+          workOrder={selectedWorkOrder} 
+          onClose={() => setSelectedWorkOrder(null)} 
+        />
+      )}
+
       <div className="bg-white dark:bg-slate-900 rounded-lg sm:rounded-2xl w-full h-full sm:max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-w-7xl">
         
         {/* Header */}
@@ -357,9 +382,7 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
           {/* TAB: OVERVIEW */}
           {activeTab === 'overview' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6">
-              {/* ... (Existing Overview Content) ... */}
               <div className="bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 sm:space-y-4 relative">
-                {/* ... (Contact Data Form) ... */}
                 <div className="flex justify-between items-center mb-2">
                     <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Dados de Contato</h3>
                     {!isEditing ? (
@@ -375,7 +398,7 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
                         </div>
                     )}
                 </div>
-                {/* ... (Display/Edit Logic - same as before) ... */}
+                
                 {!isEditing ? (
                     <>
                         <div className="flex items-start gap-2 sm:gap-3">
@@ -384,18 +407,36 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
                         </div>
                         <div className="flex items-start gap-2 sm:gap-3">
                         <Mail size={16} className="text-slate-400 flex-shrink-0 mt-0.5" />
-                        <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 break-all">{client.email}</span>
+                        <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 break-all">{client.email || 'Email não cadastrado'}</span>
                         </div>
                         <div className="flex items-start gap-2 sm:gap-3">
                         <MapPin size={16} className="text-slate-400 flex-shrink-0 mt-0.5" />
-                        <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">{client.address || 'Endereço não cadastrado'}</span>
+                        <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">{displayAddress}</span>
                         </div>
+                        {client.notes && (
+                            <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded border border-yellow-100 dark:border-yellow-800">
+                                <p className="text-xs text-yellow-800 dark:text-yellow-200 font-bold mb-1 flex items-center gap-1"><StickyNote size={12} /> Notas:</p>
+                                <p className="text-xs text-yellow-700 dark:text-yellow-300">{client.notes}</p>
+                            </div>
+                        )}
                     </>
                 ) : (
                     <div className="space-y-3">
                         <input type="text" value={editFormData.name} onChange={e => setEditFormData({...editFormData, name: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" placeholder="Nome" />
                         <input type="text" value={editFormData.phone} onChange={e => setEditFormData({...editFormData, phone: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" placeholder="Telefone" />
                         <input type="email" value={editFormData.email} onChange={e => setEditFormData({...editFormData, email: e.target.value})} className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" placeholder="Email" />
+                        
+                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                            <p className="text-xs font-bold text-slate-500 mb-2">Endereço</p>
+                            <div className="grid grid-cols-3 gap-2 mb-2">
+                                <input type="text" value={editFormData.cep} onChange={handleCepChange} className="col-span-1 px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" placeholder="CEP" maxLength={9} />
+                                <input type="text" value={editFormData.street} onChange={e => setEditFormData({...editFormData, street: e.target.value})} className="col-span-2 px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" placeholder="Rua" />
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                                <input type="text" value={editFormData.number} onChange={e => setEditFormData({...editFormData, number: e.target.value})} className="col-span-1 px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" placeholder="Nº" />
+                                <input type="text" value={editFormData.neighborhood} onChange={e => setEditFormData({...editFormData, neighborhood: e.target.value})} className="col-span-2 px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white" placeholder="Bairro" />
+                            </div>
+                        </div>
                     </div>
                 )}
               </div>
@@ -424,44 +465,121 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
             </div>
           )}
 
-          {/* TAB: VEHICLES */}
+          {/* TAB: VEHICLES (Square Cards Grid) */}
           {activeTab === 'vehicles' && (
-            <div className="space-y-3 sm:space-y-4">
-              {/* ... (Existing Vehicles Content) ... */}
+            <div className="space-y-4">
               <div className="flex justify-between items-center gap-2">
-                <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Veículos</h3>
-                <button onClick={() => setShowAddVehicle(!showAddVehicle)} className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-2 sm:px-3 py-1.5 rounded-lg transition-colors flex-shrink-0">
-                  <Plus size={14} /> <span className="hidden sm:inline">Adicionar</span>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Veículos Cadastrados</h3>
+                <button onClick={() => setShowAddVehicle(!showAddVehicle)} className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-3 py-2 rounded-lg transition-colors flex-shrink-0 border border-blue-200 dark:border-blue-800">
+                  <Plus size={16} /> <span className="hidden sm:inline">Adicionar Veículo</span>
                 </button>
               </div>
+              
               {showAddVehicle && (
-                <form onSubmit={handleAddVehicle} className="bg-slate-100 dark:bg-slate-800 p-3 sm:p-4 rounded-lg sm:rounded-xl mb-3 sm:mb-4 animate-in slide-in-from-top-2">
-                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 sm:gap-3 mb-2 sm:mb-3">
-                    <input type="text" placeholder="Marca" required value={newVehicle.brand} onChange={e => setNewVehicle({...newVehicle, brand: e.target.value})} className="w-full px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm" />
-                    <input type="text" placeholder="Modelo" required value={newVehicle.model} onChange={e => setNewVehicle({...newVehicle, model: e.target.value})} className="w-full px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm" />
-                    <input type="text" placeholder="Placa" required value={newVehicle.plate} onChange={e => setNewVehicle({...newVehicle, plate: e.target.value})} className="w-full px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm uppercase" />
-                    <input type="text" placeholder="Cor" value={newVehicle.color} onChange={e => setNewVehicle({...newVehicle, color: e.target.value})} className="w-full px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm" />
-                    <input type="text" placeholder="Ano" value={newVehicle.year} onChange={e => setNewVehicle({...newVehicle, year: e.target.value})} className="w-full px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm" />
-                    <select value={newVehicle.size} onChange={e => setNewVehicle({...newVehicle, size: e.target.value as VehicleSize})} className="w-full px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-xs sm:text-sm">
+                <form onSubmit={handleAddVehicle} className="bg-slate-100 dark:bg-slate-800 p-4 rounded-xl mb-4 animate-in slide-in-from-top-2 border border-slate-200 dark:border-slate-700">
+                  <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">Novo Veículo</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 mb-3">
+                    <input type="text" placeholder="Marca" required value={newVehicle.brand} onChange={e => setNewVehicle({...newVehicle, brand: e.target.value})} className="col-span-1 w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm" />
+                    <input type="text" placeholder="Modelo" required value={newVehicle.model} onChange={e => setNewVehicle({...newVehicle, model: e.target.value})} className="col-span-1 w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm" />
+                    <input type="text" placeholder="Placa" required value={newVehicle.plate} onChange={e => setNewVehicle({...newVehicle, plate: e.target.value})} className="col-span-1 w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm uppercase" />
+                    <input type="text" placeholder="Cor (ex: Preto)" value={newVehicle.color} onChange={e => setNewVehicle({...newVehicle, color: e.target.value})} className="col-span-1 w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm" />
+                    <input type="text" placeholder="Ano" value={newVehicle.year} onChange={e => setNewVehicle({...newVehicle, year: e.target.value})} className="col-span-1 w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm" />
+                    <select value={newVehicle.size} onChange={e => setNewVehicle({...newVehicle, size: e.target.value as VehicleSize})} className="col-span-1 w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm">
                       {Object.entries(VEHICLE_SIZES).map(([key, label]) => (<option key={key} value={key}>{label}</option>))}
                     </select>
                   </div>
-                  <div className="flex justify-end gap-1 sm:gap-2">
-                    <button type="button" onClick={() => setShowAddVehicle(false)} className="text-xs font-bold text-slate-500 px-2 sm:px-3 py-1.5 sm:py-2">Cancelar</button>
-                    <button type="submit" disabled={!newVehicle.brand || !newVehicle.model || !newVehicle.plate} className="text-xs font-bold bg-blue-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg disabled:opacity-50">Salvar</button>
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setShowAddVehicle(false)} className="text-xs font-bold text-slate-500 px-3 py-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors">Cancelar</button>
+                    <button type="submit" disabled={!newVehicle.brand || !newVehicle.model || !newVehicle.plate} className="text-xs font-bold bg-blue-600 text-white px-4 py-2 rounded-lg disabled:opacity-50 hover:bg-blue-700 transition-colors">Salvar</button>
                   </div>
                 </form>
               )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
-                {client.vehicles.map((vehicle) => (
-                  <div key={vehicle.id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex justify-between items-start">
-                    <div>
-                        <h4 className="font-bold text-slate-900 dark:text-white">{vehicle.model}</h4>
-                        <p className="text-xs text-slate-500">{vehicle.plate} • {vehicle.color}</p>
-                    </div>
-                    <button onClick={() => handleDeleteVehicle(vehicle.id)} className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 p-1.5 rounded"><Trash2 size={16} /></button>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {client.vehicles.map((vehicle) => {
+                  const isEditingThis = editingVehicleId === vehicle.id;
+                  const vehicleColor = getVehicleColor(vehicle.color);
+                  const isLightColor = ['#ffffff', '#f8fafc', '#f5f5dc'].includes(vehicleColor.toLowerCase());
+
+                  return (
+                  <div key={vehicle.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden relative group flex flex-col">
+                    {isEditingThis ? (
+                        <div className="p-4 space-y-3">
+                            <div className="flex justify-between items-center mb-2">
+                                <h4 className="font-bold text-slate-900 dark:text-white">Editar Veículo</h4>
+                                <button onClick={() => setEditingVehicleId(null)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <input type="text" value={editBrand} onChange={e => setEditBrand(e.target.value)} placeholder="Marca" className="px-3 py-2 rounded border bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white text-sm" />
+                                <input type="text" value={editModel} onChange={e => setEditModel(e.target.value)} placeholder="Modelo" className="px-3 py-2 rounded border bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white text-sm" />
+                                <input type="text" value={editVehicleData.plate || ''} onChange={e => setEditVehicleData({...editVehicleData, plate: e.target.value})} placeholder="Placa" className="px-3 py-2 rounded border bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white text-sm uppercase" />
+                                <input type="text" value={editVehicleData.color || ''} onChange={e => setEditVehicleData({...editVehicleData, color: e.target.value})} placeholder="Cor" className="px-3 py-2 rounded border bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white text-sm" />
+                                <input type="text" value={editVehicleData.year || ''} onChange={e => setEditVehicleData({...editVehicleData, year: e.target.value})} placeholder="Ano" className="px-3 py-2 rounded border bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white text-sm" />
+                                <select value={editVehicleData.size || 'medium'} onChange={e => setEditVehicleData({...editVehicleData, size: e.target.value as VehicleSize})} className="px-3 py-2 rounded border bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-white text-sm">
+                                    {Object.entries(VEHICLE_SIZES).map(([key, label]) => (<option key={key} value={key}>{label}</option>))}
+                                </select>
+                            </div>
+                            <div className="flex justify-end pt-2">
+                                <button onClick={saveEditVehicle} className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-green-700 transition-colors flex items-center gap-2">
+                                    <Save size={16} /> Salvar Alterações
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Visual do Carro (Top) */}
+                            <div className="w-full h-32 bg-slate-100 dark:bg-slate-800 flex items-center justify-center relative overflow-hidden">
+                                <div className="absolute inset-0 opacity-10 bg-grid-slate-200 dark:bg-grid-slate-700" />
+                                <div className="relative z-10 transform scale-150">
+                                    <Car 
+                                        size={64} 
+                                        fill={vehicleColor} 
+                                        className={cn(
+                                            "drop-shadow-lg transition-colors duration-300",
+                                            isLightColor ? "text-slate-400" : "text-slate-800 dark:text-slate-900" // Stroke color
+                                        )}
+                                        strokeWidth={1.5}
+                                    />
+                                </div>
+                                <div className="absolute bottom-2 right-2 flex gap-1">
+                                    <div className="w-4 h-4 rounded-full border border-white/20 shadow-sm" style={{ backgroundColor: vehicleColor }} title={vehicle.color} />
+                                </div>
+                            </div>
+
+                            {/* Detalhes (Bottom) */}
+                            <div className="p-4 flex flex-col justify-between flex-1">
+                                <div className="flex justify-between items-start">
+                                    <div className="w-full">
+                                        <h4 className="text-lg font-bold text-slate-900 dark:text-white truncate">{vehicle.model}</h4>
+                                        <div className="flex items-center gap-2 mt-2">
+                                            {/* PLACA REALISTA */}
+                                            <LicensePlate plate={vehicle.plate} size="sm" />
+                                            <span className="text-xs text-slate-500 dark:text-slate-400 ml-auto">• {vehicle.year}</span>
+                                        </div>
+                                    </div>
+                                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 dark:bg-slate-900/80 rounded-lg p-1 shadow-sm">
+                                        <button onClick={() => startEditVehicle(vehicle)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title="Editar">
+                                            <Edit2 size={16} />
+                                        </button>
+                                        <button onClick={() => handleDeleteVehicle(vehicle.id)} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Excluir">
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="mt-4 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800 pt-3">
+                                    <span className="flex items-center gap-1">
+                                        <Palette size={12} /> {vehicle.color}
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                        <Car size={12} /> {VEHICLE_SIZES[vehicle.size]?.split(' ')[0] || 'Médio'}
+                                    </span>
+                                </div>
+                            </div>
+                        </>
+                    )}
                   </div>
-                ))}
+                )})}
               </div>
             </div>
           )}
@@ -472,13 +590,35 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
               <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Histórico de Serviços</h3>
               <div className="space-y-2">
                 {clientWorkOrders.length > 0 ? clientWorkOrders.map((os) => (
-                  <div key={os.id} className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <div 
+                    key={os.id} 
+                    onClick={() => setSelectedWorkOrder(os)}
+                    className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm cursor-pointer hover:border-blue-500 dark:hover:border-blue-500 transition-colors group"
+                  >
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="min-w-0 flex-1">
-                        <p className="font-bold text-slate-900 dark:text-white text-xs truncate">{os.service}</p>
+                        <div className="flex items-center gap-2">
+                            <p className="font-bold text-slate-900 dark:text-white text-xs truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{os.service}</p>
+                            <span className="text-[10px] text-slate-400">{formatId(os.id)}</span>
+                        </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(os.createdAt || '').toLocaleDateString('pt-BR')}</p>
                       </div>
-                      <span className={cn("px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 whitespace-nowrap", os.status === 'Concluído' ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400")}>{os.status}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={cn("px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 whitespace-nowrap", os.status === 'Concluído' ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400")}>{os.status}</span>
+                        
+                        {/* Payment Status Badge */}
+                        <span className={cn(
+                            "px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1 flex-shrink-0 whitespace-nowrap",
+                            os.paymentStatus === 'paid' 
+                                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" 
+                                : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                        )}>
+                            {os.paymentStatus === 'paid' ? <CheckCircle2 size={10} /> : <AlertTriangle size={10} />}
+                            {os.paymentStatus === 'paid' ? 'Pago' : 'Pendente'}
+                        </span>
+
+                        <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-500 transition-colors" />
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div><p className="text-slate-500 dark:text-slate-400">Veículo</p><p className="font-medium text-slate-900 dark:text-white truncate">{os.vehicle}</p></div>
@@ -490,13 +630,73 @@ export default function ClientDetailsModal({ client, onClose }: ClientDetailsMod
             </div>
           )}
 
-          {/* TAB: FIDELIDADE (NEW LAYOUT) */}
+          {/* TAB: CRM */}
+          {activeTab === 'crm' && (
+            <div className="space-y-6">
+              {/* Lifecycle Banner */}
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-6 text-white shadow-lg">
+                <h3 className="font-bold text-lg mb-2">Gestão de Ciclo de Vida</h3>
+                <p className="text-blue-100 text-sm">
+                  O sistema monitora automaticamente serviços que requerem manutenção e gera alertas.
+                </p>
+              </div>
+
+              {/* Active Reminders */}
+              <div>
+                <h4 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                  <TrendingUp size={20} className="text-amber-500" /> Lembretes Ativos
+                </h4>
+                
+                <div className="space-y-3">
+                  {reminders.filter(r => r.clientId === client.id && r.status !== 'sent').length > 0 ? (
+                    reminders.filter(r => r.clientId === client.id && r.status !== 'sent').map(reminder => (
+                      <div key={reminder.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h5 className="font-bold text-slate-900 dark:text-white">{reminder.serviceType}</h5>
+                            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+                              Vencimento: <span className="text-slate-900 dark:text-white font-bold">{new Date(reminder.dueDate).toLocaleDateString('pt-BR')}</span>
+                            </p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => {
+                              const message = `Olá ${client.name}! Lembrete da Cristal Care: Seu serviço de ${reminder.serviceType} vence em ${new Date(reminder.dueDate).toLocaleDateString('pt-BR')}. Vamos agendar a manutenção?`;
+                              if (isWhatsAppConnected) {
+                                  if (consumeTokens(1, `Lembrete ${reminder.serviceType}`)) {
+                                      showAlert({ title: 'Enviado', message: 'Lembrete enviado automaticamente!', type: 'success' });
+                                  } else {
+                                      window.open(getWhatsappLink(client.phone, message), '_blank');
+                                  }
+                              } else {
+                                  window.open(getWhatsappLink(client.phone, message), '_blank');
+                              }
+                          }}
+                          className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold flex items-center justify-center gap-2 transition-colors shadow-md"
+                        >
+                          {isWhatsAppConnected ? <Bot size={18} /> : <MessageCircle size={18} />} 
+                          Enviar (Híbrido)
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-12 text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                      <Clock size={32} className="mx-auto mb-2 opacity-50" />
+                      <p>Nenhum lembrete ativo para este cliente.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: FIDELIDADE */}
           {activeTab === 'fidelidade' && companySettings.gamification?.enabled && (
             <div className="h-full flex flex-col">
               {card ? (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
                   
-                  {/* Left Column: Card & Stats (Sticky on Desktop) */}
+                  {/* Left Column: Card & Stats */}
                   <div className="lg:col-span-5 space-y-6">
                       <div className="sticky top-0 space-y-6">
                         <FidelityCard 

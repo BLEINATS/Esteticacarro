@@ -55,9 +55,11 @@ import {
 import { formatCurrency, cn, formatId, generateUUID } from '../lib/utils';
 import { useApp } from '../context/AppContext';
 import WorkOrderModal from '../components/WorkOrderModal';
-import { WorkOrder } from '../types';
+import ClientDetailsModal from '../components/ClientDetailsModal';
+import { WorkOrder, Client } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { isSameDay, isSameMonth, startOfMonth, endOfMonth, isWithinInterval, subMonths } from 'date-fns';
+import { LicensePlate } from '../components/ui/LicensePlate';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
 
@@ -65,6 +67,7 @@ export default function Dashboard() {
   const { theme, workOrders, clients, inventory, financialTransactions, companySettings, systemAlerts, markAlertResolved, employees, services, showAlert } = useApp();
   const isDark = theme === 'dark';
   const [selectedOS, setSelectedOS] = useState<WorkOrder | null>(null);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const navigate = useNavigate();
 
   const today = new Date();
@@ -300,6 +303,13 @@ export default function Dashboard() {
         />
       )}
 
+      {selectedClient && (
+        <ClientDetailsModal 
+          client={selectedClient} 
+          onClose={() => setSelectedClient(null)} 
+        />
+      )}
+
       {/* Header & Quick Actions */}
       <div className="flex-shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 p-4 sm:p-6 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 z-10">
         <div className="min-w-0">
@@ -328,7 +338,6 @@ export default function Dashboard() {
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         <div className="space-y-6">
           
-          {/* ... (SECTIONS 0, 1, 2, 3 remain unchanged) ... */}
           {/* --- SECTION 0: PÁTIO AGORA --- */}
           <div className="rounded-2xl overflow-hidden shadow-2xl relative bg-slate-900 border border-slate-800">
               {/* Background Effect */}
@@ -375,7 +384,7 @@ export default function Dashboard() {
                                       {getStatusIcon(os.status)}
                                       {os.status === 'Aguardando' ? 'Na Fila' : os.status}
                                   </div>
-                                  <span className="text-xs font-mono text-slate-500">{formatId(os.plate)}</span>
+                                  <LicensePlate plate={os.plate} size="sm" />
                               </div>
                               
                               <h4 className="text-lg font-bold text-white mb-1 truncate">{os.vehicle}</h4>
@@ -429,7 +438,6 @@ export default function Dashboard() {
               </div>
           </div>
 
-          {/* ... (SECTIONS 1, 2, 3 - Keeping them as they are) ... */}
           {/* --- SECTION 1: DAILY PULSE & KPIs --- */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Agenda Hoje */}
@@ -507,7 +515,6 @@ export default function Dashboard() {
               </div>
           </div>
 
-          {/* ... (SECTION 2 & 3) ... */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Card 1: Receita do Mês */}
             <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden group">
@@ -601,7 +608,10 @@ export default function Dashboard() {
                         </div>
 
                         {clientOfTheMonth ? (
-                            <div className="animate-in fade-in slide-in-from-bottom-4">
+                            <div 
+                                className="animate-in fade-in slide-in-from-bottom-4 cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={() => setSelectedClient(clientOfTheMonth as Client)}
+                            >
                                 <h2 className="text-3xl font-bold mb-1">{clientOfTheMonth.name}</h2>
                                 <p className="text-indigo-200 text-sm mb-4">{clientOfTheMonth.vehicles[0]?.model || 'Veículo não cad.'}</p>
                                 
@@ -632,7 +642,11 @@ export default function Dashboard() {
                     </h3>
                     <div className="space-y-3">
                         {topClientsAllTime.map((client, idx) => (
-                            <div key={client.id} className="flex items-center justify-between p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer" onClick={() => navigate('/clients')}>
+                            <div 
+                                key={client.id} 
+                                className="flex items-center justify-between p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer" 
+                                onClick={() => setSelectedClient(client)}
+                            >
                                 <div className="flex items-center gap-3">
                                     <div className={cn(
                                         "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold",

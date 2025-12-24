@@ -5,13 +5,13 @@ import {
 } from './mockData';
 
 const DB_NAME = 'cristal_care_idb';
-const DB_VERSION = 2; // Incremented version for schema changes
+// INCREMENTED VERSION TO FORCE SCHEMA UPDATE
+const DB_VERSION = 3;
 const LOCAL_STORAGE_KEY = 'cristal_care_local_db_v1';
 
-// List of all object stores (collections)
 const COLLECTIONS = [
   'clients', 
-  'vehicles', // Added vehicles collection
+  'vehicles', 
   'work_orders', 
   'inventory', 
   'services', 
@@ -35,7 +35,6 @@ type CollectionName = typeof COLLECTIONS[number];
 let dbInstance: IDBDatabase | null = null;
 let dbInitPromise: Promise<IDBDatabase> | null = null;
 
-// Open IndexedDB Connection
 const openDB = (): Promise<IDBDatabase> => {
   if (dbInstance) return Promise.resolve(dbInstance);
   if (dbInitPromise) return dbInitPromise;
@@ -47,7 +46,6 @@ const openDB = (): Promise<IDBDatabase> => {
       const db = (event.target as IDBOpenDBRequest).result;
       COLLECTIONS.forEach(col => {
         if (!db.objectStoreNames.contains(col)) {
-          // Create object store with 'id' as keyPath
           db.createObjectStore(col, { keyPath: 'id' });
         }
       });
@@ -67,7 +65,6 @@ const openDB = (): Promise<IDBDatabase> => {
   return dbInitPromise;
 };
 
-// Helper to run a transaction
 const runTransaction = async <T>(
   storeName: CollectionName, 
   mode: IDBTransactionMode, 
@@ -95,27 +92,21 @@ const runTransaction = async <T>(
   });
 };
 
-// Initialize DB: Migrate from LocalStorage OR Seed Mocks
 const initializeDB = async () => {
   try {
     const db = await openDB();
-    
-    // 1. Check if we need to migrate from LocalStorage (Legacy)
     const existingLocalData = localStorage.getItem(LOCAL_STORAGE_KEY);
     
     if (existingLocalData) {
-      console.log('Migrating data from LocalStorage to IndexedDB...');
       try {
         const parsedData = JSON.parse(existingLocalData);
         const tx = db.transaction(COLLECTIONS, 'readwrite');
-        
         let hasError = false;
 
         COLLECTIONS.forEach(col => {
           if (parsedData[col] && Array.isArray(parsedData[col])) {
             const store = tx.objectStore(col);
             parsedData[col].forEach((item: any) => {
-              // Ensure ID exists
               if (!item.id) item.id = Date.now().toString() + Math.random().toString(36).substr(2, 5);
               store.put(item);
             });
@@ -128,7 +119,6 @@ const initializeDB = async () => {
         });
 
         if (!hasError) {
-          console.log('Migration successful. Clearing LocalStorage.');
           localStorage.removeItem(LOCAL_STORAGE_KEY);
         }
       } catch (e) {
@@ -137,14 +127,10 @@ const initializeDB = async () => {
       return;
     }
 
-    // 2. If no local data, check if IDB is empty (Fresh Start)
     const userCount = await runTransaction<number>('users', 'readonly', store => store.count());
-    
-    // CHECK FOR SKIP SEEDING FLAG (To allow clean registration)
     const shouldSkipSeeding = localStorage.getItem('skip_seeding') === 'true';
     
     if (userCount === 0 && !shouldSkipSeeding) {
-      console.log('Seeding IndexedDB with Mock Data...');
       const tx = db.transaction(COLLECTIONS, 'readwrite');
       
       const seed = (col: CollectionName, data: any[]) => {
@@ -155,8 +141,6 @@ const initializeDB = async () => {
       };
 
       seed('clients', MOCK_CLIENTS);
-      // Extract vehicles from clients for seeding if needed, but MOCK_CLIENTS has nested vehicles.
-      // We should ideally flatten them here for the new structure.
       const vehicles: any[] = [];
       MOCK_CLIENTS.forEach(c => {
           if (c.vehicles) {
@@ -166,7 +150,6 @@ const initializeDB = async () => {
           }
       });
       seed('vehicles', vehicles);
-
       seed('work_orders', MOCK_WORK_ORDERS);
       seed('inventory', MOCK_INVENTORY);
       seed('services', MOCK_SERVICES);
@@ -183,17 +166,11 @@ const initializeDB = async () => {
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
       });
-      console.log('Seeding complete.');
-    } else if (userCount === 0 && shouldSkipSeeding) {
-        console.log('Skipping seed (Clean Install requested).');
     }
-
   } catch (error) {
     console.error("Failed to initialize DB:", error);
   }
 };
-
-const delay = (ms = 100) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const db = {
   init: initializeDB,
@@ -205,7 +182,7 @@ export const db = {
     }
     const req = indexedDB.deleteDatabase(DB_NAME);
     req.onsuccess = () => {
-      localStorage.clear(); // Clear all local storage
+      localStorage.clear();
       if (skipSeeding) {
           localStorage.setItem('skip_seeding', 'true');
       }
@@ -228,8 +205,17 @@ export const db = {
       ...item,
       created_at: (item as any).created_at || new Date().toISOString()
     };
-    
     await runTransaction(collection, 'readwrite', store => store.add(newItem));
+    return newItem;
+  },
+
+  // Novo método para sincronização (Cria ou Atualiza)
+  upsert: async <T>(collection: CollectionName, item: T): Promise<T> => {
+    const newItem = { 
+      id: (item as any).id || (typeof item === 'object' && 'id' in (item as any) ? (item as any).id : Date.now().toString()),
+      ...item
+    };
+    await runTransaction(collection, 'readwrite', store => store.put(newItem));
     return newItem;
   },
 

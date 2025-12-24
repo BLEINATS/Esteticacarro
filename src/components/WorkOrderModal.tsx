@@ -32,7 +32,8 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     workOrders, addVehicle, useVoucher, getVoucherDetails,
     getClientPoints, companySettings, getRewardsByLevel, claimReward,
     addFinancialTransaction, deleteFinancialTransaction, financialTransactions,
-    updateClientLTV, subscription, consumeTokens, employees, campaigns, currentUser
+    updateClientLTV, subscription, consumeTokens, employees, campaigns, currentUser,
+    addPointsToClient, generateReminders
   } = useApp();
   const { showConfirm, showAlert, showOptions } = useDialog();
 
@@ -408,7 +409,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       }
   };
 
-  // ... (Other handlers remain same) ...
   const handleRegisterPayment = async () => {
     const currentData = getUpdatedOrderData();
     const amountToPay = currentData.totalValue || 0;
@@ -447,11 +447,29 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
         if (selectedClientId) {
             updateClientLTV(selectedClientId, amountToPay);
+            
+            // Lógica de Pontos de Fidelidade (Só pontua quando paga)
+            if (companySettings.gamification?.enabled) {
+                const multiplier = companySettings.gamification.pointsMultiplier || 1;
+                const pointsEarned = Math.floor(amountToPay * multiplier);
+                if (pointsEarned > 0) {
+                    addPointsToClient(
+                        selectedClientId, 
+                        workOrder.id, 
+                        pointsEarned, 
+                        `Serviço: ${currentData.service || 'OS #' + workOrder.id}`
+                    );
+                }
+            }
         }
+
+        // Lógica de Lembretes (Só gera quando paga)
+        const osForReminders = { ...workOrder, ...currentData } as WorkOrder;
+        generateReminders(osForReminders);
 
         await showAlert({
             title: 'Pagamento Registrado',
-            message: 'O valor foi lançado no financeiro e o LTV do cliente atualizado.',
+            message: 'O valor foi lançado no financeiro, os pontos de fidelidade creditados e os lembretes de retorno agendados.',
             type: 'success'
         });
     }
@@ -463,7 +481,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
     const confirm = await showConfirm({
         title: 'Desfazer Pagamento',
-        message: 'Isso removerá o lançamento do financeiro e subtrairá o valor do LTV do cliente. Continuar?',
+        message: 'Isso removerá o lançamento do financeiro, estornará os pontos e subtrairá o valor do LTV. Continuar?',
         type: 'warning',
         confirmText: 'Sim, Desfazer'
     });
@@ -484,11 +502,25 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
         if (selectedClientId) {
             updateClientLTV(selectedClientId, -amountToRefund);
+            
+            // Estornar Pontos
+            if (companySettings.gamification?.enabled) {
+                 const multiplier = companySettings.gamification.pointsMultiplier || 1;
+                 const pointsReversed = Math.floor(amountToRefund * multiplier);
+                 if (pointsReversed > 0) {
+                     addPointsToClient(
+                         selectedClientId, 
+                         workOrder.id, 
+                         -pointsReversed, 
+                         `Estorno: OS #${workOrder.id}`
+                     );
+                 }
+            }
         }
 
         await showAlert({
             title: 'Pagamento Desfeito',
-            message: 'O lançamento foi removido e o LTV do cliente ajustado.',
+            message: 'O lançamento foi removido e os pontos estornados.',
             type: 'success'
         });
     }
@@ -696,7 +728,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       }
       await showAlert({
         title: 'Serviço Concluído!',
-        message: 'Pontos creditados, comissão lançada e estoque atualizado.',
+        message: 'Serviço finalizado. Registre o pagamento para creditar os pontos de fidelidade.',
         type: 'success'
       });
     } 

@@ -291,7 +291,7 @@ export const MOCK_EMPLOYEES_TRANSACTIONS: EmployeeTransaction[] = [
     amount: 150.00,
     description: 'Comissão OS-1001 (Lavagem Detalhada)',
     date: new Date(Date.now() - 1000 * 60 * 60 * 24 * 1).toISOString(), // 1 day ago
-    relatedWorkOrderId: 'OS-1001'
+    relatedWorkOrderId: '00000000-0000-0000-0000-000000001001'
   },
   {
     id: 't2',
@@ -327,9 +327,10 @@ export const MOCK_EMPLOYEES_TRANSACTIONS: EmployeeTransaction[] = [
   }
 ];
 
+// UPDATED: Using valid UUIDs for mock work orders to prevent sync errors
 export const MOCK_WORK_ORDERS: WorkOrder[] = [
   {
-    id: 'OS-1001',
+    id: '00000000-0000-0000-0000-000000001001', // Valid UUID
     clientId: 'c1',
     vehicle: 'BMW 320i',
     plate: 'ABC-1234',
@@ -355,7 +356,7 @@ export const MOCK_WORK_ORDERS: WorkOrder[] = [
     npsComment: "Serviço impecável! O carro ficou novo de novo."
   },
   {
-    id: 'OS-1002',
+    id: '00000000-0000-0000-0000-000000001002', // Valid UUID
     clientId: 'c2',
     vehicle: 'Jeep Compass',
     plate: 'XYZ-9876',
@@ -377,7 +378,7 @@ export const MOCK_WORK_ORDERS: WorkOrder[] = [
     paymentStatus: 'pending'
   },
   {
-    id: 'OS-1000',
+    id: '00000000-0000-0000-0000-000000001000', // Valid UUID
     clientId: 'c3',
     vehicle: 'Honda Civic',
     plate: 'DEF-5678',

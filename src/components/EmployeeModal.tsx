@@ -14,7 +14,7 @@ export default function EmployeeModal({ employee, onClose }: EmployeeModalProps)
   
   const [formData, setFormData] = useState<Partial<Employee>>({
     name: '',
-    role: 'Detailer',
+    role: '', // Agora é string vazia inicialmente
     pin: '',
     salaryType: 'commission', // default
     fixedSalary: 0,
@@ -82,17 +82,25 @@ export default function EmployeeModal({ employee, onClose }: EmployeeModalProps)
               <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Cargo / Função</label>
               <div className="relative">
                 <Shield className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <select 
+                <input 
+                    type="text" 
+                    list="role-suggestions"
+                    required
                     value={formData.role}
-                    onChange={e => setFormData({...formData, role: e.target.value as any})}
-                    className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white appearance-none"
-                >
-                    <option value="Manager">Gerente</option>
-                    <option value="Detailer">Detailer</option>
-                    <option value="Funileiro">Funileiro</option>
-                    <option value="Pintor">Pintor</option>
-                    <option value="Lavador">Lavador</option>
-                </select>
+                    onChange={e => setFormData({...formData, role: e.target.value})}
+                    className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 dark:text-white placeholder-slate-400"
+                    placeholder="Digite o cargo..."
+                />
+                <datalist id="role-suggestions">
+                    <option value="Gerente" />
+                    <option value="Detailer" />
+                    <option value="Funileiro" />
+                    <option value="Pintor" />
+                    <option value="Lavador" />
+                    <option value="Recepcionista" />
+                    <option value="Vendedor" />
+                    <option value="Auxiliar" />
+                </datalist>
               </div>
             </div>
             <div>

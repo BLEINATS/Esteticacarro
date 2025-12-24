@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { Client, Vehicle, VEHICLE_SIZES, VehicleSize } from '../types';
 import { cn } from '../lib/utils';
 import { useDialog } from '../context/DialogContext';
+import { LicensePlate } from './ui/LicensePlate';
 
 interface ClientModalProps {
   client?: Client | null;
@@ -388,10 +389,10 @@ export default function ClientModal({ client, onClose }: ClientModalProps) {
                     Veículos ({vehicles.length})
                 </h3>
 
-                {/* Lista de carros adicionados */}
-                <div className="grid grid-cols-1 gap-3 mb-4">
+                {/* Lista de carros adicionados - GRID LAYOUT */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                     {vehicles.map((vehicle, index) => (
-                    <div key={index} className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm hover:shadow-md transition-all group">
+                    <div key={index} className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm hover:shadow-md transition-all group flex flex-col">
                         <div className="flex justify-between items-start mb-3">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
@@ -399,10 +400,8 @@ export default function ClientModal({ client, onClose }: ClientModalProps) {
                                 </div>
                                 <div>
                                     <h4 className="font-bold text-slate-900 dark:text-white text-sm">{vehicle.brand} {vehicle.model}</h4>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 uppercase tracking-wide border border-slate-200 dark:border-slate-700">
-                                            {vehicle.plate}
-                                        </span>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <LicensePlate plate={vehicle.plate} size="sm" />
                                         <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 uppercase tracking-wide">
                                             {VEHICLE_SIZES[vehicle.size]?.split(' ')[0]}
                                         </span>
@@ -419,7 +418,7 @@ export default function ClientModal({ client, onClose }: ClientModalProps) {
                             </button>
                         </div>
                         
-                        <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                        <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 mt-auto">
                             <div>
                                 <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-0.5">Cor</p>
                                 <p className="text-xs font-semibold text-slate-900 dark:text-white capitalize">{vehicle.color}</p>

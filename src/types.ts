@@ -192,7 +192,7 @@ export interface ServiceCatalogItem {
 export interface Employee {
   id: string;
   name: string;
-  role: 'Manager' | 'Detailer' | 'Funileiro' | 'Pintor' | 'Lavador';
+  role: string; // Alterado de union type restrito para string livre
   pin: string;
   salaryType: 'fixed' | 'commission' | 'mixed';
   fixedSalary: number;
