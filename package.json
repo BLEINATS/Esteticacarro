@@ -5,13 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.86.2",
-    "@types/three": "^0.182.0",
+    "@supabase/supabase-js": "^2.39.7",
+    "@types/three": "^0.162.0",
     "axios": "^1.6.7",
     "clsx": "^2.1.0",
     "date-fns": "^3.3.1",
@@ -23,7 +23,7 @@
     "react-router-dom": "^6.22.3",
     "recharts": "^2.12.2",
     "tailwind-merge": "^2.2.1",
-    "three": "^0.182.0"
+    "three": "^0.162.0"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.5",

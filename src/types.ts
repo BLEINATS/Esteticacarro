@@ -80,6 +80,8 @@ export interface ScopeItem {
   label: string;
   completed: boolean;
   type: 'main' | 'additional';
+  photos?: string[]; // Nova propriedade para fotos da etapa
+  completedAt?: string; // Data de conclusão
 }
 
 export interface AdditionalItem {
@@ -192,7 +194,7 @@ export interface ServiceCatalogItem {
 export interface Employee {
   id: string;
   name: string;
-  role: string; // Alterado de union type restrito para string livre
+  role: string;
   pin: string;
   salaryType: 'fixed' | 'commission' | 'mixed';
   fixedSalary: number;
@@ -411,7 +413,7 @@ export interface CompanySettings {
   facebook?: string;
   primaryColor?: string;
   initialBalance: number;
-  hourlyRate?: number; // Added for Service Pricing
+  hourlyRate?: number;
   whatsapp: WhatsappConfig;
   landingPage: LandingPageConfig;
   preferences: CompanyPreferences;
@@ -536,7 +538,6 @@ export interface ServiceRecipe {
   }[];
 }
 
-// Super Admin Types
 export interface SaaSTenant {
   id: string;
   name: string;
@@ -560,7 +561,7 @@ export interface SaaSPlan {
   features: string[];
   includedTokens: number;
   maxEmployees: number;
-  maxDiskSpace: number; // GB
+  maxDiskSpace: number;
   active: boolean;
   highlight?: boolean;
 }
@@ -579,7 +580,7 @@ export interface SaaSTokenTransaction {
   tenantName: string;
   type: 'purchase' | 'usage' | 'bonus' | 'plan_credit';
   amount: number;
-  value?: number; // R$ if purchase
+  value?: number;
   description: string;
   date: string;
 }

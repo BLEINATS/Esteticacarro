@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { cn } from '../lib/utils';
-import { AlertCircle, Camera, Eye, X } from 'lucide-react';
+import { AlertCircle, Camera, Eye, X, Trash2 } from 'lucide-react';
 import { DamagePoint } from '../types';
 
 interface VehicleDamageMapProps {
   damages: DamagePoint[];
   onAddDamage: (area: DamagePoint['area']) => void;
+  onRemoveDamage?: (id: string) => void;
   readOnly?: boolean;
 }
 
-export default function VehicleDamageMap({ damages, onAddDamage, readOnly = false }: VehicleDamageMapProps) {
+export default function VehicleDamageMap({ damages, onAddDamage, onRemoveDamage, readOnly = false }: VehicleDamageMapProps) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   
   const areas: { id: DamagePoint['area']; label: string; style: string }[] = [
@@ -87,7 +88,7 @@ export default function VehicleDamageMap({ damages, onAddDamage, readOnly = fals
 
       <div className="w-full mt-4 space-y-2">
         {damages.map((damage, idx) => (
-          <div key={idx} className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm">
+          <div key={idx} className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm group">
             <div className="flex items-center gap-3 overflow-hidden">
               <div className="p-2 bg-red-100 dark:bg-red-900/20 rounded-lg text-red-600 dark:text-red-400 flex-shrink-0">
                 <AlertCircle size={16} />
@@ -98,26 +99,36 @@ export default function VehicleDamageMap({ damages, onAddDamage, readOnly = fals
               </div>
             </div>
             
-            <div className="flex-shrink-0 ml-2">
+            <div className="flex-shrink-0 ml-2 flex items-center gap-2">
               {damage.photoUrl && damage.photoUrl !== 'pending' ? (
                 <button 
                   onClick={() => setPreviewImage(damage.photoUrl!)}
-                  className="relative group block"
+                  className="relative group/img block"
                   title="Ver foto ampliada"
                 >
                   <img 
                     src={damage.photoUrl} 
                     alt="Avaria" 
-                    className="w-12 h-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700 transition-transform group-hover:scale-105 shadow-sm"
+                    className="w-12 h-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700 transition-transform group-hover/img:scale-105 shadow-sm"
                   />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-lg flex items-center justify-center">
-                    <Eye size={16} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
+                  <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-colors rounded-lg flex items-center justify-center">
+                    <Eye size={16} className="text-white opacity-0 group-hover/img:opacity-100 transition-opacity drop-shadow-md" />
                   </div>
                 </button>
               ) : (
                 <div className="text-xs text-slate-400 italic px-2">
                   Sem foto
                 </div>
+              )}
+
+              {!readOnly && onRemoveDamage && (
+                <button 
+                  onClick={() => onRemoveDamage(damage.id)}
+                  className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  title="Excluir Avaria"
+                >
+                  <Trash2 size={16} />
+                </button>
               )}
             </div>
           </div>

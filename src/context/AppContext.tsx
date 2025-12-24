@@ -1237,7 +1237,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteCampaign = () => {};
   const seedDefaultCampaigns = async () => {};
   const seedMockReviews = async () => {};
-  const getWhatsappLink = (phone: string, msg: string) => `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+  
+  // FIX: Sanitized WhatsApp Link
+  const getWhatsappLink = (phone: string, msg: string) => {
+    const cleanPhone = phone.replace(/\D/g, '');
+    // Assume Brazil (55) if length is 10 or 11 (DD + Number)
+    const finalPhone = (cleanPhone.length === 10 || cleanPhone.length === 11) 
+      ? `55${cleanPhone}` 
+      : cleanPhone;
+      
+    return `https://wa.me/${finalPhone}?text=${encodeURIComponent(msg)}`;
+  };
+
   const createSocialPost = () => {};
   const generateSocialContent = async () => ({ caption: '', hashtags: [] });
   const getClientPoints = (id: string) => clientPoints.find(cp => cp.clientId === id);

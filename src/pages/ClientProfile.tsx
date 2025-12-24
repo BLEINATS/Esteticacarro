@@ -5,7 +5,6 @@ import { ArrowLeft, Smartphone, Wallet, QrCode, Copy, Share2, Loader2, Gift, Che
 import FidelityCard from '../components/FidelityCard';
 import QRCode from 'qrcode';
 import { ClientPoints } from '../types';
-import { getWhatsappLink } from '../lib/utils';
 
 export default function ClientProfile() {
   const { clientId } = useParams();

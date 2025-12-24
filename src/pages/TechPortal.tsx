@@ -75,13 +75,17 @@ export default function TechPortal() {
     setIsDamageModalOpen(true);
   };
 
+  const handleRemoveDamage = (id: string) => {
+    setDamages(prev => prev.filter(d => d.id !== id));
+  };
+
   const handleSaveDamage = () => {
     if (currentDamageArea && damageDesc) {
       setDamages([...damages, {
         id: Date.now().toString(),
         area: currentDamageArea,
         type: 'risco', 
-        description: damageDesc,
+        description: damageDesc, 
         photoUrl: damagePhoto || 'pending'
       }]);
       setIsDamageModalOpen(false);
@@ -332,7 +336,7 @@ export default function TechPortal() {
                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl text-center">
                   <p className="text-sm text-blue-800 dark:text-blue-300 font-bold">1. Marque as avarias no mapa</p>
                </div>
-               <VehicleDamageMap damages={damages} onAddDamage={handleMapClick} />
+               <VehicleDamageMap damages={damages} onAddDamage={handleMapClick} onRemoveDamage={handleRemoveDamage} />
                <button onClick={() => setStep('inventory')} className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-900/20">
                  Próximo: Inventário
                </button>

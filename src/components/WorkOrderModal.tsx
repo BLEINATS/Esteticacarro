@@ -39,7 +39,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
   const [activeTab, setActiveTab] = useState<'reception' | 'execution' | 'quality' | 'finance'>('reception');
   const [isSaving, setIsSaving] = useState(false);
-  const [isSavingLog, setIsSavingLog] = useState(false); // State for timeline saving
+  const [isSavingLog, setIsSavingLog] = useState(false);
 
   const [selectedClientId, setSelectedClientId] = useState<string>(workOrder.clientId || '');
   const [clientSearch, setClientSearch] = useState('');
@@ -62,12 +62,33 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   const [insurance, setInsurance] = useState(workOrder.insuranceDetails || { isInsurance: false });
   const [qaList, setQaList] = useState<QualityChecklistItem[]>(workOrder.qaChecklist || []);
   const [additionalItems, setAdditionalItems] = useState<AdditionalItem[]>(workOrder.additionalItems || []);
-  const [scopeList, setScopeList] = useState<ScopeItem[]>(workOrder.scopeChecklist || []);
   
+  // --- SCOPE LIST STATE & REF ---
+  const [scopeList, setScopeList] = useState<ScopeItem[]>(workOrder.scopeChecklist || []);
+  const scopeListRef = useRef<ScopeItem[]>(scopeList);
+  
+  // Update ref whenever state changes
+  useEffect(() => {
+      scopeListRef.current = scopeList;
+  }, [scopeList]);
+  
+  // Scope Photo Input Ref
+  const scopeFileInputRef = useRef<HTMLInputElement>(null);
+  const [activeScopeItemIndex, setActiveScopeItemIndex] = useState<number | null>(null);
+
   const [currentStatus, setCurrentStatus] = useState<WorkOrder['status']>(workOrder.status);
   const [assignedTechnician, setAssignedTechnician] = useState<string>(workOrder.technician || 'A Definir');
 
-  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  // FIX: Initialize selectedServiceIds directly in useState to prevent race condition with useEffect
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(() => {
+    if (workOrder.serviceIds && workOrder.serviceIds.length > 0) {
+        return workOrder.serviceIds;
+    } else if (workOrder.serviceId) {
+        return [workOrder.serviceId];
+    }
+    return [];
+  });
+
   const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -141,14 +162,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
   }, [workOrder.clientId, clients]);
 
   useEffect(() => {
-    if (workOrder.serviceIds && workOrder.serviceIds.length > 0) {
-        setSelectedServiceIds(workOrder.serviceIds);
-    } else if (workOrder.serviceId) {
-        setSelectedServiceIds([workOrder.serviceId]);
-    }
-  }, [workOrder]);
-
-  useEffect(() => {
     if (selectedVehicleObj && selectedServiceIds.length > 0) {
         const total = selectedServiceIds.reduce((acc, id) => acc + getPrice(id, selectedVehicleObj.size), 0);
         if (workOrder.totalValue === 0 || selectedServiceIds.join(',') !== (workOrder.serviceIds || [workOrder.serviceId]).join(',')) {
@@ -167,18 +180,62 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Sync Scope with Selected Services (Dynamic Checklist)
   useEffect(() => {
-    if (scopeList.length === 0) {
-        const items: ScopeItem[] = [];
-        if (workOrder.service) items.push({ id: 'main-svc', label: workOrder.service, completed: false, type: 'main' });
-        if (workOrder.additionalItems && workOrder.additionalItems.length > 0) {
-            workOrder.additionalItems.forEach(item => {
-                items.push({ id: `add-${item.id}`, label: item.description, completed: false, type: 'additional' });
-            });
-        }
-        if (items.length > 0) setScopeList(items);
+    const newItems: ScopeItem[] = [];
+    const currentScope = scopeListRef.current; // Access latest state via ref to preserve checks
+
+    // 1. Add Main Services from Selection
+    if (selectedServiceIds.length > 0) {
+        selectedServiceIds.forEach(id => {
+            const s = services.find(srv => srv.id === id);
+            if (s) {
+                // Check if already exists in CURRENT state to preserve 'completed' and 'photos'
+                const existing = currentScope.find(item => item.id === s.id);
+                newItems.push({ 
+                    id: s.id, 
+                    label: s.name, 
+                    completed: existing ? existing.completed : false, 
+                    type: 'main',
+                    photos: existing ? existing.photos : [],
+                    completedAt: existing ? existing.completedAt : undefined
+                });
+            }
+        });
+    } else if (workOrder.service && workOrder.service !== 'A Definir') {
+        // Fallback for legacy or text-only service
+        const existing = currentScope.find(item => item.id === 'main-legacy');
+        newItems.push({ 
+            id: 'main-legacy', 
+            label: workOrder.service, 
+            completed: existing ? existing.completed : false, 
+            type: 'main',
+            photos: existing ? existing.photos : [],
+            completedAt: existing ? existing.completedAt : undefined
+        });
     }
-  }, [workOrder.service, workOrder.additionalItems]);
+
+    // 2. Add Additional Items
+    additionalItems.forEach(item => {
+        const existing = currentScope.find(i => i.id === `add-${item.id}`);
+        newItems.push({ 
+            id: `add-${item.id}`, 
+            label: item.description, 
+            completed: existing ? existing.completed : false, 
+            type: 'additional',
+            photos: existing ? existing.photos : [],
+            completedAt: existing ? existing.completedAt : undefined
+        });
+    });
+
+    const currentIds = currentScope.map(i => i.id).sort().join(',');
+    const newIds = newItems.map(i => i.id).sort().join(',');
+    
+    // Only update if the structure changed to avoid resetting state during renders
+    if (currentIds !== newIds || (currentScope.length === 0 && newItems.length > 0)) {
+        setScopeList(newItems);
+    }
+  }, [selectedServiceIds, additionalItems, services, workOrder.service]);
 
   useEffect(() => {
     if (qaList.length === 0) {
@@ -255,6 +312,51 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     }
   };
 
+  // --- SCOPE PHOTO HANDLER ---
+  const handleScopePhotoClick = (index: number) => {
+      setActiveScopeItemIndex(index);
+      scopeFileInputRef.current?.click();
+  };
+
+  const handleScopePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0] && activeScopeItemIndex !== null) {
+          const file = e.target.files[0];
+          
+          if (file.size > 2 * 1024 * 1024) {
+              showAlert({ title: 'Erro', message: 'Imagem muito grande. Máximo 2MB.', type: 'error' });
+              return;
+          }
+
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              const url = reader.result as string;
+              const newList = [...scopeList];
+              const item = newList[activeScopeItemIndex];
+              
+              // Add photo to item
+              item.photos = [...(item.photos || []), url];
+              item.completed = true; // Auto-complete when photo added
+              item.completedAt = new Date().toISOString();
+              
+              setScopeList(newList);
+              
+              // Also add to Daily Log automatically
+              const newEntry: DailyLogEntry = { 
+                  id: Date.now().toString(), 
+                  date: new Date().toISOString(), 
+                  stage: 'Execução', 
+                  description: `Etapa Concluída: ${item.label}`, 
+                  photos: [url], 
+                  author: currentUser?.name || 'Técnico' 
+              };
+              setDailyLog(prev => [newEntry, ...prev]);
+          };
+          reader.readAsDataURL(file);
+      }
+      // Reset input
+      if (scopeFileInputRef.current) scopeFileInputRef.current.value = '';
+  };
+
   const getUpdatedOrderData = (): Partial<WorkOrder> => {
     const extrasTotal = additionalItems.reduce((acc, item) => acc + item.value, 0);
     const subtotal = servicePrice + extrasTotal;
@@ -303,6 +405,60 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       paidAt: isPaid ? paymentDate : undefined,
       campaignId: selectedCampaignId
     };
+  };
+
+  // --- UNSAVED CHANGES CHECK ---
+  const hasUnsavedChanges = () => {
+    const current = getUpdatedOrderData();
+    
+    // Helper to compare arrays/objects safely
+    const isDiff = (a: any, b: any) => JSON.stringify(a) !== JSON.stringify(b);
+
+    if (current.clientId !== workOrder.clientId) return true;
+    if (current.plate !== workOrder.plate) return true;
+    if (current.status !== workOrder.status) return true;
+    if (current.technician !== workOrder.technician) return true;
+    
+    // Services
+    const currentServices = (current.serviceIds || []).sort();
+    const originalServices = (workOrder.serviceIds || (workOrder.serviceId ? [workOrder.serviceId] : [])).sort();
+    if (isDiff(currentServices, originalServices)) return true;
+
+    // Complex objects
+    if (isDiff(current.damages, workOrder.damages || [])) return true;
+    if (isDiff(current.vehicleInventory, workOrder.vehicleInventory)) return true;
+    if (isDiff(current.scopeChecklist, workOrder.scopeChecklist || [])) return true;
+    if (isDiff(current.qaChecklist, workOrder.qaChecklist || [])) return true;
+    if (isDiff(current.dailyLog, workOrder.dailyLog || [])) return true;
+    if (isDiff(current.additionalItems, workOrder.additionalItems || [])) return true;
+
+    // Discount
+    if (current.discount?.amount !== (workOrder.discount?.amount || 0)) return true;
+    if (current.discount?.type !== (workOrder.discount?.type || 'percentage')) return true;
+
+    // Payment
+    const originalPaid = workOrder.paymentStatus === 'paid';
+    const currentPaid = current.paymentStatus === 'paid';
+    if (originalPaid !== currentPaid) return true;
+
+    return false;
+  };
+
+  const handleAttemptClose = async () => {
+    if (hasUnsavedChanges()) {
+        const confirm = await showConfirm({
+            title: 'Alterações Não Salvas',
+            message: 'Você tem alterações não salvas nesta Ordem de Serviço. Se sair agora, elas serão perdidas.',
+            confirmText: 'Sair sem Salvar',
+            cancelText: 'Continuar Editando',
+            type: 'warning'
+        });
+        if (confirm) {
+            onClose();
+        }
+    } else {
+        onClose();
+    }
   };
 
   const handleSave = async () => {
@@ -448,7 +604,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         if (selectedClientId) {
             updateClientLTV(selectedClientId, amountToPay);
             
-            // Lógica de Pontos de Fidelidade (Só pontua quando paga)
             if (companySettings.gamification?.enabled) {
                 const multiplier = companySettings.gamification.pointsMultiplier || 1;
                 const pointsEarned = Math.floor(amountToPay * multiplier);
@@ -463,7 +618,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
             }
         }
 
-        // Lógica de Lembretes (Só gera quando paga)
         const osForReminders = { ...workOrder, ...currentData } as WorkOrder;
         generateReminders(osForReminders);
 
@@ -503,7 +657,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
         if (selectedClientId) {
             updateClientLTV(selectedClientId, -amountToRefund);
             
-            // Estornar Pontos
             if (companySettings.gamification?.enabled) {
                  const multiplier = companySettings.gamification.pointsMultiplier || 1;
                  const pointsReversed = Math.floor(amountToRefund * multiplier);
@@ -573,6 +726,10 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     setIsDamageModalOpen(true);
   };
 
+  const handleRemoveDamage = (id: string) => {
+    setDamages(prev => prev.filter(d => d.id !== id));
+  };
+
   const handleSaveDamage = () => {
     if (currentDamageArea && damageDesc) {
       setDamages([...damages, { 
@@ -601,7 +758,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       
-      // Validação de Tamanho (2MB)
       if (file.size > 2 * 1024 * 1024) {
         showAlert({ title: 'Erro', message: 'Imagem muito grande. Máximo 2MB.', type: 'error' });
         return;
@@ -631,11 +787,8 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
     };
 
     const updatedLog = [newEntry, ...dailyLog];
-    
-    // Update local state immediately
     setDailyLog(updatedLog);
     
-    // If OS exists in DB, save log immediately
     const exists = workOrders.some(o => o.id === workOrder.id);
     if (exists) {
         await updateWorkOrder(workOrder.id, { dailyLog: updatedLog });
@@ -755,7 +908,6 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
     const htmlContent = WorkOrderPrintTemplate({ workOrder: printOrder, client: selectedClient });
     
-    // ... (Keep existing print logic) ...
     const printContent = `
       <!DOCTYPE html>
       <html>
@@ -992,6 +1144,16 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
       {isClientModalOpen && <ClientModal onClose={() => setIsClientModalOpen(false)} />}
       {isSignaturePadOpen && <SignaturePad onSave={handleSignatureSave} onClose={() => setIsSignaturePadOpen(false)} />}
       
+      {/* Hidden File Input for Scope Photos */}
+      <input 
+          type="file" 
+          accept="image/*" 
+          capture="environment"
+          className="hidden" 
+          ref={scopeFileInputRef}
+          onChange={handleScopePhotoChange}
+      />
+
       {isDamageModalOpen && (
         <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
@@ -1138,7 +1300,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     {isWhatsAppConnected ? 'Enviar (Auto)' : 'WhatsApp'}
                 </button>
                 
-                <button onClick={onClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg text-slate-400 transition-colors ml-2">
+                <button onClick={handleAttemptClose} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg text-slate-400 transition-colors ml-2">
                   <X size={20} />
                 </button>
             </div>
@@ -1166,7 +1328,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
           </div>
         </div>
 
-        {/* ... (Tabs and Content - No changes needed here) ... */}
+        {/* Tabs */}
         <div className="flex w-full border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex-shrink-0">
           {[
             { id: 'reception', label: 'Recepção & Vistoria', mobileLabel: 'Recepção', icon: ClipboardCheck },
@@ -1194,10 +1356,9 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
 
         <div className="flex-1 overflow-y-auto p-2 sm:p-6 bg-slate-50/30 dark:bg-slate-950/30">
           
-          {/* ... (Reception Tab - No changes) ... */}
+          {/* RECEPTION TAB */}
           {activeTab === 'reception' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-8">
-              {/* ... (Reception Content) ... */}
               <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-3 sm:p-6 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm mb-2">
                  <h3 className="font-bold text-slate-900 dark:text-white mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
                     <User size={18} className="text-blue-600" />
@@ -1303,7 +1464,7 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                   <Camera size={18} className="text-blue-600" />
                   Inspeção do Veículo
                 </h3>
-                <VehicleDamageMap damages={damages} onAddDamage={handleAddDamage} />
+                <VehicleDamageMap damages={damages} onAddDamage={handleAddDamage} onRemoveDamage={handleRemoveDamage} />
               </div>
 
               <div className="lg:col-span-2 space-y-3 sm:space-y-6">
@@ -1455,34 +1616,66 @@ export default function WorkOrderModal({ workOrder, onClose }: WorkOrderModalPro
                     </h3>
                     <div className="space-y-3">
                         {scopeList.length > 0 ? scopeList.map((item, idx) => (
-                            <label key={item.id} className={cn(
-                                "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                            <div key={item.id} className={cn(
+                                "flex flex-col gap-2 p-3 rounded-lg border transition-all",
                                 item.completed 
                                     ? "bg-green-50 dark:bg-green-900/10 border-green-500" 
                                     : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
                             )}>
-                                <input 
-                                    type="checkbox"
-                                    checked={item.completed}
-                                    onChange={() => {
-                                        const newList = [...scopeList];
-                                        newList[idx].completed = !newList[idx].completed;
-                                        setScopeList(newList);
-                                    }}
-                                    className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                                />
-                                <div>
-                                    <span className={cn(
-                                        "text-sm font-bold block",
-                                        item.completed ? "text-green-700 dark:text-green-400 line-through" : "text-slate-700 dark:text-slate-200"
-                                    )}>
-                                        {item.label}
-                                    </span>
-                                    <span className="text-[10px] uppercase font-bold text-slate-400">
-                                        {item.type === 'main' ? 'Principal' : 'Adicional'}
-                                    </span>
+                                <div className="flex items-start gap-3">
+                                    <input 
+                                        type="checkbox"
+                                        checked={item.completed}
+                                        onChange={() => {
+                                            const newList = [...scopeList];
+                                            newList[idx].completed = !newList[idx].completed;
+                                            // If unchecked, remove photo? Maybe keep it.
+                                            setScopeList(newList);
+                                        }}
+                                        className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                    />
+                                    <div className="flex-1">
+                                        <span className={cn(
+                                            "text-sm font-bold block",
+                                            item.completed ? "text-green-700 dark:text-green-400 line-through" : "text-slate-700 dark:text-slate-200"
+                                        )}>
+                                            {item.label}
+                                        </span>
+                                        <span className="text-[10px] uppercase font-bold text-slate-400">
+                                            {item.type === 'main' ? 'Principal' : 'Adicional'}
+                                        </span>
+                                    </div>
+                                    
+                                    {/* Photo Button */}
+                                    <button 
+                                        onClick={() => handleScopePhotoClick(idx)}
+                                        className={cn(
+                                            "p-1.5 rounded-full transition-colors",
+                                            item.photos && item.photos.length > 0 
+                                                ? "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400" 
+                                                : "bg-slate-200 text-slate-500 hover:bg-blue-100 hover:text-blue-600 dark:bg-slate-700 dark:text-slate-400 dark:hover:bg-blue-900/30 dark:hover:text-blue-400"
+                                        )}
+                                        title="Adicionar Foto da Etapa"
+                                    >
+                                        <Camera size={16} />
+                                    </button>
                                 </div>
-                            </label>
+
+                                {/* Photo Preview */}
+                                {item.photos && item.photos.length > 0 && (
+                                    <div className="flex gap-2 mt-1 pl-7 overflow-x-auto">
+                                        {item.photos.map((photo, pIdx) => (
+                                            <img 
+                                                key={pIdx} 
+                                                src={photo} 
+                                                alt={`Etapa ${item.label}`} 
+                                                className="w-12 h-12 rounded object-cover border border-slate-200 dark:border-slate-600 cursor-pointer hover:scale-105 transition-transform"
+                                                onClick={() => window.open(photo, '_blank')}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         )) : (
                             <div className="text-center py-8 text-slate-400">
                                 <p>Nenhum item de escopo definido.</p>
