@@ -9,6 +9,152 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      saas_settings: {
+        Row: {
+          id: number
+          platform_name: string
+          support_email: string
+          payment_gateway: string
+          pix_key: string
+          api_key: string
+          admin_password?: string
+          whatsapp_global?: Json
+        }
+        Insert: {
+          platform_name?: string
+          support_email?: string
+          payment_gateway?: string
+          pix_key?: string
+          api_key?: string
+          admin_password?: string
+          whatsapp_global?: Json
+        }
+        Update: {
+          platform_name?: string
+          support_email?: string
+          payment_gateway?: string
+          pix_key?: string
+          api_key?: string
+          admin_password?: string
+          whatsapp_global?: Json
+        }
+      }
+      saas_plans: {
+        Row: {
+          id: string
+          name: string
+          price: number
+          features: string[]
+          included_tokens: number
+          max_employees: number
+          max_disk_space: number
+          active: boolean
+          highlight: boolean
+        }
+        Insert: {
+          id: string
+          name: string
+          price: number
+          features: string[]
+          included_tokens: number
+          max_employees: number
+          max_disk_space: number
+          active: boolean
+          highlight: boolean
+        }
+        Update: {
+          id?: string
+          name?: string
+          price?: number
+          features?: string[]
+          included_tokens?: number
+          max_employees?: number
+          max_disk_space?: number
+          active?: boolean
+          highlight?: boolean
+        }
+      }
+      token_packages: {
+        Row: {
+          id: string
+          name: string
+          tokens: number
+          price: number
+          active: boolean
+        }
+        Insert: {
+          id: string
+          name: string
+          tokens: number
+          price: number
+          active: boolean
+        }
+        Update: {
+          id?: string
+          name?: string
+          tokens?: number
+          price?: number
+          active?: boolean
+        }
+      }
+      saas_token_ledger: {
+        Row: {
+          id: string
+          tenant_id: string
+          tenant_name: string
+          type: string
+          amount: number
+          value: number
+          description: string
+          date: string
+        }
+        Insert: {
+          id: string
+          tenant_id: string
+          tenant_name: string
+          type: string
+          amount: number
+          value: number
+          description: string
+          date: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          tenant_name?: string
+          type?: string
+          amount?: number
+          value?: number
+          description?: string
+          date?: string
+        }
+      }
+      saas_financial_transactions: {
+        Row: {
+          id: string
+          description: string
+          amount: number
+          type: string
+          category: string
+          date: string
+        }
+        Insert: {
+          id: string
+          description: string
+          amount: number
+          type: string
+          category: string
+          date: string
+        }
+        Update: {
+          id?: string
+          description?: string
+          amount?: number
+          type?: string
+          category?: string
+          date?: string
+        }
+      }
       services: {
         Row: {
           id: string
@@ -53,9 +199,6 @@ export interface Database {
           created_at?: string
         }
       }
-      // ... (other tables remain unchanged, but for brevity I am only showing the changed one. 
-      // In a real scenario I would keep the full file content or just the changed part if the system merges it. 
-      // Since I must provide full file content for replacement, I will include the rest of the file as it was in context)
       reminders: {
         Row: {
           id: string

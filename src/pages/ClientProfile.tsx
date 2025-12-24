@@ -172,7 +172,7 @@ export default function ClientProfile() {
                         className="w-full flex items-center justify-center gap-3 bg-slate-100 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-500 transition-all group active:scale-95"
                     >
                         <span className="font-mono text-lg font-bold text-slate-900 dark:text-white tracking-widest break-all">
-                            {card.cardNumber}
+                            {card?.cardNumber || '...'}
                         </span>
                         {copied ? (
                             <CheckCircle2 size={20} className="text-green-500 flex-shrink-0" />

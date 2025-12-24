@@ -153,7 +153,7 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
             pixKey: settingsData.pix_key,
             apiKey: settingsData.api_key,
             adminPassword: settingsData.admin_password,
-            whatsappGlobal: settingsData.whatsapp_global
+            whatsappGlobal: settingsData.whatsapp_global as any
         });
       } else {
           // Seed default settings if table is empty
@@ -195,24 +195,24 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
         setTenants(tenantsData.map(t => ({
             id: t.id,
             name: t.name,
-            responsibleName: t.settings?.responsibleName || 'Admin',
+            responsibleName: (t.settings as any)?.responsibleName || 'Admin',
             email: 'admin@loja.com', 
-            phone: t.settings?.phone || '',
+            phone: (t.settings as any)?.phone || '',
             planId: t.plan_id,
             status: t.status as any,
             joinedAt: t.created_at,
-            nextBilling: t.subscription?.nextBillingDate || new Date().toISOString(),
-            tokenBalance: t.subscription?.tokenBalance || 0,
+            nextBilling: (t.subscription as any)?.nextBillingDate || new Date().toISOString(),
+            tokenBalance: (t.subscription as any)?.tokenBalance || 0,
             mrr: 0, // Calculated later
             lastLogin: t.created_at,
-            logoUrl: t.settings?.logoUrl
+            logoUrl: (t.settings as any)?.logoUrl
         })));
       }
 
       // 5. Ledger
       const { data: ledgerData } = await supabase.from('saas_token_ledger').select('*').order('date', { ascending: false });
       if (ledgerData) {
-        setTokenLedger(ledgerData.map(l => ({
+        setTokenLedger((ledgerData as any[]).map(l => ({
             id: l.id,
             tenantId: l.tenant_id,
             tenantName: l.tenant_name,
@@ -227,7 +227,7 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
       // 6. Transactions
       const { data: transData } = await supabase.from('saas_financial_transactions').select('*').order('date', { ascending: false });
       if (transData) {
-        setSaasTransactions(transData);
+        setSaasTransactions(transData as any[]);
       }
 
     } catch (error) {
@@ -326,10 +326,12 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
 
       // Add to Ledger
       const ledgerEntry = {
+          id: `led-${Date.now()}`,
           tenant_id: tenantId,
           tenant_name: tenant.name,
           type: 'bonus',
           amount: amount,
+          value: 0,
           description: 'Bônus Administrativo',
           date: new Date().toISOString()
       };
@@ -345,6 +347,18 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
               value: newLedger.value,
               description: newLedger.description,
               date: newLedger.date
+          }, ...prev]);
+      } else {
+          // Optimistic update if insert returns nothing (e.g. RLS or network)
+          setTokenLedger(prev => [{
+              id: ledgerEntry.id,
+              tenantId: ledgerEntry.tenant_id,
+              tenantName: ledgerEntry.tenant_name,
+              type: ledgerEntry.type as any,
+              amount: ledgerEntry.amount,
+              value: ledgerEntry.value,
+              description: ledgerEntry.description,
+              date: ledgerEntry.date
           }, ...prev]);
       }
   };
