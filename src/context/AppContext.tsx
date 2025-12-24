@@ -263,7 +263,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [theme]);
 
-  // --- HELPER: AGGREGATE POINTS ---
   const aggregatePoints = useCallback((history: any[]) => {
       const pointsMap: Record<string, ClientPoints> = {};
       history.forEach(entry => {
@@ -305,7 +304,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
   }, [companySettings.gamification?.tiers]);
 
-  // Automatic Recalculation Effect
   useEffect(() => {
       if (pointsHistory.length > 0) {
           const aggregated = aggregatePoints(pointsHistory);
@@ -319,7 +317,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setCompanySettings({ ...initialCompanySettings, ...tenantData.settings });
         if (tenantData.subscription) setSubscription(tenantData.subscription);
 
-        // SYNC POINTS HISTORY FROM SUPABASE (Using Upsert)
         if (isValidUUID(tenantData.id)) {
             try {
                 const { data: remoteHistory } = await supabase.from('points_history').select('*').eq('tenant_id', tenantData.id);
@@ -400,7 +397,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setPriceMatrix(processedMatrix);
         setServiceConsumptions(processedConsumptions);
         setPointsHistory(historyData);
-        // setClientPoints is handled by useEffect
 
     } catch (error) {
         console.error("Error loading tenant data:", error);
@@ -427,7 +423,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     init();
   }, [loadTenantData]);
 
-  // ... (CRUD functions remain same) ...
   const addClient = async (clientData: Partial<Client>) => {
     try {
       const newClient = {
@@ -629,7 +624,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  // --- FIDELITY LOGIC ---
   const addPointsToClient = async (clientId: string, workOrderId: string, points: number, description: string) => {
       const entry = {
           id: generateUUID(),
@@ -642,11 +636,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           created_at: new Date().toISOString()
       };
 
-      // Update local history (useEffect handles clientPoints update)
       setPointsHistory(prev => [...prev, entry]);
       await db.create('points_history', entry);
 
-      // Update Supabase
       if (tenantId && isValidUUID(tenantId)) {
           const { error } = await supabase.from('points_history').insert({
               id: entry.id,
@@ -670,7 +662,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!cp || !reward) return { success: false, message: 'Dados inválidos' };
       if (cp.totalPoints < reward.requiredPoints) return { success: false, message: 'Pontos insuficientes' };
 
-      // 1. Create Redemption
       const redemption = {
           id: generateUUID(),
           tenant_id: tenantId,
@@ -683,25 +674,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
           redeemed_at: new Date().toISOString()
       };
 
-      // 2. Deduct Points (Add negative history)
       const historyEntry = {
           id: generateUUID(),
           tenant_id: tenantId,
           client_id: clientId,
-          points: -reward.requiredPoints, // Negative points for redemption
+          points: -reward.requiredPoints,
           description: `Resgate: ${reward.name}`,
           type: 'redeem',
           created_at: new Date().toISOString()
       };
 
-      // Update Local
       setRedemptions(prev => [...prev, redemption as any]);
       setPointsHistory(prev => [...prev, historyEntry]);
       
       db.create('redemptions', redemption);
       db.create('points_history', historyEntry);
 
-      // Update Supabase
       if (tenantId && isValidUUID(tenantId)) {
           supabase.from('redemptions').insert(redemption as any).then(({ error }) => {
               if(error) console.error("Redemption error", error);
@@ -736,7 +724,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return { redemption, reward };
   };
 
-  // --- CLIENT METRICS ---
   const recalculateClientMetrics = async (clientId: string) => {
       const clientOrders = workOrders.filter(os => os.clientId === clientId && (os.status === 'Concluído' || os.status === 'Entregue'));
       const visitCount = clientOrders.length;
@@ -750,13 +737,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
       }
 
-      // Update Local
       setClients(prev => prev.map(c => c.id === clientId ? { ...c, ltv, visitCount, lastVisit: lastVisit || c.lastVisit } : c));
       
-      // Update DB
       await db.update('clients', clientId, { ltv, visitCount, lastVisit: lastVisit || undefined });
       
-      // Update Supabase
       if (tenantId && isValidUUID(tenantId)) {
           await supabase.from('clients').update({ 
               ltv, 
@@ -774,7 +758,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       recalculateClientMetrics(clientId);
   };
 
-  // ... (Rest of the file remains same) ...
   const login = (pin: string) => { const employee = employees.find(e => e.pin === pin && e.active); if (employee) { setCurrentUser(employee); return true; } return false; };
   const logout = () => setCurrentUser(null);
   const loginOwner = async (email: string, password: string) => { const users = await db.getAll<any>('users'); const user = users.find(u => u.email === email && u.password === password); if (user) { setOwnerUser(user); localStorage.setItem('cristal_care_user', JSON.stringify(user)); const tenants = await db.getAll<any>('tenants'); const tenant = tenants.find(t => t.owner_id === user.id); if (tenant) await loadTenantData(tenant); return { success: true }; } return { success: false, error: { message: 'Credenciais inválidas' } }; };
@@ -1139,11 +1122,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const os = orderSnapshot || workOrders.find(o => o.id === id);
       if (!os) return;
       if (os.serviceIds) { os.serviceIds.forEach(sId => deductStock(sId)); } else if (os.serviceId) { deductStock(os.serviceId); }
-      // Reminders are now generated upon payment, not completion
       if (os.clientId) { await recalculateClientMetrics(os.clientId); }
   };
   
-  // --- EMPLOYEE FUNCTIONS ---
   const addEmployee = async (employee: Omit<Employee, 'id' | 'balance'>) => {
     try {
         const newEmployee: Employee = {
@@ -1238,10 +1219,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const seedDefaultCampaigns = async () => {};
   const seedMockReviews = async () => {};
   
-  // FIX: Sanitized WhatsApp Link
   const getWhatsappLink = (phone: string, msg: string) => {
     const cleanPhone = phone.replace(/\D/g, '');
-    // Assume Brazil (55) if length is 10 or 11 (DD + Number)
     const finalPhone = (cleanPhone.length === 10 || cleanPhone.length === 11) 
       ? `55${cleanPhone}` 
       : cleanPhone;
@@ -1252,7 +1231,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const createSocialPost = () => {};
   const generateSocialContent = async () => ({ caption: '', hashtags: [] });
   const getClientPoints = (id: string) => clientPoints.find(cp => cp.clientId === id);
-  const createFidelityCard = async (clientId: string) => { return {} as FidelityCard; };
+  const createFidelityCard = async (_clientId: string) => { return {} as FidelityCard; };
   const getFidelityCard = (clientId: string) => fidelityCards.find(c => c.clientId === clientId);
   const addReward = () => {};
   const updateReward = () => {};

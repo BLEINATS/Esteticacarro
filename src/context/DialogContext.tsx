@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useCallback, ReactNode } from 'react';
-import { AlertTriangle, CheckCircle2, Info, X, Trash2, Save, XCircle, HelpCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Info, Trash2, HelpCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 type DialogType = 'info' | 'success' | 'warning' | 'danger' | 'question';

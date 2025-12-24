@@ -80,8 +80,8 @@ export interface ScopeItem {
   label: string;
   completed: boolean;
   type: 'main' | 'additional';
-  photos?: string[]; // Nova propriedade para fotos da etapa
-  completedAt?: string; // Data de conclusão
+  photos?: string[];
+  completedAt?: string;
 }
 
 export interface AdditionalItem {
@@ -204,6 +204,7 @@ export interface Employee {
   balance: number;
   tenant_id?: string;
   salary_data?: any;
+  created_at?: string; // Added this property
 }
 
 export interface EmployeeTransaction {

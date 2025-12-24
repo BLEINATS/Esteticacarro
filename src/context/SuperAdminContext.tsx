@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { SaaSPlan, SaaSTenant, TokenPackage, SaaSTokenTransaction, SaaSTransaction } from '../types';
-import { addDays, formatISO } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { syncProductToStripe } from '../services/stripe';
 
@@ -288,7 +287,7 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
   };
 
   // Tenants
-  const addTenant = async (tenantData: any) => {
+  const addTenant = async (_tenantData: any) => {
       console.log('Use register flow to add tenants');
   };
 
