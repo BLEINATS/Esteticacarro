@@ -403,7 +403,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
         setIsAppLoading(false);
     }
-  }, [companySettings]);
+  }, []); 
 
   useEffect(() => {
     const init = async () => {
@@ -1231,7 +1231,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const createSocialPost = () => {};
   const generateSocialContent = async () => ({ caption: '', hashtags: [] });
   const getClientPoints = (id: string) => clientPoints.find(cp => cp.clientId === id);
-  const createFidelityCard = async (_clientId: string) => { return {} as FidelityCard; };
+  
+  // FIX: Implement createFidelityCard properly
+  const createFidelityCard = async (clientId: string): Promise<FidelityCard> => {
+    // Check if card already exists
+    const existing = fidelityCards.find(c => c.clientId === clientId);
+    if (existing) return existing;
+
+    const newCard: FidelityCard = {
+      clientId,
+      cardNumber: Math.floor(100000000000 + Math.random() * 900000000000).toString(), // 12 digits
+      cardHolder: clients.find(c => c.id === clientId)?.name || 'Cliente',
+      cardColor: 'blue',
+      qrCode: '', // Generated on frontend
+      expiresAt: addDays(new Date(), 365 * 2).toISOString(), // 2 years
+      issueDate: new Date().toISOString(),
+      tenant_id: tenantId || undefined
+    };
+
+    setFidelityCards(prev => [...prev, newCard]);
+    await db.create('fidelity_cards', newCard);
+
+    if (tenantId && isValidUUID(tenantId)) {
+        const { error } = await supabase.from('fidelity_cards').insert({
+            tenant_id: tenantId,
+            client_id: clientId,
+            card_number: newCard.cardNumber,
+            created_at: newCard.issueDate
+        });
+        if (error) console.error("Error creating fidelity card in Supabase:", error);
+    }
+
+    return newCard;
+  };
+
   const getFidelityCard = (clientId: string) => fidelityCards.find(c => c.clientId === clientId);
   const addReward = () => {};
   const updateReward = () => {};

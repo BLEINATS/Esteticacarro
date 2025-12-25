@@ -26,7 +26,7 @@ const StatusBadge = ({ status }: { status: string }) => {
 
   return (
     <span className={cn("px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap", styles)}>
-      {status}
+      {status || 'Desconhecido'}
     </span>
   );
 };
@@ -64,8 +64,12 @@ export default function Operations() {
   const getClientName = (id: string) => clients.find(c => c.id === id)?.name || 'Cliente Desconhecido';
 
   const sortedWorkOrders = [...workOrders].sort((a, b) => {
-    if (a.status === 'Aguardando Aprovação' && b.status !== 'Aguardando Aprovação') return -1;
-    if (a.status !== 'Aguardando Aprovação' && b.status === 'Aguardando Aprovação') return 1;
+    // Safe sort handling undefined status
+    const statusA = a?.status || '';
+    const statusB = b?.status || '';
+    
+    if (statusA === 'Aguardando Aprovação' && statusB !== 'Aguardando Aprovação') return -1;
+    if (statusA !== 'Aguardando Aprovação' && statusB === 'Aguardando Aprovação') return 1;
     return 0;
   });
 

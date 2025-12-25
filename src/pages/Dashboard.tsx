@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -33,7 +33,9 @@ import {
   ShieldCheck,
   AlertTriangle,
   MessageSquare,
-  Quote
+  Quote,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { 
   PieChart, 
@@ -58,7 +60,7 @@ import WorkOrderModal from '../components/WorkOrderModal';
 import ClientDetailsModal from '../components/ClientDetailsModal';
 import { WorkOrder, Client } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { isSameDay, isSameMonth, startOfMonth, endOfMonth, isWithinInterval, subMonths } from 'date-fns';
+import { isSameDay, isSameMonth, startOfMonth, endOfMonth, isWithinInterval, subMonths, isValid } from 'date-fns';
 import { LicensePlate } from '../components/ui/LicensePlate';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
@@ -69,6 +71,9 @@ export default function Dashboard() {
   const [selectedOS, setSelectedOS] = useState<WorkOrder | null>(null);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const navigate = useNavigate();
+  
+  // Ref para rolagem do Pátio
+  const yardScrollRef = useRef<HTMLDivElement>(null);
 
   const today = new Date();
 
@@ -103,7 +108,8 @@ export default function Dashboard() {
   const newClientsMonth = clients.filter(c => {
       const dateStr = c.created_at || (c as any).createdAt;
       if (!dateStr) return false;
-      return isSameMonth(new Date(dateStr), today);
+      const date = new Date(dateStr);
+      return isValid(date) && isSameMonth(date, today);
   }).length;
 
   // --- CÁLCULOS ESPECÍFICOS PARA OS NOVOS CARDS ---
@@ -199,7 +205,8 @@ export default function Dashboard() {
               // Verifica se é hoje ou data de hoje
               return dl.includes('hoje') || dl.includes(today.toLocaleDateString('pt-BR').slice(0, 5));
           }
-          return isSameDay(new Date(os.createdAt), today);
+          const osDate = new Date(os.createdAt);
+          return isValid(osDate) && isSameDay(osDate, today);
       });
 
       // 3. Somar tempo estimado dos serviços
@@ -293,6 +300,16 @@ export default function Dashboard() {
       }
   };
 
+  const scrollYard = (direction: 'left' | 'right') => {
+    if (yardScrollRef.current) {
+        const scrollAmount = 320; // Largura do card + gap
+        yardScrollRef.current.scrollBy({
+            left: direction === 'left' ? -scrollAmount : scrollAmount,
+            behavior: 'smooth'
+        });
+    }
+  };
+
   return (
     <div className="h-screen overflow-hidden flex flex-col bg-slate-50 dark:bg-slate-950 animate-in fade-in duration-500 relative">
       
@@ -372,62 +389,84 @@ export default function Dashboard() {
                   </div>
 
                   {/* Vehicle List - Horizontal Scroll */}
-                  <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-                      {activeYardOS.length > 0 ? activeYardOS.map(os => (
-                          <div 
-                            key={os.id}
-                            onClick={() => setSelectedOS(os)}
-                            className="min-w-[280px] bg-white/5 hover:bg-white/10 border border-white/10 hover:border-blue-500/50 rounded-xl p-4 cursor-pointer transition-all group relative overflow-hidden"
-                          >
-                              <div className="flex justify-between items-start mb-3">
-                                  <div className={cn("px-2 py-1 rounded-lg text-[10px] font-bold uppercase border flex items-center gap-1.5", getStatusColor(os.status))}>
-                                      {getStatusIcon(os.status)}
-                                      {os.status === 'Aguardando' ? 'Na Fila' : os.status}
-                                  </div>
-                                  <LicensePlate plate={os.plate} size="sm" />
-                              </div>
-                              
-                              <h4 className="text-lg font-bold text-white mb-1 truncate">{os.vehicle}</h4>
-                              <p className="text-xs text-slate-400 mb-3 truncate">{os.service}</p>
-                              
-                              <div className="flex items-center justify-between pt-3 border-t border-white/5">
-                                  <div className="flex items-center gap-2">
-                                      <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-300 border border-slate-700">
-                                          {os.technician.charAt(0)}
-                                      </div>
-                                      <span className="text-xs text-slate-400 truncate max-w-[80px]">{os.technician}</span>
-                                  </div>
-                                  {os.deadline && (
-                                      <span className={cn(
-                                          "text-xs font-bold flex items-center gap-1",
-                                          os.deadline.toLowerCase().includes('hoje') ? "text-amber-400" : "text-slate-500"
-                                      )}>
-                                          <Clock size={12} /> {os.deadline.split(' ')[0]}
-                                      </span>
-                                  )}
-                              </div>
+                  <div className="relative group/yard">
+                      {/* Navigation Buttons (Desktop & Mobile) */}
+                      <button 
+                          onClick={(e) => { e.stopPropagation(); scrollYard('left'); }}
+                          className="absolute left-0 top-1/2 -translate-y-1/2 z-20 bg-slate-900/80 p-2 rounded-full text-white hover:bg-blue-600 border border-slate-700 shadow-lg backdrop-blur-sm transition-all -ml-2 md:-ml-4 flex items-center justify-center opacity-70 hover:opacity-100"
+                          title="Rolar para esquerda"
+                      >
+                          <ChevronLeft size={24} />
+                      </button>
+                      
+                      <button 
+                          onClick={(e) => { e.stopPropagation(); scrollYard('right'); }}
+                          className="absolute right-0 top-1/2 -translate-y-1/2 z-20 bg-slate-900/80 p-2 rounded-full text-white hover:bg-blue-600 border border-slate-700 shadow-lg backdrop-blur-sm transition-all -mr-2 md:-mr-4 flex items-center justify-center opacity-70 hover:opacity-100"
+                          title="Rolar para direita"
+                      >
+                          <ChevronRight size={24} />
+                      </button>
 
-                              {/* Progress Bar Simulation based on status */}
-                              <div className="absolute bottom-0 left-0 h-1 bg-slate-800 w-full">
-                                  <div 
-                                    className={cn("h-full transition-all duration-1000", 
-                                        os.status === 'Aguardando Aprovação' ? "w-[5%] bg-purple-500" :
-                                        os.status === 'Aguardando' ? "w-[10%] bg-amber-500" :
-                                        os.status === 'Em Andamento' ? "w-[50%] bg-blue-500" :
-                                        os.status === 'Controle de Qualidade' ? "w-[90%] bg-indigo-500" : "w-full bg-slate-600"
-                                    )} 
-                                  />
+                      <div 
+                          ref={yardScrollRef}
+                          className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent snap-x snap-mandatory px-1"
+                      >
+                          {activeYardOS.length > 0 ? activeYardOS.map(os => (
+                              <div 
+                                key={os.id}
+                                onClick={() => setSelectedOS(os)}
+                                className="min-w-[280px] bg-white/5 hover:bg-white/10 border border-white/10 hover:border-blue-500/50 rounded-xl p-4 cursor-pointer transition-all group relative overflow-hidden snap-center"
+                              >
+                                  <div className="flex justify-between items-start mb-3">
+                                      <div className={cn("px-2 py-1 rounded-lg text-[10px] font-bold uppercase border flex items-center gap-1.5", getStatusColor(os.status))}>
+                                          {getStatusIcon(os.status)}
+                                          {os.status === 'Aguardando' ? 'Na Fila' : os.status}
+                                      </div>
+                                      <LicensePlate plate={os.plate} size="sm" />
+                                  </div>
+                                  
+                                  <h4 className="text-lg font-bold text-white mb-1 truncate">{os.vehicle}</h4>
+                                  <p className="text-xs text-slate-400 mb-3 truncate">{os.service}</p>
+                                  
+                                  <div className="flex items-center justify-between pt-3 border-t border-white/5">
+                                      <div className="flex items-center gap-2">
+                                          <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-300 border border-slate-700">
+                                              {os.technician.charAt(0)}
+                                          </div>
+                                          <span className="text-xs text-slate-400 truncate max-w-[80px]">{os.technician}</span>
+                                      </div>
+                                      {os.deadline && (
+                                          <span className={cn(
+                                              "text-xs font-bold flex items-center gap-1",
+                                              os.deadline.toLowerCase().includes('hoje') ? "text-amber-400" : "text-slate-500"
+                                          )}>
+                                              <Clock size={12} /> {os.deadline.split(' ')[0]}
+                                          </span>
+                                      )}
+                                  </div>
+
+                                  {/* Progress Bar Simulation based on status */}
+                                  <div className="absolute bottom-0 left-0 h-1 bg-slate-800 w-full">
+                                      <div 
+                                        className={cn("h-full transition-all duration-1000", 
+                                            os.status === 'Aguardando Aprovação' ? "w-[5%] bg-purple-500" :
+                                            os.status === 'Aguardando' ? "w-[10%] bg-amber-500" :
+                                            os.status === 'Em Andamento' ? "w-[50%] bg-blue-500" :
+                                            os.status === 'Controle de Qualidade' ? "w-[90%] bg-indigo-500" : "w-full bg-slate-600"
+                                        )} 
+                                      />
+                                  </div>
                               </div>
-                          </div>
-                      )) : (
-                          <div className="w-full py-12 text-center border-2 border-dashed border-white/10 rounded-xl">
-                              <Car size={48} className="mx-auto text-slate-700 mb-3" />
-                              <p className="text-slate-500">Nenhum veículo no pátio agora.</p>
-                              <button onClick={handleNewOS} className="mt-4 text-sm text-blue-400 hover:text-blue-300 font-bold">
-                                  + Registrar Entrada
-                              </button>
-                          </div>
-                      )}
+                          )) : (
+                              <div className="w-full py-12 text-center border-2 border-dashed border-white/10 rounded-xl">
+                                  <Car size={48} className="mx-auto text-slate-700 mb-3" />
+                                  <p className="text-slate-500">Nenhum veículo no pátio agora.</p>
+                                  <button onClick={handleNewOS} className="mt-4 text-sm text-blue-400 hover:text-blue-300 font-bold">
+                                      + Registrar Entrada
+                                  </button>
+                              </div>
+                          )}
+                      </div>
                   </div>
 
                   <div className="mt-2 flex justify-end">

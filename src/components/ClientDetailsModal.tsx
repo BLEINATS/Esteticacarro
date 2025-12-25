@@ -21,35 +21,62 @@ interface ClientDetailsModalProps {
 
 // Helper para mapear cores em PT-BR para CSS
 const getVehicleColor = (colorName: string) => {
+  if (!colorName) return '#94a3b8'; // Default gray if empty
+
   const map: Record<string, string> = {
+    // Cores Básicas
     'preto': '#1a1a1a',
+    'preta': '#1a1a1a',
     'branco': '#f8fafc',
+    'branca': '#f8fafc',
     'prata': '#94a3b8',
     'cinza': '#475569',
+    
+    // Cores Quentes
     'vermelho': '#ef4444',
-    'azul': '#3b82f6',
-    'verde': '#22c55e',
+    'vermelha': '#ef4444',
     'amarelo': '#eab308',
-    'dourado': '#d97706',
-    'marrom': '#78350f',
-    'bege': '#f5f5dc',
+    'amarela': '#eab308',
     'laranja': '#f97316',
+    'dourado': '#d97706',
+    'dourada': '#d97706',
+    'bege': '#f5f5dc',
+    'marrom': '#78350f',
+    
+    // Cores Frias
+    'azul': '#3b82f6',
+    'azul marinho': '#1e3a8a',
+    'verde': '#22c55e',
+    'verde escuro': '#14532d',
     'roxo': '#a855f7',
+    'roxa': '#a855f7',
+    
+    // Outros
     'rosa': '#ec4899',
     'vinho': '#881337',
-    'grafite': '#374151'
+    'grafite': '#374151',
+    'chumbo': '#4b5563'
   };
-  return map[colorName.toLowerCase()] || colorName;
+
+  const normalizedColor = colorName.toLowerCase().trim();
+  
+  // Retorna a cor mapeada ou a própria string se for um código Hex válido
+  return map[normalizedColor] || (normalizedColor.startsWith('#') ? normalizedColor : '#94a3b8');
 };
 
-export default function ClientDetailsModal({ client, onClose }: ClientDetailsModalProps) {
+export default function ClientDetailsModal({ client: initialClient, onClose }: ClientDetailsModalProps) {
   const navigate = useNavigate();
   const { 
+    clients, // Importante: Pegar a lista atualizada do contexto
     workOrders, reminders, addVehicle, updateVehicle, removeVehicle, updateClient, 
     getClientPoints, getFidelityCard, createFidelityCard, companySettings, 
     getRewardsByLevel, getWhatsappLink, claimReward, getClientRedemptions, 
     addPointsToClient, subscription, consumeTokens 
   } = useApp();
+  
+  // GARANTIR REATIVIDADE: Busca o cliente mais atualizado do estado global usando o ID
+  // Se não encontrar (caso raro de exclusão concorrente), usa o initialClient como fallback
+  const client = clients.find(c => c.id === initialClient.id) || initialClient;
   
   const { showConfirm, showAlert } = useDialog();
   const [activeTab, setActiveTab] = useState<'overview' | 'vehicles' | 'history' | 'crm' | 'fidelidade'>('overview');
