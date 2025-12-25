@@ -204,7 +204,7 @@ export interface Employee {
   balance: number;
   tenant_id?: string;
   salary_data?: any;
-  created_at?: string; // Added this property
+  created_at?: string;
 }
 
 export interface EmployeeTransaction {
@@ -394,6 +394,13 @@ export interface GamificationConfig {
   tiers: TierConfig[];
 }
 
+export interface PaymentRate {
+  method: string;
+  rate: number;
+  type: 'percentage' | 'fixed';
+  daysToReceive: number;
+}
+
 export interface CompanySettings {
   name: string;
   slug: string;
@@ -415,6 +422,7 @@ export interface CompanySettings {
   primaryColor?: string;
   initialBalance: number;
   hourlyRate?: number;
+  paymentRates: PaymentRate[]; // Added for Payment Fees
   whatsapp: WhatsappConfig;
   landingPage: LandingPageConfig;
   preferences: CompanyPreferences;

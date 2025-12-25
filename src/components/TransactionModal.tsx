@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, DollarSign, Calendar, Tag, FileText, CheckCircle2, AlertCircle, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
+import { X, Save, DollarSign, Calendar, Tag, FileText, CheckCircle2, AlertCircle, ArrowUpCircle, ArrowDownCircle, Info } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { FinancialTransaction } from '../types';
-import { cn } from '../lib/utils';
+import { cn, formatCurrency } from '../lib/utils';
 import { useDialog } from '../context/DialogContext';
 
 interface TransactionModalProps {
@@ -12,7 +12,7 @@ interface TransactionModalProps {
 }
 
 export default function TransactionModal({ isOpen, onClose, transaction }: TransactionModalProps) {
-  const { addFinancialTransaction, updateFinancialTransaction } = useApp();
+  const { addFinancialTransaction, updateFinancialTransaction, calculateFee } = useApp();
   const { showAlert } = useDialog();
 
   const [type, setType] = useState<'income' | 'expense'>('expense');
@@ -24,6 +24,9 @@ export default function TransactionModal({ isOpen, onClose, transaction }: Trans
     status: 'paid' as 'paid' | 'pending',
     method: 'Pix'
   });
+
+  // State for Fee Preview
+  const [feePreview, setFeePreview] = useState<{ fee: number, netAmount: number } | null>(null);
 
   useEffect(() => {
     if (transaction) {
@@ -50,6 +53,21 @@ export default function TransactionModal({ isOpen, onClose, transaction }: Trans
     }
   }, [transaction, isOpen]);
 
+  // Calculate fee preview whenever amount or method changes (only for income)
+  useEffect(() => {
+      if (type === 'income' && formData.amount && formData.method) {
+          const amount = parseFloat(formData.amount);
+          if (!isNaN(amount)) {
+              const result = calculateFee(amount, formData.method);
+              setFeePreview(result);
+          } else {
+              setFeePreview(null);
+          }
+      } else {
+          setFeePreview(null);
+      }
+  }, [formData.amount, formData.method, type, calculateFee]);
+
   const categories = type === 'income' 
     ? ['Serviços', 'Venda de Produtos', 'Investimento', 'Outros']
     : ['Aluguel', 'Energia', 'Água', 'Internet', 'Fornecedores', 'Manutenção', 'Marketing', 'Impostos', 'Salários', 'Outros'];
@@ -63,24 +81,26 @@ export default function TransactionModal({ isOpen, onClose, transaction }: Trans
     }
 
     const value = parseFloat(formData.amount);
-    // Expenses are negative in the backend logic usually, but here we store absolute and use type to distinguish
-    // However, looking at AppContext logic, expenses might be stored as negative numbers or just typed.
-    // Let's follow the pattern: Amount is stored as is, type defines sign in calculations usually, 
-    // BUT in Team.tsx we saw `amount: -amount` for expenses. Let's standardize.
-    // Ideally, store positive and let type dictate. But to be safe with existing dashboard logic:
-    // Dashboard sums `netAmount ?? amount`. If expense, we usually want to subtract.
-    // Let's assume the dashboard logic handles `type === 'expense'` subtraction or expects negative values.
-    // Checking Dashboard.tsx: 
-    // `totalExpense = ... reduce((acc, t) => acc + Math.abs(t.amount), 0);` -> It uses Math.abs, so sign doesn't matter for display there.
-    // `currentBalance = ... + netProfit`.
-    // Let's store positive values and let the type define it logically.
+    
+    // Calculate fee for income
+    let fee = 0;
+    let netAmount = value;
+    
+    if (type === 'income') {
+        const calc = calculateFee(value, formData.method);
+        fee = calc.fee;
+        netAmount = calc.netAmount;
+    } else {
+        // For expense, netAmount is same as amount (negative logic handled by type elsewhere or stored positive)
+        netAmount = value;
+    }
 
     const newTransaction: any = {
         desc: formData.description,
         category: formData.category,
-        amount: parseFloat(formData.amount), // Store positive, Dashboard handles Math.abs for expenses
-        netAmount: parseFloat(formData.amount),
-        fee: 0,
+        amount: parseFloat(formData.amount), 
+        netAmount: netAmount,
+        fee: fee,
         type: type,
         date: new Date(formData.date).toISOString(),
         dueDate: new Date(formData.date).toISOString(),
@@ -162,6 +182,20 @@ export default function TransactionModal({ isOpen, onClose, transaction }: Trans
                     />
                 </div>
             </div>
+
+            {/* Fee Preview */}
+            {feePreview && feePreview.fee > 0 && (
+                <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 flex justify-between items-center text-xs">
+                    <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                        <Info size={14} />
+                        <span>Taxa estimada ({formData.method})</span>
+                    </div>
+                    <div className="text-right">
+                        <span className="text-red-500 font-bold block">-{formatCurrency(feePreview.fee)}</span>
+                        <span className="text-green-600 dark:text-green-400 font-bold block">Líquido: {formatCurrency(feePreview.netAmount)}</span>
+                    </div>
+                </div>
+            )}
 
             {/* Description */}
             <div>

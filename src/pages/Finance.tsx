@@ -17,30 +17,48 @@ import {
   Clock,
   Plus,
   Pencil,
-  Trash2
+  Trash2,
+  Settings
 } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { format, addWeeks, startOfWeek, endOfWeek, isWithinInterval, parseISO, isAfter, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import TransactionModal from '../components/TransactionModal';
-import { FinancialTransaction } from '../types';
+import { FinancialTransaction, PaymentRate } from '../types';
 import { useDialog } from '../context/DialogContext';
 
 export default function Finance() {
-  const { financialTransactions, workOrders, companySettings, deleteFinancialTransaction } = useApp();
+  const { financialTransactions, workOrders, companySettings, updateCompanySettings, deleteFinancialTransaction } = useApp();
   const { showConfirm, showAlert } = useDialog();
-  const [activeTab, setActiveTab] = useState<'overview' | 'forecast'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'forecast' | 'rates'>('overview');
   const [filterPeriod, setFilterPeriod] = useState('month');
   
   // Transaction Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<FinancialTransaction | null>(null);
 
+  // Rate Editing State
+  const [rates, setRates] = useState<PaymentRate[]>(companySettings.paymentRates || []);
+
+  const handleRateChange = (index: number, field: keyof PaymentRate, value: any) => {
+      const newRates = [...rates];
+      newRates[index] = { ...newRates[index], [field]: value };
+      setRates(newRates);
+  };
+
+  const handleSaveRates = () => {
+      updateCompanySettings({ paymentRates: rates });
+      showAlert({ title: 'Salvo', message: 'Taxas de pagamento atualizadas.', type: 'success' });
+  };
+
   // --- LÓGICA DE VISÃO GERAL (EXISTENTE) ---
   const metrics = {
     revenue: financialTransactions
       .filter(t => t.type === 'income' && t.status === 'paid')
       .reduce((acc, t) => acc + t.amount, 0),
+    netRevenue: financialTransactions
+      .filter(t => t.type === 'income' && t.status === 'paid')
+      .reduce((acc, t) => acc + (t.netAmount || t.amount), 0),
     expenses: financialTransactions
       .filter(t => t.type === 'expense' && t.status === 'paid')
       .reduce((acc, t) => acc + Math.abs(t.amount), 0),
@@ -49,8 +67,9 @@ export default function Finance() {
       .reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -Math.abs(t.amount)), 0)
   };
 
-  const profit = metrics.revenue - metrics.expenses;
-  const margin = metrics.revenue > 0 ? (profit / metrics.revenue) * 100 : 0;
+  const profit = metrics.netRevenue - metrics.expenses;
+  const margin = metrics.netRevenue > 0 ? (profit / metrics.netRevenue) * 100 : 0;
+  const totalFees = metrics.revenue - metrics.netRevenue;
 
   // --- HANDLERS ---
   const handleNewTransaction = () => {
@@ -170,7 +189,19 @@ export default function Finance() {
                 )}
             >
                 <Target size={16} />
-                Previsão Futura
+                Previsão
+            </button>
+            <button
+                onClick={() => setActiveTab('rates')}
+                className={cn(
+                "px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2",
+                activeTab === 'rates' 
+                    ? "bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 shadow-sm" 
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                )}
+            >
+                <Settings size={16} />
+                Taxas
             </button>
             </div>
 
@@ -184,7 +215,7 @@ export default function Finance() {
         </div>
       </div>
 
-      {activeTab === 'overview' ? (
+      {activeTab === 'overview' && (
         // --- CONTEÚDO EXISTENTE (VISÃO GERAL) ---
         <>
           {/* Metrics Cards */}
@@ -198,10 +229,11 @@ export default function Finance() {
                   <ArrowUpRight size={14} className="mr-1" /> +12%
                 </span>
               </div>
-              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Receita Total</p>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Receita Bruta</p>
               <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
                 {formatCurrency(metrics.revenue)}
               </h3>
+              <p className="text-xs text-slate-400 mt-1">Líquido: {formatCurrency(metrics.netRevenue)}</p>
             </div>
 
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -237,15 +269,15 @@ export default function Finance() {
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
               <div className="flex justify-between items-start mb-4">
                 <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-xl">
-                  <Calendar className="text-amber-600 dark:text-amber-400" size={24} />
+                  <AlertTriangle className="text-amber-600 dark:text-amber-400" size={24} />
                 </div>
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400 px-2 py-1">
-                  A Compensar
+                  Taxas Pagas
                 </span>
               </div>
-              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Saldo Pendente</p>
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Custo Financeiro</p>
               <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                {formatCurrency(metrics.pending)}
+                {formatCurrency(totalFees)}
               </h3>
             </div>
           </div>
@@ -271,7 +303,9 @@ export default function Finance() {
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Categoria</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Data</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Valor</th>
+                    <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Valor Bruto</th>
+                    <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Taxa</th>
+                    <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Líquido</th>
                     <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Ações</th>
                   </tr>
                 </thead>
@@ -284,9 +318,12 @@ export default function Finance() {
                             "w-2 h-2 rounded-full mr-3",
                             transaction.type === 'income' ? "bg-green-500" : "bg-red-500"
                           )} />
-                          <span className="text-sm font-medium text-slate-900 dark:text-white">
-                            {transaction.desc}
-                          </span>
+                          <div>
+                              <span className="text-sm font-medium text-slate-900 dark:text-white block">
+                                {transaction.desc}
+                              </span>
+                              <span className="text-xs text-slate-500">{transaction.method}</span>
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
@@ -307,9 +344,18 @@ export default function Finance() {
                       </td>
                       <td className={cn(
                         "px-6 py-4 whitespace-nowrap text-sm font-bold text-right",
+                        transaction.type === 'income' ? "text-slate-700 dark:text-slate-300" : "text-red-600 dark:text-red-400"
+                      )}>
+                        {formatCurrency(Math.abs(transaction.amount))}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-red-500 font-medium">
+                        {transaction.fee && transaction.fee > 0 ? `-${formatCurrency(transaction.fee)}` : '-'}
+                      </td>
+                      <td className={cn(
+                        "px-6 py-4 whitespace-nowrap text-sm font-bold text-right",
                         transaction.type === 'income' ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
                       )}>
-                        {transaction.type === 'income' ? '+' : '-'}{formatCurrency(Math.abs(transaction.amount))}
+                        {transaction.type === 'income' ? '+' : '-'}{formatCurrency(Math.abs(transaction.netAmount || transaction.amount))}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -331,7 +377,7 @@ export default function Finance() {
                   ))}
                   {financialTransactions.length === 0 && (
                       <tr>
-                          <td colSpan={6} className="px-6 py-8 text-center text-slate-400">
+                          <td colSpan={8} className="px-6 py-8 text-center text-slate-400">
                               Nenhuma transação encontrada.
                           </td>
                       </tr>
@@ -341,10 +387,10 @@ export default function Finance() {
             </div>
           </div>
         </>
-      ) : (
-        // --- NOVA ABA: PREVISÃO FUTURA ---
+      )}
+
+      {activeTab === 'forecast' && (
         <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-          
           {/* Resumo da Projeção */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
              {/* Card 1: Receita Garantida */}
@@ -492,16 +538,85 @@ export default function Finance() {
                   <p className="text-xs text-slate-400 mt-1">Todas as semanas estão acima de 50% da meta.</p>
                 </div>
               )}
-
-              <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800">
-                <h4 className="font-bold text-sm text-slate-700 dark:text-slate-300 mb-2">Dica do Especialista</h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400 italic">
-                  "Semanas com baixa ocupação são ideais para oferecer serviços de ticket menor (lavagens, higienização) para atrair fluxo."
-                </p>
-              </div>
             </div>
           </div>
         </div>
+      )}
+
+      {activeTab === 'rates' && (
+          <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <div className="flex justify-between items-center mb-6">
+                      <div>
+                          <h3 className="font-bold text-lg text-slate-900 dark:text-white">Taxas de Pagamento</h3>
+                          <p className="text-sm text-slate-500 dark:text-slate-400">Configure as taxas cobradas por cada método para calcular o valor líquido real.</p>
+                      </div>
+                      <button 
+                          onClick={handleSaveRates}
+                          className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-colors flex items-center gap-2"
+                      >
+                          <CheckCircle2 size={18} /> Salvar Taxas
+                      </button>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm">
+                          <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+                              <tr>
+                                  <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Método</th>
+                                  <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Tipo de Taxa</th>
+                                  <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Valor da Taxa</th>
+                                  <th className="px-6 py-3 font-semibold text-slate-700 dark:text-slate-300">Prazo Recebimento (Dias)</th>
+                              </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                              {rates.map((rate, idx) => (
+                                  <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                                      <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">
+                                          {rate.method}
+                                      </td>
+                                      <td className="px-6 py-4">
+                                          <select 
+                                              value={rate.type}
+                                              onChange={(e) => handleRateChange(idx, 'type', e.target.value)}
+                                              className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white"
+                                          >
+                                              <option value="percentage">Porcentagem (%)</option>
+                                              <option value="fixed">Valor Fixo (R$)</option>
+                                          </select>
+                                      </td>
+                                      <td className="px-6 py-4">
+                                          <div className="flex items-center gap-2">
+                                              <input 
+                                                  type="number" 
+                                                  step="0.01"
+                                                  value={rate.rate}
+                                                  onChange={(e) => handleRateChange(idx, 'rate', parseFloat(e.target.value))}
+                                                  className="w-24 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white"
+                                              />
+                                              <span className="text-slate-500 font-bold">
+                                                  {rate.type === 'percentage' ? '%' : 'R$'}
+                                              </span>
+                                          </div>
+                                      </td>
+                                      <td className="px-6 py-4">
+                                          <div className="flex items-center gap-2">
+                                              <input 
+                                                  type="number" 
+                                                  value={rate.daysToReceive}
+                                                  onChange={(e) => handleRateChange(idx, 'daysToReceive', parseInt(e.target.value))}
+                                                  className="w-20 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white"
+                                              />
+                                              <span className="text-slate-500 text-xs">dias</span>
+                                          </div>
+                                      </td>
+                                  </tr>
+                              ))}
+                          </tbody>
+                      </table>
+                  </div>
+              </div>
+          </div>
       )}
     </div>
   );

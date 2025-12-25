@@ -5,7 +5,7 @@ import {
   EmployeeTransaction, MarketingCampaign,
   CompanySettings, SubscriptionDetails, FinancialTransaction, ClientPoints, FidelityCard, Reward,
   Redemption, TierConfig, TierLevel, ShopOwner, Notification, ServiceConsumption, AuthResponse,
-  SystemAlert, SocialPost, CustomAutomation, MessageLog, VEHICLE_SIZES
+  SystemAlert, SocialPost, CustomAutomation, MessageLog, VEHICLE_SIZES, PaymentRate
 } from '../types';
 import { addDays, formatISO, isAfter } from 'date-fns';
 import { db } from '../lib/db';
@@ -22,6 +22,15 @@ const defaultTiers: TierConfig[] = [
   { id: 'platinum', name: 'Platina', minPoints: 5000, color: 'from-blue-500 to-blue-600', benefits: ['20% de desconto', 'Brinde exclusivo'] }
 ];
 
+const defaultPaymentRates: PaymentRate[] = [
+    { method: 'Pix', rate: 0, type: 'percentage', daysToReceive: 0 },
+    { method: 'Dinheiro', rate: 0, type: 'percentage', daysToReceive: 0 },
+    { method: 'Cartão Crédito', rate: 3.99, type: 'percentage', daysToReceive: 30 },
+    { method: 'Cartão Débito', rate: 1.99, type: 'percentage', daysToReceive: 1 },
+    { method: 'Boleto', rate: 2.99, type: 'fixed', daysToReceive: 2 },
+    { method: 'Transferência', rate: 0, type: 'percentage', daysToReceive: 0 }
+];
+
 export const initialCompanySettings: CompanySettings = {
   name: 'Minha Oficina',
   slug: 'minha-oficina',
@@ -33,6 +42,7 @@ export const initialCompanySettings: CompanySettings = {
   logoUrl: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=150&q=80',
   initialBalance: 0,
   hourlyRate: 50,
+  paymentRates: defaultPaymentRates,
   whatsapp: {
     enabled: true,
     session: { status: 'disconnected' },
@@ -215,6 +225,7 @@ interface AppContextType {
   generatePKPass: (clientId: string) => string;
   generateGoogleWallet: (clientId: string) => string;
   seedDefaultRewards: () => Promise<void>;
+  calculateFee: (amount: number, method: string) => { fee: number, netAmount: number };
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -255,6 +266,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => { priceMatrixRef.current = priceMatrix; }, [priceMatrix]);
   useEffect(() => { servicesRef.current = services; }, [services]);
 
+  // ... (Keep existing effects and loadTenantData) ...
   useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
@@ -314,7 +326,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadTenantData = useCallback(async (tenantData: any) => {
     try {
         setTenantId(tenantData.id);
-        setCompanySettings({ ...initialCompanySettings, ...tenantData.settings });
+        // Merge with defaults to ensure new fields like paymentRates exist
+        setCompanySettings({ 
+            ...initialCompanySettings, 
+            ...tenantData.settings,
+            paymentRates: tenantData.settings?.paymentRates || initialCompanySettings.paymentRates
+        });
         if (tenantData.subscription) setSubscription(tenantData.subscription);
 
         if (isValidUUID(tenantData.id)) {
@@ -423,6 +440,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     init();
   }, [loadTenantData]);
 
+  // --- HELPER FUNCTION TO CALCULATE FEES ---
+  const calculateFee = (amount: number, method: string) => {
+      const rateConfig = companySettings.paymentRates?.find(r => r.method === method);
+      
+      if (!rateConfig) {
+          return { fee: 0, netAmount: amount };
+      }
+
+      let fee = 0;
+      if (rateConfig.type === 'percentage') {
+          fee = (amount * rateConfig.rate) / 100;
+      } else {
+          fee = rateConfig.rate;
+      }
+
+      return {
+          fee: parseFloat(fee.toFixed(2)),
+          netAmount: parseFloat((amount - fee).toFixed(2))
+      };
+  };
+
+  // ... (Keep existing addClient, updateClient, deleteClient, addVehicle, updateVehicle, removeVehicle, updateCompanySettings) ...
   const addClient = async (clientData: Partial<Client>) => {
     try {
       const newClient = {
@@ -502,6 +541,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Error updating client:", error);
     }
+  };
+
+  const recalculateClientMetrics = async (clientId: string) => {
+    const clientOrders = workOrders.filter(o => o.clientId === clientId && (o.status === 'Concluído' || o.status === 'Entregue'));
+    const visitCount = clientOrders.length;
+    const ltv = clientOrders.reduce((acc, order) => acc + (order.totalValue || 0), 0);
+    
+    let lastVisit = undefined;
+    if (clientOrders.length > 0) {
+        const dates = clientOrders
+            .map(o => o.createdAt ? new Date(o.createdAt).getTime() : 0)
+            .filter(d => d > 0);
+        
+        if (dates.length > 0) {
+            lastVisit = new Date(Math.max(...dates)).toISOString();
+        }
+    }
+
+    await updateClient(clientId, {
+        visitCount,
+        ltv,
+        lastVisit
+    });
+  };
+
+  const updateClientLTV = async (clientId: string, amount: number) => {
+      const client = clients.find(c => c.id === clientId);
+      if (client) {
+          await updateClient(clientId, { ltv: (client.ltv || 0) + amount });
+      }
+  };
+
+  const updateClientVisits = async (clientId: string, amount: number) => {
+      const client = clients.find(c => c.id === clientId);
+      if (client) {
+          await updateClient(clientId, { visitCount: (client.visitCount || 0) + amount });
+      }
   };
 
   const deleteClient = async (id: string) => {
@@ -624,6 +700,76 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const addFinancialTransaction = (trans: FinancialTransaction) => {
+    // Calculate Fee and Net Amount if not already provided or if it's an income
+    let finalTrans = { ...trans };
+    
+    if (trans.type === 'income' && (!trans.fee || trans.fee === 0)) {
+        const { fee, netAmount } = calculateFee(trans.amount, trans.method);
+        finalTrans.fee = fee;
+        finalTrans.netAmount = netAmount;
+    }
+
+    setFinancialTransactions(prev => [...prev, finalTrans]);
+    db.create('financial_transactions', finalTrans);
+    
+    if (tenantId && isValidUUID(tenantId)) {
+        supabase.from('financial_transactions').insert({
+            tenant_id: tenantId,
+            description: finalTrans.desc,
+            category: finalTrans.category,
+            amount: finalTrans.amount,
+            type: finalTrans.type,
+            date: finalTrans.date,
+            method: finalTrans.method,
+            status: finalTrans.status
+        }).then(({ error }) => {
+            if(error) console.error("Error adding transaction", error);
+        });
+    }
+  };
+
+  const updateFinancialTransaction = (id: number, updates: Partial<FinancialTransaction>) => {
+    setFinancialTransactions(prev => prev.map(t => {
+        if (t.id === id) {
+            let updatedT = { ...t, ...updates };
+            
+            // Recalculate fee if amount or method changed for income
+            if (updatedT.type === 'income' && (updates.amount !== undefined || updates.method !== undefined)) {
+                const { fee, netAmount } = calculateFee(updatedT.amount, updatedT.method);
+                updatedT.fee = fee;
+                updatedT.netAmount = netAmount;
+            }
+            
+            return updatedT;
+        }
+        return t;
+    }));
+    
+    db.update('financial_transactions', id, updates);
+    
+    if (tenantId && isValidUUID(tenantId)) {
+        const payload: any = {};
+        if (updates.desc) payload.description = updates.desc;
+        if (updates.category) payload.category = updates.category;
+        if (updates.amount !== undefined) payload.amount = updates.amount;
+        if (updates.type) payload.type = updates.type;
+        if (updates.date) payload.date = updates.date;
+        if (updates.method) payload.method = updates.method;
+        if (updates.status) payload.status = updates.status;
+        
+        supabase.from('financial_transactions').update(payload).eq('id', id);
+    }
+  };
+
+  const deleteFinancialTransaction = (id: number) => {
+    setFinancialTransactions(prev => prev.filter(t => t.id !== id));
+    db.delete('financial_transactions', id);
+    if (tenantId && isValidUUID(tenantId)) {
+        supabase.from('financial_transactions').delete().eq('id', id);
+    }
+  };
+
   const addPointsToClient = async (clientId: string, workOrderId: string, points: number, description: string) => {
       const entry = {
           id: generateUUID(),
@@ -655,109 +801,291 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const generateVoucherCode = () => 'V-' + Math.random().toString(36).substr(2, 6).toUpperCase();
 
-  const claimReward = (clientId: string, rewardId: string) => {
-      const cp = getClientPoints(clientId);
-      const reward = rewards.find(r => r.id === rewardId);
-      
-      if (!cp || !reward) return { success: false, message: 'Dados inválidos' };
-      if (cp.totalPoints < reward.requiredPoints) return { success: false, message: 'Pontos insuficientes' };
-
-      const redemption = {
-          id: generateUUID(),
-          tenant_id: tenantId,
-          client_id: clientId,
-          reward_id: rewardId,
-          reward_name: reward.name,
-          code: generateVoucherCode(),
-          points_cost: reward.requiredPoints,
-          status: 'active',
-          redeemed_at: new Date().toISOString()
-      };
-
-      const historyEntry = {
-          id: generateUUID(),
-          tenant_id: tenantId,
-          client_id: clientId,
-          points: -reward.requiredPoints,
-          description: `Resgate: ${reward.name}`,
-          type: 'redeem',
-          created_at: new Date().toISOString()
-      };
-
-      setRedemptions(prev => [...prev, redemption as any]);
-      setPointsHistory(prev => [...prev, historyEntry]);
-      
-      db.create('redemptions', redemption);
-      db.create('points_history', historyEntry);
-
+  const getClientRedemptions = (clientId: string) => redemptions.filter(r => r.clientId === clientId);
+  const generatePKPass = () => '';
+  const generateGoogleWallet = () => '';
+  const seedDefaultRewards = async () => {};
+  const markNotificationAsRead = () => {};
+  const clearAllNotifications = () => {};
+  const addNotification = () => {};
+  const markAlertResolved = () => {};
+  const updateServiceConsumption = async (consumption: ServiceConsumption) => {
+      setServiceConsumptions(prev => {
+          const index = prev.findIndex(sc => sc.serviceId === consumption.serviceId);
+          if (index >= 0) {
+              const newConsumptions = [...prev];
+              newConsumptions[index] = consumption;
+              return newConsumptions;
+          }
+          return [...prev, consumption];
+      });
+      const service = services.find(s => s.id === consumption.serviceId);
+      if (service) {
+          const updatedService = {
+              ...service,
+              price_matrix: { ...service.price_matrix, consumption: consumption.items }
+          };
+          await db.update('services', service.id, updatedService);
+          if (tenantId && isValidUUID(tenantId)) {
+              await supabase.from('services').update({ price_matrix: updatedService.price_matrix }).eq('id', service.id);
+          }
+      }
+      return true;
+  };
+  const getServiceConsumption = (serviceId: string) => serviceConsumptions.find(sc => sc.serviceId === serviceId);
+  const calculateServiceCost = (serviceId: string) => {
+      const consumption = getServiceConsumption(serviceId);
+      if (!consumption) return 0;
+      return consumption.items.reduce((total, item) => {
+          const invItem = inventory.find(i => String(i.id) === String(item.inventoryId));
+          if (!invItem) return total;
+          let multiplier = 1;
+          if (invItem.unit === 'L' && item.usageUnit === 'ml') multiplier = 0.001;
+          else if (invItem.unit === 'kg' && item.usageUnit === 'g') multiplier = 0.001;
+          else if (invItem.unit === 'ml' && item.usageUnit === 'L') multiplier = 1000;
+          else if (invItem.unit === 'g' && item.usageUnit === 'kg') multiplier = 1000;
+          return total + (invItem.costPrice * item.quantity * multiplier);
+      }, 0);
+  };
+  const addWorkOrder = async (os: WorkOrder) => {
+    try {
+      const newOS = { ...os, tenant_id: tenantId };
+      setWorkOrders(prev => [...prev, newOS]);
+      await db.create('work_orders', newOS);
       if (tenantId && isValidUUID(tenantId)) {
-          supabase.from('redemptions').insert(redemption as any).then(({ error }) => {
-              if(error) console.error("Redemption error", error);
-          });
-          supabase.from('points_history').insert(historyEntry).then(({ error }) => {
-              if(error) console.error("Points history error", error);
+        if (isValidUUID(newOS.id)) {
+            const { error } = await supabase.from('work_orders').insert({
+              id: newOS.id,
+              tenant_id: tenantId,
+              client_id: newOS.clientId,
+              vehicle_plate: newOS.plate,
+              service_summary: newOS.service,
+              status: newOS.status,
+              total_value: newOS.totalValue,
+              technician: newOS.technician,
+              deadline: newOS.deadline,
+              created_at: newOS.createdAt,
+              payment_status: newOS.paymentStatus,
+              payment_method: newOS.paymentMethod,
+              nps_score: newOS.npsScore,
+              json_data: newOS
+            });
+            if (error) console.error("Supabase insert error:", error);
+        } else { console.warn("Skipping Supabase insert: WorkOrder ID is not a valid UUID", newOS.id); }
+      }
+      return true;
+    } catch (error) { console.error("Error adding work order:", error); return false; }
+  };
+  const updateWorkOrder = async (id: string, updates: Partial<WorkOrder>) => {
+    try {
+      setWorkOrders(prev => prev.map(o => o.id === id ? { ...o, ...updates } : o));
+      const currentOS = workOrders.find(o => o.id === id);
+      if (!currentOS) return false;
+      const updatedOS = { ...currentOS, ...updates };
+      await db.update('work_orders', id, updates);
+      if (tenantId && isValidUUID(tenantId)) {
+        if (isValidUUID(id)) {
+            const payload: any = { json_data: updatedOS };
+            if (updates.clientId) payload.client_id = updates.clientId;
+            if (updates.plate) payload.vehicle_plate = updates.plate;
+            if (updates.service) payload.service_summary = updates.service;
+            if (updates.status) payload.status = updates.status;
+            if (updates.totalValue !== undefined) payload.total_value = updates.totalValue;
+            if (updates.technician) payload.technician = updates.technician;
+            if (updates.deadline) payload.deadline = updates.deadline;
+            if (updates.paymentStatus) payload.payment_status = updates.paymentStatus;
+            if (updates.paymentMethod) payload.payment_method = updates.paymentMethod;
+            if (updates.npsScore !== undefined) payload.nps_score = updates.npsScore;
+            const { error } = await supabase.from('work_orders').update(payload).eq('id', id);
+            if (error) console.error("Supabase update error:", error);
+        } else { console.warn("Skipping Supabase update: WorkOrder ID is not a valid UUID", id); }
+      }
+      return true;
+    } catch (error) { console.error("Error updating work order:", error); return false; }
+  };
+  const completeWorkOrder = async (id: string, orderSnapshot?: WorkOrder) => {
+      const os = orderSnapshot || workOrders.find(o => o.id === id);
+      if (!os) return;
+      if (os.serviceIds) { os.serviceIds.forEach(sId => deductStock(sId)); } else if (os.serviceId) { deductStock(os.serviceId); }
+      if (os.clientId) { await recalculateClientMetrics(os.clientId); }
+  };
+  const addEmployee = async (employee: Omit<Employee, 'id' | 'balance'>) => {
+    try {
+        const newEmployee: Employee = {
+            ...employee,
+            id: generateUUID(),
+            balance: 0,
+            tenant_id: tenantId || undefined,
+            created_at: new Date().toISOString()
+        } as Employee;
+        setEmployees(prev => [...prev, newEmployee]);
+        await db.create('employees', newEmployee);
+        if (tenantId && isValidUUID(tenantId)) {
+            await supabase.from('employees').insert({
+                id: newEmployee.id,
+                tenant_id: tenantId,
+                name: newEmployee.name,
+                role: newEmployee.role,
+                pin: newEmployee.pin,
+                active: newEmployee.active,
+                balance: newEmployee.balance,
+                created_at: newEmployee.created_at || new Date().toISOString(),
+                salary_data: {
+                    salaryType: newEmployee.salaryType,
+                    fixedSalary: newEmployee.fixedSalary,
+                    commissionRate: newEmployee.commissionRate,
+                    commissionBase: newEmployee.commissionBase
+                }
+            });
+        }
+    } catch (error) {
+        console.error("Error adding employee:", error);
+    }
+  };
+  const updateEmployee = async (id: string, updates: Partial<Employee>) => {
+      try {
+          setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
+          await db.update('employees', id, updates);
+          if (tenantId && isValidUUID(tenantId)) {
+              const currentEmployee = employees.find(e => e.id === id);
+              const merged = { ...currentEmployee, ...updates };
+              const payload: any = {
+                  name: merged.name,
+                  role: merged.role,
+                  pin: merged.pin,
+                  active: merged.active,
+                  balance: merged.balance,
+                  salary_data: {
+                      salaryType: merged.salaryType,
+                      fixedSalary: merged.fixedSalary,
+                      commissionRate: merged.commissionRate,
+                      commissionBase: merged.commissionBase
+                  }
+              };
+              await supabase.from('employees').update(payload).eq('id', id);
+          }
+      } catch (error) {
+          console.error("Error updating employee:", error);
+      }
+  };
+  const deleteEmployee = async (id: string) => {
+      try {
+          setEmployees(prev => prev.filter(e => e.id !== id));
+          await db.delete('employees', id);
+          if (tenantId && isValidUUID(tenantId)) {
+              await supabase.from('employees').delete().eq('id', id);
+          }
+      } catch (error) {
+          console.error("Error deleting employee:", error);
+      }
+  };
+  const assignTask = () => {};
+  const startTask = () => {};
+  const stopTask = () => {};
+  const addEmployeeTransaction = () => {};
+  const updateEmployeeTransaction = () => {};
+  const deleteEmployeeTransaction = () => {};
+  const createCampaign = () => {};
+  const updateCampaign = () => {};
+  const deleteCampaign = () => {};
+  const seedDefaultCampaigns = async () => {};
+  const seedMockReviews = async () => {};
+  const getWhatsappLink = (phone: string, msg: string) => {
+    const cleanPhone = phone.replace(/\D/g, '');
+    const finalPhone = (cleanPhone.length === 10 || cleanPhone.length === 11) 
+      ? `55${cleanPhone}` 
+      : cleanPhone;
+    return `https://wa.me/${finalPhone}?text=${encodeURIComponent(msg)}`;
+  };
+  const createSocialPost = () => {};
+  const generateSocialContent = async () => ({ caption: '', hashtags: [] });
+  const getClientPoints = (id: string) => clientPoints.find(cp => cp.clientId === id);
+  const createFidelityCard = async (clientId: string): Promise<FidelityCard> => {
+    const existing = fidelityCards.find(c => c.clientId === clientId);
+    if (existing) return existing;
+    const newCard: FidelityCard = {
+      clientId,
+      cardNumber: Math.floor(100000000000 + Math.random() * 900000000000).toString(), // 12 digits
+      cardHolder: clients.find(c => c.id === clientId)?.name || 'Cliente',
+      cardColor: 'blue',
+      qrCode: '', // Generated on frontend
+      expiresAt: addDays(new Date(), 365 * 2).toISOString(), // 2 years
+      issueDate: new Date().toISOString(),
+      tenant_id: tenantId || undefined
+    };
+    setFidelityCards(prev => [...prev, newCard]);
+    await db.create('fidelity_cards', newCard);
+    if (tenantId && isValidUUID(tenantId)) {
+        const { error } = await supabase.from('fidelity_cards').insert({
+            tenant_id: tenantId,
+            client_id: clientId,
+            card_number: newCard.cardNumber,
+            created_at: newCard.issueDate
+        });
+        if (error) console.error("Error creating fidelity card in Supabase:", error);
+    }
+    return newCard;
+  };
+  const getFidelityCard = (clientId: string) => fidelityCards.find(c => c.clientId === clientId);
+  const addReward = () => {};
+  const updateReward = () => {};
+  const deleteReward = () => {};
+  const getRewardsByLevel = (level: TierLevel) => rewards.filter(r => r.requiredLevel === level || (level === 'platinum' && r.requiredLevel !== 'platinum'));
+  const updateTierConfig = () => {};
+  const claimReward = (clientId: string, rewardId: string) => {
+      const reward = rewards.find(r => r.id === rewardId);
+      const points = getClientPoints(clientId);
+      if (!reward || !points) return { success: false, message: 'Recompensa ou cliente não encontrado.' };
+      if (points.totalPoints < reward.requiredPoints) return { success: false, message: 'Pontos insuficientes.' };
+      const voucherCode = generateVoucherCode();
+      const redemption: Redemption = {
+          id: generateUUID(),
+          clientId,
+          rewardId,
+          rewardName: reward.name,
+          code: voucherCode,
+          pointsCost: reward.requiredPoints,
+          status: 'active',
+          redeemedAt: new Date().toISOString(),
+          tenant_id: tenantId || undefined
+      };
+      setRedemptions(prev => [...prev, redemption]);
+      db.create('redemptions', redemption);
+      // Deduct points
+      addPointsToClient(clientId, '', -reward.requiredPoints, `Resgate: ${reward.name}`);
+      if (tenantId && isValidUUID(tenantId)) {
+          supabase.from('redemptions').insert({
+              id: redemption.id,
+              tenant_id: tenantId,
+              client_id: clientId,
+              reward_id: rewardId,
+              reward_name: reward.name,
+              code: voucherCode,
+              points_cost: reward.requiredPoints,
+              status: 'active',
+              redeemed_at: redemption.redeemedAt
           });
       }
-
-      return { success: true, message: 'Recompensa resgatada!', voucherCode: redemption.code };
+      return { success: true, message: `Resgate realizado! Código: ${voucherCode}`, voucherCode };
   };
-
   const useVoucher = (code: string, workOrderId: string) => {
       const redemption = redemptions.find(r => r.code === code && r.status === 'active');
       if (!redemption) return false;
-
       const updates = { status: 'used', used_at: new Date().toISOString(), used_in_work_order_id: workOrderId };
-      
-      setRedemptions(prev => prev.map(r => r.id === redemption.id ? { ...r, ...updates } : r) as any);
+      // @ts-ignore
+      setRedemptions(prev => prev.map(r => r.id === redemption.id ? { ...r, ...updates } : r));
       db.update('redemptions', redemption.id, updates);
-
       if (tenantId && isValidUUID(tenantId)) {
           supabase.from('redemptions').update(updates).eq('id', redemption.id);
       }
       return true;
   };
-
   const getVoucherDetails = (code: string) => {
       const redemption = redemptions.find(r => r.code === code);
       if (!redemption) return null;
       const reward = rewards.find(r => r.id === redemption.rewardId);
       return { redemption, reward };
   };
-
-  const recalculateClientMetrics = async (clientId: string) => {
-      const clientOrders = workOrders.filter(os => os.clientId === clientId && (os.status === 'Concluído' || os.status === 'Entregue'));
-      const visitCount = clientOrders.length;
-      const ltv = clientOrders.reduce((acc, os) => acc + (os.totalValue || 0), 0);
-      
-      let lastVisit = null;
-      if (clientOrders.length > 0) {
-          const dates = clientOrders.map(os => new Date(os.createdAt || os.paidAt || '').getTime()).filter(d => !isNaN(d));
-          if (dates.length > 0) {
-              lastVisit = new Date(Math.max(...dates)).toISOString();
-          }
-      }
-
-      setClients(prev => prev.map(c => c.id === clientId ? { ...c, ltv, visitCount, lastVisit: lastVisit || c.lastVisit } : c));
-      
-      await db.update('clients', clientId, { ltv, visitCount, lastVisit: lastVisit || undefined });
-      
-      if (tenantId && isValidUUID(tenantId)) {
-          await supabase.from('clients').update({ 
-              ltv, 
-              visit_count: visitCount,
-              last_visit: lastVisit 
-          }).eq('id', clientId);
-      }
-  };
-
-  const updateClientLTV = (clientId: string, amount: number) => {
-      recalculateClientMetrics(clientId);
-  };
-
-  const updateClientVisits = (clientId: string, amount: number) => {
-      recalculateClientMetrics(clientId);
-  };
-
   const login = (pin: string) => { const employee = employees.find(e => e.pin === pin && e.active); if (employee) { setCurrentUser(employee); return true; } return false; };
   const logout = () => setCurrentUser(null);
   const loginOwner = async (email: string, password: string) => { const users = await db.getAll<any>('users'); const user = users.find(u => u.email === email && u.password === password); if (user) { setOwnerUser(user); localStorage.setItem('cristal_care_user', JSON.stringify(user)); const tenants = await db.getAll<any>('tenants'); const tenant = tenants.find(t => t.owner_id === user.id); if (tenant) await loadTenantData(tenant); return { success: true }; } return { success: false, error: { message: 'Credenciais inválidas' } }; };
@@ -1048,261 +1376,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const entry = priceMatrix.find(p => p.serviceId === serviceId && p.size === size);
       return entry ? entry.price : 0;
   };
-  const calculateServiceCost = (serviceId: string) => {
-      const consumption = getServiceConsumption(serviceId);
-      if (!consumption) return 0;
-      return consumption.items.reduce((total, item) => {
-          const invItem = inventory.find(i => String(i.id) === String(item.inventoryId));
-          if (!invItem) return total;
-          let multiplier = 1;
-          if (invItem.unit === 'L' && item.usageUnit === 'ml') multiplier = 0.001;
-          else if (invItem.unit === 'kg' && item.usageUnit === 'g') multiplier = 0.001;
-          else if (invItem.unit === 'ml' && item.usageUnit === 'L') multiplier = 1000;
-          else if (invItem.unit === 'g' && item.usageUnit === 'kg') multiplier = 1000;
-          return total + (invItem.costPrice * item.quantity * multiplier);
-      }, 0);
-  };
-  const addWorkOrder = async (os: WorkOrder) => {
-    try {
-      const newOS = { ...os, tenant_id: tenantId };
-      setWorkOrders(prev => [...prev, newOS]);
-      await db.create('work_orders', newOS);
-      if (tenantId && isValidUUID(tenantId)) {
-        if (isValidUUID(newOS.id)) {
-            const { error } = await supabase.from('work_orders').insert({
-              id: newOS.id,
-              tenant_id: tenantId,
-              client_id: newOS.clientId,
-              vehicle_plate: newOS.plate,
-              service_summary: newOS.service,
-              status: newOS.status,
-              total_value: newOS.totalValue,
-              technician: newOS.technician,
-              deadline: newOS.deadline,
-              created_at: newOS.createdAt,
-              payment_status: newOS.paymentStatus,
-              payment_method: newOS.paymentMethod,
-              nps_score: newOS.npsScore,
-              json_data: newOS
-            });
-            if (error) console.error("Supabase insert error:", error);
-        } else { console.warn("Skipping Supabase insert: WorkOrder ID is not a valid UUID", newOS.id); }
-      }
-      return true;
-    } catch (error) { console.error("Error adding work order:", error); return false; }
-  };
-  const updateWorkOrder = async (id: string, updates: Partial<WorkOrder>) => {
-    try {
-      setWorkOrders(prev => prev.map(o => o.id === id ? { ...o, ...updates } : o));
-      const currentOS = workOrders.find(o => o.id === id);
-      if (!currentOS) return false;
-      const updatedOS = { ...currentOS, ...updates };
-      await db.update('work_orders', id, updates);
-      if (tenantId && isValidUUID(tenantId)) {
-        if (isValidUUID(id)) {
-            const payload: any = { json_data: updatedOS };
-            if (updates.clientId) payload.client_id = updates.clientId;
-            if (updates.plate) payload.vehicle_plate = updates.plate;
-            if (updates.service) payload.service_summary = updates.service;
-            if (updates.status) payload.status = updates.status;
-            if (updates.totalValue !== undefined) payload.total_value = updates.totalValue;
-            if (updates.technician) payload.technician = updates.technician;
-            if (updates.deadline) payload.deadline = updates.deadline;
-            if (updates.paymentStatus) payload.payment_status = updates.paymentStatus;
-            if (updates.paymentMethod) payload.payment_method = updates.paymentMethod;
-            if (updates.npsScore !== undefined) payload.nps_score = updates.npsScore;
-            const { error } = await supabase.from('work_orders').update(payload).eq('id', id);
-            if (error) console.error("Supabase update error:", error);
-        } else { console.warn("Skipping Supabase update: WorkOrder ID is not a valid UUID", id); }
-      }
-      return true;
-    } catch (error) { console.error("Error updating work order:", error); return false; }
-  };
-  const completeWorkOrder = async (id: string, orderSnapshot?: WorkOrder) => {
-      const os = orderSnapshot || workOrders.find(o => o.id === id);
-      if (!os) return;
-      if (os.serviceIds) { os.serviceIds.forEach(sId => deductStock(sId)); } else if (os.serviceId) { deductStock(os.serviceId); }
-      if (os.clientId) { await recalculateClientMetrics(os.clientId); }
-  };
-  
-  const addEmployee = async (employee: Omit<Employee, 'id' | 'balance'>) => {
-    try {
-        const newEmployee: Employee = {
-            ...employee,
-            id: generateUUID(),
-            balance: 0,
-            tenant_id: tenantId || undefined,
-            created_at: new Date().toISOString()
-        } as Employee;
-
-        setEmployees(prev => [...prev, newEmployee]);
-        await db.create('employees', newEmployee);
-
-        if (tenantId && isValidUUID(tenantId)) {
-            await supabase.from('employees').insert({
-                id: newEmployee.id,
-                tenant_id: tenantId,
-                name: newEmployee.name,
-                role: newEmployee.role,
-                pin: newEmployee.pin,
-                active: newEmployee.active,
-                balance: newEmployee.balance,
-                created_at: newEmployee.created_at || new Date().toISOString(),
-                salary_data: {
-                    salaryType: newEmployee.salaryType,
-                    fixedSalary: newEmployee.fixedSalary,
-                    commissionRate: newEmployee.commissionRate,
-                    commissionBase: newEmployee.commissionBase
-                }
-            });
-        }
-    } catch (error) {
-        console.error("Error adding employee:", error);
-    }
-  };
-
-  const updateEmployee = async (id: string, updates: Partial<Employee>) => {
-      try {
-          setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
-          await db.update('employees', id, updates);
-
-          if (tenantId && isValidUUID(tenantId)) {
-              const currentEmployee = employees.find(e => e.id === id);
-              const merged = { ...currentEmployee, ...updates };
-              
-              const payload: any = {
-                  name: merged.name,
-                  role: merged.role,
-                  pin: merged.pin,
-                  active: merged.active,
-                  balance: merged.balance,
-                  salary_data: {
-                      salaryType: merged.salaryType,
-                      fixedSalary: merged.fixedSalary,
-                      commissionRate: merged.commissionRate,
-                      commissionBase: merged.commissionBase
-                  }
-              };
-              
-              await supabase.from('employees').update(payload).eq('id', id);
-          }
-      } catch (error) {
-          console.error("Error updating employee:", error);
-      }
-  };
-
-  const deleteEmployee = async (id: string) => {
-      try {
-          setEmployees(prev => prev.filter(e => e.id !== id));
-          await db.delete('employees', id);
-          
-          if (tenantId && isValidUUID(tenantId)) {
-              await supabase.from('employees').delete().eq('id', id);
-          }
-      } catch (error) {
-          console.error("Error deleting employee:", error);
-      }
-  };
-
-  const assignTask = () => {};
-  const startTask = () => {};
-  const stopTask = () => {};
-  const addEmployeeTransaction = () => {};
-  const updateEmployeeTransaction = () => {};
-  const deleteEmployeeTransaction = () => {};
-  const addFinancialTransaction = () => {};
-  const updateFinancialTransaction = () => {};
-  const deleteFinancialTransaction = () => {};
-  const createCampaign = () => {};
-  const updateCampaign = () => {};
-  const deleteCampaign = () => {};
-  const seedDefaultCampaigns = async () => {};
-  const seedMockReviews = async () => {};
-  
-  const getWhatsappLink = (phone: string, msg: string) => {
-    const cleanPhone = phone.replace(/\D/g, '');
-    const finalPhone = (cleanPhone.length === 10 || cleanPhone.length === 11) 
-      ? `55${cleanPhone}` 
-      : cleanPhone;
-      
-    return `https://wa.me/${finalPhone}?text=${encodeURIComponent(msg)}`;
-  };
-
-  const createSocialPost = () => {};
-  const generateSocialContent = async () => ({ caption: '', hashtags: [] });
-  const getClientPoints = (id: string) => clientPoints.find(cp => cp.clientId === id);
-  
-  // FIX: Implement createFidelityCard properly
-  const createFidelityCard = async (clientId: string): Promise<FidelityCard> => {
-    // Check if card already exists
-    const existing = fidelityCards.find(c => c.clientId === clientId);
-    if (existing) return existing;
-
-    const newCard: FidelityCard = {
-      clientId,
-      cardNumber: Math.floor(100000000000 + Math.random() * 900000000000).toString(), // 12 digits
-      cardHolder: clients.find(c => c.id === clientId)?.name || 'Cliente',
-      cardColor: 'blue',
-      qrCode: '', // Generated on frontend
-      expiresAt: addDays(new Date(), 365 * 2).toISOString(), // 2 years
-      issueDate: new Date().toISOString(),
-      tenant_id: tenantId || undefined
-    };
-
-    setFidelityCards(prev => [...prev, newCard]);
-    await db.create('fidelity_cards', newCard);
-
-    if (tenantId && isValidUUID(tenantId)) {
-        const { error } = await supabase.from('fidelity_cards').insert({
-            tenant_id: tenantId,
-            client_id: clientId,
-            card_number: newCard.cardNumber,
-            created_at: newCard.issueDate
-        });
-        if (error) console.error("Error creating fidelity card in Supabase:", error);
-    }
-
-    return newCard;
-  };
-
-  const getFidelityCard = (clientId: string) => fidelityCards.find(c => c.clientId === clientId);
-  const addReward = () => {};
-  const updateReward = () => {};
-  const deleteReward = () => {};
-  const getRewardsByLevel = (level: TierLevel) => rewards.filter(r => r.requiredLevel === level || (level === 'platinum' && r.requiredLevel !== 'platinum'));
-  const updateTierConfig = () => {};
-  const getClientRedemptions = (clientId: string) => redemptions.filter(r => r.clientId === clientId);
-  const generatePKPass = () => '';
-  const generateGoogleWallet = () => '';
-  const seedDefaultRewards = async () => {};
-  const markNotificationAsRead = () => {};
-  const clearAllNotifications = () => {};
-  const addNotification = () => {};
-  const markAlertResolved = () => {};
-  const updateServiceConsumption = async (consumption: ServiceConsumption) => {
-      setServiceConsumptions(prev => {
-          const index = prev.findIndex(sc => sc.serviceId === consumption.serviceId);
-          if (index >= 0) {
-              const newConsumptions = [...prev];
-              newConsumptions[index] = consumption;
-              return newConsumptions;
-          }
-          return [...prev, consumption];
-      });
-      const service = services.find(s => s.id === consumption.serviceId);
-      if (service) {
-          const updatedService = {
-              ...service,
-              price_matrix: { ...service.price_matrix, consumption: consumption.items }
-          };
-          await db.update('services', service.id, updatedService);
-          if (tenantId && isValidUUID(tenantId)) {
-              await supabase.from('services').update({ price_matrix: updatedService.price_matrix }).eq('id', service.id);
-          }
-      }
-      return true;
-  };
-  const getServiceConsumption = (serviceId: string) => serviceConsumptions.find(sc => sc.serviceId === serviceId);
 
   return (
     <AppContext.Provider value={{
@@ -1329,7 +1402,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       generateSocialContent, addPointsToClient, getClientPoints, createFidelityCard,
       getFidelityCard, addReward, updateReward, deleteReward, getRewardsByLevel,
       updateTierConfig, claimReward, getClientRedemptions, useVoucher, getVoucherDetails,
-      generatePKPass, generateGoogleWallet, seedDefaultRewards
+      generatePKPass, generateGoogleWallet, seedDefaultRewards, calculateFee
     }}>
       {children}
     </AppContext.Provider>
