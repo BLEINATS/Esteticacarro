@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { SaaSPlan, SaaSTenant, TokenPackage, SaaSTokenTransaction, SaaSTransaction } from '../types';
+import { SaaSPlan, SaaSTenant, TokenPackage, SaaSTokenTransaction, SaaSTransaction, SupportTicket } from '../types';
 import { supabase } from '../lib/supabase';
 import { syncProductToStripe } from '../services/stripe';
 
@@ -13,7 +13,8 @@ export interface SaaSSettings {
   adminPassword?: string;
   whatsappGlobal?: {
     enabled: boolean;
-    baseUrl: string;
+    baseUrl?: string; // Agora opcional/padrão
+    instanceId: string;
     apiKey: string;
     webhookUrl?: string;
   };
@@ -25,6 +26,7 @@ interface SuperAdminContextType {
   tokenPackages: TokenPackage[];
   tokenLedger: SaaSTokenTransaction[];
   saasTransactions: SaaSTransaction[];
+  supportTickets: SupportTicket[];
   isAuthenticated: boolean;
   saasSettings: SaaSSettings;
   login: (password: string) => Promise<boolean>;
@@ -47,6 +49,7 @@ interface SuperAdminContextType {
   deleteSaaSTransaction: (id: string) => Promise<void>;
 
   updateSaaSSettings: (settings: Partial<SaaSSettings>) => Promise<void>;
+  respondToTicket: (ticketId: string, response: string, status: SupportTicket['status']) => Promise<boolean>;
   
   totalMRR: number;
   activeTenantsCount: number;
@@ -72,7 +75,8 @@ const initialSaaSSettings: SaaSSettings = {
   adminPassword: 'admin',
   whatsappGlobal: {
     enabled: false,
-    baseUrl: 'https://w-api.app/api',
+    baseUrl: 'https://api.w-api.app', // Padrão
+    instanceId: '',
     apiKey: '',
     webhookUrl: ''
   }
@@ -85,6 +89,7 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
   const [saasSettings, setSaasSettings] = useState<SaaSSettings>(initialSaaSSettings);
   const [tokenLedger, setTokenLedger] = useState<SaaSTokenTransaction[]>([]);
   const [saasTransactions, setSaasTransactions] = useState<SaaSTransaction[]>([]);
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
   
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('saas_admin_auth') === 'true';
@@ -229,6 +234,25 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
         setSaasTransactions(transData as any[]);
       }
 
+      // 7. Support Tickets
+      const { data: ticketsData } = await supabase.from('support_tickets').select('*').order('created_at', { ascending: false });
+      if (ticketsData) {
+        setSupportTickets(ticketsData.map(t => ({
+            id: t.id,
+            tenantId: t.tenant_id,
+            userId: t.user_id,
+            userName: t.user_name,
+            type: t.type,
+            subject: t.subject,
+            message: t.message,
+            status: t.status,
+            priority: t.priority,
+            adminResponse: t.admin_response,
+            createdAt: t.created_at,
+            updatedAt: t.updated_at
+        })));
+      }
+
     } catch (error) {
       console.error("Error loading Super Admin data:", error);
     }
@@ -286,6 +310,7 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // ... (Rest of the functions remain the same)
   // Tenants
   const addTenant = async (_tenantData: any) => {
       console.log('Use register flow to add tenants');
@@ -456,6 +481,26 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
       await supabase.from('saas_financial_transactions').delete().eq('id', id);
   };
 
+  // Support Tickets
+  const respondToTicket = async (ticketId: string, response: string, status: SupportTicket['status']) => {
+      try {
+          const { error } = await supabase.from('support_tickets').update({
+              admin_response: response,
+              status: status,
+              updated_at: new Date().toISOString()
+          }).eq('id', ticketId);
+          
+          if (!error) {
+              setSupportTickets(prev => prev.map(t => t.id === ticketId ? { ...t, adminResponse: response, status, updatedAt: new Date().toISOString() } : t));
+              return true;
+          }
+          return false;
+      } catch (err) {
+          console.error("Error updating ticket:", err);
+          return false;
+      }
+  };
+
   // Metrics Calculations
   const totalMRR = tenants.filter(t => t.status === 'active').reduce((acc, t) => {
       const plan = plans.find(p => p.id === t.planId);
@@ -502,6 +547,7 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
       tokenPackages,
       tokenLedger,
       saasTransactions,
+      supportTickets,
       isAuthenticated,
       saasSettings,
       login,
@@ -519,6 +565,7 @@ export function SuperAdminProvider({ children }: { children: ReactNode }) {
       addSaaSTransaction,
       deleteSaaSTransaction,
       updateSaaSSettings,
+      respondToTicket,
       totalMRR,
       activeTenantsCount,
       totalTokensSold,

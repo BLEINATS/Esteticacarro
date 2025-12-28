@@ -182,7 +182,7 @@ export default function ClientDetailsModal({ client: initialClient, onClose }: C
     });
   }, [client]);
 
-  const clientWorkOrders = workOrders
+  const clientWorkOrders = (workOrders || [])
     .filter(os => os.clientId === client.id)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -523,7 +523,7 @@ export default function ClientDetailsModal({ client: initialClient, onClose }: C
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {client.vehicles.map((vehicle) => {
+                {(client.vehicles || []).map((vehicle) => {
                   const isEditingThis = editingVehicleId === vehicle.id;
                   const vehicleColor = getVehicleColor(vehicle.color);
                   const isLightColor = ['#ffffff', '#f8fafc', '#f5f5dc'].includes(vehicleColor.toLowerCase());
@@ -675,8 +675,8 @@ export default function ClientDetailsModal({ client: initialClient, onClose }: C
                 </h4>
                 
                 <div className="space-y-3">
-                  {reminders.filter(r => r.clientId === client.id && r.status !== 'sent').length > 0 ? (
-                    reminders.filter(r => r.clientId === client.id && r.status !== 'sent').map(reminder => (
+                  {(reminders || []).filter(r => r.clientId === client.id && r.status !== 'sent').length > 0 ? (
+                    (reminders || []).filter(r => r.clientId === client.id && r.status !== 'sent').map(reminder => (
                       <div key={reminder.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm">
                         <div className="flex justify-between items-start mb-4">
                           <div>
@@ -815,13 +815,13 @@ export default function ClientDetailsModal({ client: initialClient, onClose }: C
                       </div>
 
                       {/* Vouchers Ativos */}
-                      {redemptions.filter(r => r.status === 'active').length > 0 && (
+                      {(redemptions || []).filter(r => r.status === 'active').length > 0 && (
                           <div className="bg-pink-50 dark:bg-pink-900/20 border border-pink-200 dark:border-pink-800 p-4 rounded-xl">
                               <h4 className="font-bold text-pink-700 dark:text-pink-300 text-sm mb-3 flex items-center gap-2">
                                   <Gift size={16} /> Vouchers Ativos
                               </h4>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  {redemptions.filter(r => r.status === 'active').map(r => (
+                                  {(redemptions || []).filter(r => r.status === 'active').map(r => (
                                       <div key={r.id} className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
                                           <div className="flex justify-between items-center mb-1">
                                               <span className="font-mono font-bold text-slate-900 dark:text-white text-lg tracking-wider">{r.code}</span>
@@ -838,7 +838,7 @@ export default function ClientDetailsModal({ client: initialClient, onClose }: C
                       <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex-1 flex flex-col">
                           <h4 className="font-bold text-slate-700 dark:text-slate-300 text-sm mb-3">Recompensas Disponíveis</h4>
                           <div className="space-y-2 overflow-y-auto pr-1 flex-1 min-h-[200px]">
-                          {getRewardsByLevel(points.tier).map(r => {
+                          {(getRewardsByLevel(points.tier) || []).map(r => {
                               const canClaim = points.totalPoints >= r.requiredPoints;
                               return (
                               <div key={r.id} className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-xs shadow-sm flex justify-between items-center gap-3">
@@ -870,7 +870,7 @@ export default function ClientDetailsModal({ client: initialClient, onClose }: C
                               </div>
                               );
                           })}
-                          {getRewardsByLevel(points.tier).length === 0 && (
+                          {(getRewardsByLevel(points.tier) || []).length === 0 && (
                               <div className="flex flex-col items-center justify-center h-full text-slate-400 py-8">
                                   <Gift size={32} className="mb-2 opacity-50" />
                                   <p>Nenhuma recompensa para este nível.</p>

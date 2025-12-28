@@ -17,7 +17,6 @@ export default function Inventory() {
 
   const location = useLocation();
 
-  // Handle navigation from Global Search
   useEffect(() => {
     if (location.state && (location.state as any).searchTerm) {
       setSearchTerm((location.state as any).searchTerm);
@@ -30,7 +29,6 @@ export default function Inventory() {
     return matchesSearch && matchesFilter;
   });
 
-  // Lógica de Inteligência de Estoque (Dados Reais)
   const criticalItem = inventory.find(i => i.status === 'critical');
   const warningItem = inventory.find(i => i.status === 'warning');
   const alertItem = criticalItem || warningItem;
@@ -87,7 +85,6 @@ export default function Inventory() {
         </button>
       </div>
 
-      {/* AI Insights / Alerts - DYNAMIC WITH REAL DATA */}
       {alertItem ? (
         <div className={cn(
           "border rounded-xl p-4 flex items-start gap-3 transition-colors",
@@ -102,7 +99,7 @@ export default function Inventory() {
             </h4>
             <p className={cn("text-sm mt-1", alertItem.status === 'critical' ? "text-red-700 dark:text-red-400" : "text-amber-700 dark:text-amber-400")}>
               O sistema detectou um alto consumo de <strong>{alertItem.name}</strong>. 
-              Restam apenas <strong>{alertItem.stock} {alertItem.unit}</strong> (Mínimo: {alertItem.minStock}). 
+              Restam apenas <strong>{Number(alertItem.stock).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {alertItem.unit}</strong> (Mínimo: {alertItem.minStock}). 
               Considere antecipar a compra para evitar paradas.
             </p>
           </div>
@@ -171,7 +168,9 @@ export default function Inventory() {
                     <span className="truncate">{item.name}</span>
                     </td>
                     <td className="px-4 sm:px-6 py-3 sm:py-4 text-slate-600 dark:text-slate-400 text-xs sm:text-sm">{item.category}</td>
-                    <td className="px-4 sm:px-6 py-3 sm:py-4 font-mono font-bold text-slate-700 dark:text-slate-300 text-xs sm:text-sm">{item.stock} {item.unit}</td>
+                    <td className="px-4 sm:px-6 py-3 sm:py-4 font-mono font-bold text-slate-700 dark:text-slate-300 text-xs sm:text-sm">
+                        {Number(item.stock).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {item.unit}
+                    </td>
                     <td className="px-4 sm:px-6 py-3 sm:py-4 text-slate-500 dark:text-slate-400 text-xs sm:text-sm">{item.minStock} {item.unit}</td>
                     <td className="px-4 sm:px-6 py-3 sm:py-4 text-slate-600 dark:text-slate-300 text-xs sm:text-sm">{formatCurrency(item.costPrice)}</td>
                     <td className="px-4 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm">
@@ -269,7 +268,9 @@ export default function Inventory() {
                 <div className="grid grid-cols-3 gap-2 text-xs mb-2">
                   <div>
                     <p className="text-slate-500 dark:text-slate-400">Estoque</p>
-                    <p className="font-bold text-slate-900 dark:text-white">{item.stock} {item.unit}</p>
+                    <p className="font-bold text-slate-900 dark:text-white">
+                        {Number(item.stock).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {item.unit}
+                    </p>
                   </div>
                   <div>
                     <p className="text-slate-500 dark:text-slate-400">Mínimo</p>

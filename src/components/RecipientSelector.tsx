@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Client, VehicleSize, VEHICLE_SIZES } from '../types';
-import { Search, Filter, CheckSquare, Square, Users, Car, DollarSign, Clock, Calendar, Star } from 'lucide-react';
+import { Search, Filter, CheckSquare, Square, Users, Car, DollarSign, Clock, Calendar, Star, X } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
-import { differenceInDays, parseISO } from 'date-fns';
+import { differenceInDays, isValid } from 'date-fns';
 
 interface RecipientSelectorProps {
   clients: Client[];
@@ -15,59 +15,88 @@ type FilterSegment = 'all' | 'vip' | 'recurring' | 'inactive' | 'new' | 'high_lt
 
 export default function RecipientSelector({ clients, selectedIds, onSelectionChange, preSelectedSegment }: RecipientSelectorProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeSegment, setActiveSegment] = useState<FilterSegment>((preSelectedSegment as FilterSegment) || 'all');
+  const [activeSegment, setActiveSegment] = useState<FilterSegment>('all');
   const [activeVehicleSize, setActiveVehicleSize] = useState<VehicleSize | 'all'>('all');
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true); // Default to true for better visibility
 
-  // Sync with prop if it changes (Smart Template Selection)
+  // Helper function to check if a client matches a segment
+  const checkClientMatchesSegment = (client: Client, segment: string): boolean => {
+      let daysSinceVisit = 999;
+      if (client.lastVisit) {
+          const visitDate = new Date(client.lastVisit);
+          if (isValid(visitDate)) {
+              daysSinceVisit = differenceInDays(new Date(), visitDate);
+          }
+      }
+
+      switch (segment) {
+        case 'vip': 
+            // VIP se tiver a tag OU gastou mais de 2000 OU foi mais de 10 vezes
+            return client.segment === 'vip' || (client.ltv || 0) > 2000 || (client.visitCount || 0) > 10;
+        case 'recurring': 
+            // Recorrente se tiver MAIS DE 1 visita (independente da tag)
+            return (client.visitCount || 0) > 1; 
+        case 'inactive': 
+            // Inativo se status for inativo OU última visita há mais de 60 dias
+            return client.status === 'inactive' || daysSinceVisit > 60;
+        case 'new': 
+            // Novo se tiver 0 ou 1 visita
+            return (client.visitCount || 0) <= 1;
+        case 'high_ltv': return (client.ltv || 0) > 1500;
+        case 'low_ltv': return (client.ltv || 0) < 500;
+        case 'recent': return daysSinceVisit <= 30;
+        case 'long_time': return daysSinceVisit > 90;
+        case 'all': return true;
+        default: return true;
+      }
+  };
+
+  // Smart Selection Effect: Runs only when preSelectedSegment changes (e.g. template selection)
   useEffect(() => {
-      if (preSelectedSegment) {
+      if (preSelectedSegment && preSelectedSegment !== 'all' && clients.length > 0) {
+          // 1. Calculate which clients match the requested segment
+          const matchingIds = clients
+              .filter(c => checkClientMatchesSegment(c, preSelectedSegment))
+              .map(c => c.id);
+          
+          // 2. Select them
+          onSelectionChange(matchingIds);
+          
+          // 3. Update the visual filter to match, so the user sees who was selected
           setActiveSegment(preSelectedSegment as FilterSegment);
+      } else if (preSelectedSegment === 'all') {
+          // If template says 'all', we might want to reset or select all? 
+          // Usually safer to just reset view to 'all' and let user decide, 
+          // or select none if it's a fresh start.
+          setActiveSegment('all');
       }
-  }, [preSelectedSegment]);
+  }, [preSelectedSegment, clients]); // Removed activeSegment dependency to prevent loops
 
-  // Auto-select clients when segment changes (Smart Selection)
-  useEffect(() => {
-      if (preSelectedSegment && preSelectedSegment !== 'all') {
-          const ids = filteredClients.map(c => c.id);
-          // Avoid infinite loop or overwriting manual selection if user already interacted? 
-          // For "Smart" behavior, we usually want to pre-fill.
-          // Let's only do it if selection is empty to be safe, or just let the user click "Select All"
-          // To be truly "Smart", let's auto-select them if it's a template switch
-          onSelectionChange(ids);
-      }
-  }, [activeSegment]);
-
+  // Filtered list for DISPLAY ONLY
   const filteredClients = useMemo(() => {
+    if (!clients) return [];
+    
     return clients.filter(client => {
       // 1. Search
+      const searchLower = searchTerm.toLowerCase();
+      const clientName = client.name || '';
+      const clientPhone = client.phone || '';
+      const clientVehicles = client.vehicles || [];
+      
       const matchesSearch = 
-        client.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        client.phone.includes(searchTerm) ||
-        client.vehicles.some(v => v.model.toLowerCase().includes(searchTerm.toLowerCase()));
+        clientName.toLowerCase().includes(searchLower) || 
+        clientPhone.includes(searchTerm) ||
+        clientVehicles.some(v => (v.model || '').toLowerCase().includes(searchLower));
 
       if (!matchesSearch) return false;
 
-      // 2. Segment Filter
-      let matchesSegment = true;
-      const daysSinceVisit = client.lastVisit ? differenceInDays(new Date(), new Date(client.lastVisit)) : 999;
-
-      switch (activeSegment) {
-        case 'vip': matchesSegment = client.segment === 'vip'; break;
-        case 'recurring': matchesSegment = client.segment === 'recurring'; break;
-        case 'inactive': matchesSegment = client.status === 'inactive' || daysSinceVisit > 60; break;
-        case 'new': matchesSegment = client.segment === 'new'; break;
-        case 'high_ltv': matchesSegment = (client.ltv || 0) > 1500; break;
-        case 'low_ltv': matchesSegment = (client.ltv || 0) < 500; break;
-        case 'recent': matchesSegment = daysSinceVisit <= 30; break;
-        case 'long_time': matchesSegment = daysSinceVisit > 90; break;
-        case 'all': default: matchesSegment = true;
-      }
+      // 2. Segment Filter (Visual)
+      const matchesSegment = checkClientMatchesSegment(client, activeSegment);
       if (!matchesSegment) return false;
 
       // 3. Vehicle Size Filter
       if (activeVehicleSize !== 'all') {
-        const hasSize = client.vehicles.some(v => v.size === activeVehicleSize);
+        const hasSize = clientVehicles.some(v => v.size === activeVehicleSize);
         if (!hasSize) return false;
       }
 
@@ -75,12 +104,20 @@ export default function RecipientSelector({ clients, selectedIds, onSelectionCha
     });
   }, [clients, searchTerm, activeSegment, activeVehicleSize]);
 
-  const handleSelectAll = () => {
-    if (selectedIds.length === filteredClients.length && filteredClients.length > 0) {
-      onSelectionChange([]);
-    } else {
-      onSelectionChange(filteredClients.map(c => c.id));
-    }
+  // Handlers
+  const handleSelectAllVisible = () => {
+    // Selects all CURRENTLY VISIBLE clients
+    const visibleIds = filteredClients.map(c => c.id);
+    // Merge with existing selection to avoid deselecting hidden ones
+    const newSelection = Array.from(new Set([...selectedIds, ...visibleIds]));
+    onSelectionChange(newSelection);
+  };
+
+  const handleDeselectAllVisible = () => {
+    // Deselects only CURRENTLY VISIBLE clients
+    const visibleIds = filteredClients.map(c => c.id);
+    const newSelection = selectedIds.filter(id => !visibleIds.includes(id));
+    onSelectionChange(newSelection);
   };
 
   const toggleSelection = (id: string) => {
@@ -91,11 +128,16 @@ export default function RecipientSelector({ clients, selectedIds, onSelectionCha
     }
   };
 
-  const isAllSelected = filteredClients.length > 0 && filteredClients.every(c => selectedIds.includes(c.id));
+  // Check if all visible clients are selected
+  const areAllVisibleSelected = filteredClients.length > 0 && filteredClients.every(c => selectedIds.includes(c.id));
 
-  // Helper to render contextual info based on segment
+  // Render Context Info
   const renderContextInfo = (client: Client) => {
-      const daysSince = client.lastVisit ? differenceInDays(new Date(), new Date(client.lastVisit)) : 0;
+      let daysSince = 0;
+      if (client.lastVisit) {
+          const d = new Date(client.lastVisit);
+          if (isValid(d)) daysSince = differenceInDays(new Date(), d);
+      }
       
       if (activeSegment === 'inactive' || activeSegment === 'long_time') {
           return (
@@ -111,14 +153,6 @@ export default function RecipientSelector({ clients, selectedIds, onSelectionCha
               </span>
           );
       }
-      if (activeSegment === 'new') {
-          return (
-              <span className="text-xs font-bold text-green-600 dark:text-green-400 flex items-center gap-1 bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded">
-                  <Calendar size={12} /> Novo Cliente
-              </span>
-          );
-      }
-      // Default
       return (
           <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
               <Clock size={12} /> Última visita: {daysSince}d atrás
@@ -154,27 +188,25 @@ export default function RecipientSelector({ clients, selectedIds, onSelectionCha
           </button>
         </div>
 
-        {/* Advanced Filters */}
+        {/* Filter Tabs */}
         {showFilters && (
-          <div className="p-3 bg-slate-100 dark:bg-slate-800/50 rounded-lg space-y-3 animate-in slide-in-from-top-2">
+          <div className="space-y-3 animate-in slide-in-from-top-2">
             <div>
-              <p className="text-xs font-bold text-slate-500 uppercase mb-2">Segmento do Cliente</p>
               <div className="flex flex-wrap gap-2">
                 {[
                   { id: 'all', label: 'Todos' },
-                  { id: 'vip', label: 'VIP (Alto Valor)' },
+                  { id: 'vip', label: 'VIP' },
                   { id: 'inactive', label: 'Inativos (+60d)' },
-                  { id: 'recurring', label: 'Recorrentes' },
+                  { id: 'recurring', label: 'Recorrentes (>1 visita)' },
                   { id: 'new', label: 'Novos' },
-                  { id: 'long_time', label: 'Sumidos (+90d)' },
                 ].map(seg => (
                   <button
                     key={seg.id}
                     onClick={() => setActiveSegment(seg.id as FilterSegment)}
                     className={cn(
-                      "px-2.5 py-1 rounded-md text-xs font-medium transition-colors border",
+                      "px-3 py-1.5 rounded-full text-xs font-bold transition-colors border",
                       activeSegment === seg.id 
-                        ? "bg-blue-600 text-white border-blue-600" 
+                        ? "bg-blue-600 text-white border-blue-600 shadow-sm" 
                         : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-blue-400"
                     )}
                   >
@@ -183,51 +215,31 @@ export default function RecipientSelector({ clients, selectedIds, onSelectionCha
                 ))}
               </div>
             </div>
-            <div>
-              <p className="text-xs font-bold text-slate-500 uppercase mb-2">Porte do Veículo</p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                    onClick={() => setActiveVehicleSize('all')}
-                    className={cn(
-                      "px-2.5 py-1 rounded-md text-xs font-medium transition-colors border",
-                      activeVehicleSize === 'all' ? "bg-blue-600 text-white border-blue-600" : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
-                    )}
-                >
-                    Todos
-                </button>
-                {Object.entries(VEHICLE_SIZES).map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => setActiveVehicleSize(key as VehicleSize)}
-                    className={cn(
-                      "px-2.5 py-1 rounded-md text-xs font-medium transition-colors border",
-                      activeVehicleSize === key 
-                        ? "bg-blue-600 text-white border-blue-600" 
-                        : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-blue-400"
-                    )}
-                  >
-                    {label.split(' ')[0]}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         )}
 
-        {/* Selection Stats */}
-        <div className="flex items-center justify-between text-sm">
+        {/* Selection Stats Bar */}
+        <div className="flex items-center justify-between text-sm bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2">
             <button 
-              onClick={handleSelectAll}
-              className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-medium hover:text-blue-600 transition-colors"
+              onClick={areAllVisibleSelected ? handleDeselectAllVisible : handleSelectAllVisible}
+              className="flex items-center gap-2 text-slate-700 dark:text-slate-300 font-bold hover:text-blue-600 transition-colors"
             >
-              {isAllSelected ? <CheckSquare size={18} className="text-blue-600" /> : <Square size={18} />}
-              Selecionar Todos
+              {areAllVisibleSelected ? <CheckSquare size={18} className="text-blue-600" /> : <Square size={18} />}
+              {areAllVisibleSelected ? 'Desmarcar Visíveis' : 'Marcar Visíveis'}
             </button>
-            <span className="text-slate-400">|</span>
-            <span className="font-bold text-blue-600 dark:text-blue-400">
-              {selectedIds.length} <span className="font-normal text-slate-500 dark:text-slate-400">de {filteredClients.length} clientes</span>
-            </span>
+          </div>
+          
+          <div className="flex items-center gap-2">
+             <span className="text-slate-400">Total Selecionado:</span>
+             <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-md font-bold text-xs">
+                {selectedIds.length} clientes
+             </span>
+             {selectedIds.length > 0 && (
+                 <button onClick={() => onSelectionChange([])} className="ml-2 text-xs text-red-500 hover:underline">
+                     Limpar
+                 </button>
+             )}
           </div>
         </div>
       </div>
@@ -236,6 +248,7 @@ export default function RecipientSelector({ clients, selectedIds, onSelectionCha
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {filteredClients.length > 0 ? filteredClients.map(client => {
           const isSelected = selectedIds.includes(client.id);
+          const vehicleModel = client.vehicles && client.vehicles.length > 0 ? client.vehicles[0].model : 'Sem carro';
           
           return (
             <div 
@@ -248,7 +261,7 @@ export default function RecipientSelector({ clients, selectedIds, onSelectionCha
                   : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
               )}
             >
-              <div className={cn("text-blue-600", isSelected ? "opacity-100" : "opacity-30")}>
+              <div className={cn("text-blue-600 flex-shrink-0", isSelected ? "opacity-100" : "opacity-30")}>
                 {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
               </div>
               
@@ -259,16 +272,31 @@ export default function RecipientSelector({ clients, selectedIds, onSelectionCha
                 </div>
                 
                 <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  <span className="flex items-center gap-1"><Car size={12} /> {client.vehicles[0]?.model || 'Sem carro'}</span>
-                  <span className="flex items-center gap-1"><DollarSign size={12} /> LTV: {formatCurrency(client.ltv || 0)}</span>
+                  <span className="flex items-center gap-1 truncate"><Car size={12} /> {vehicleModel}</span>
+                  <span className="hidden sm:flex items-center gap-1"><DollarSign size={12} /> LTV: {formatCurrency(client.ltv || 0)}</span>
+                  <span className="truncate">{client.phone}</span>
+                  <span className={cn(
+                      "px-1.5 py-0.5 rounded text-[10px] font-bold uppercase",
+                      (client.visitCount || 0) > 1 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                  )}>
+                      {(client.visitCount || 0) > 1 ? 'Recorrente' : 'Novo'}
+                  </span>
                 </div>
               </div>
             </div>
           );
         }) : (
-          <div className="flex flex-col items-center justify-center h-full text-slate-400">
+          <div className="flex flex-col items-center justify-center h-40 text-slate-400">
             <Users size={32} className="mb-2 opacity-50" />
             <p className="text-sm">Nenhum cliente encontrado com estes filtros.</p>
+            {activeSegment !== 'all' && (
+                <button 
+                    onClick={() => setActiveSegment('all')}
+                    className="mt-2 text-xs text-blue-500 hover:underline font-bold"
+                >
+                    Ver Todos os Clientes
+                </button>
+            )}
           </div>
         )}
       </div>

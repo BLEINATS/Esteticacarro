@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, Send, Save, MessageSquare, Users, Settings, Eye, 
   Sparkles, Calendar, Clock, ChevronRight, AlertTriangle,
-  Smartphone, Mail, CheckCircle2, Info
+  Smartphone, Mail, CheckCircle2, Info, Link as LinkIcon
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Client, MarketingCampaign, CampaignTemplate } from '../types';
@@ -10,6 +10,7 @@ import { cn, formatCurrency } from '../lib/utils';
 import { CAMPAIGN_TEMPLATES, replaceVariables } from '../services/campaignService';
 import RecipientSelector from './RecipientSelector';
 import { useDialog } from '../context/DialogContext';
+import { useNavigate } from 'react-router-dom';
 
 interface CampaignModalProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ interface CampaignModalProps {
 export default function CampaignModal({ isOpen, onClose, onSave, clients, initialData, mode = 'create' }: CampaignModalProps) {
   const { subscription, companySettings } = useApp();
   const { showAlert, showConfirm } = useDialog();
+  const navigate = useNavigate();
   
   const [activeTab, setActiveTab] = useState<'message' | 'recipients' | 'settings' | 'preview'>('message');
   
@@ -63,8 +65,6 @@ export default function CampaignModal({ isOpen, onClose, onSave, clients, initia
     // Auto-select smart segment based on template
     if (template.suggestedSegment) {
         setSmartSegment(template.suggestedSegment);
-        // Switch to recipients tab to show the smart selection
-        // setActiveTab('recipients'); 
     }
   };
 
@@ -73,6 +73,7 @@ export default function CampaignModal({ isOpen, onClose, onSave, clients, initia
   const costPerMsg = 1; // WhatsApp cost fixed at 1 token
   const totalCost = selectedClientIds.length * costPerMsg;
   const canAfford = (subscription.tokenBalance || 0) >= totalCost;
+  const isWhatsAppConnected = companySettings.whatsapp.session.status === 'connected';
 
   // Preview Data
   const previewClient = selectedClientIds.length > 0 
@@ -109,8 +110,34 @@ export default function CampaignModal({ isOpen, onClose, onSave, clients, initia
         showAlert({ title: 'Dados Incompletos', message: 'Preencha o nome, mensagem e selecione destinatários.', type: 'warning' });
         return;
     }
+
+    // CHECK 1: WhatsApp Connection
+    if (!isWhatsAppConnected) {
+        const connect = await showConfirm({ 
+            title: 'WhatsApp Desconectado', 
+            message: 'Você precisa conectar seu WhatsApp para disparar campanhas. Deseja ir para as configurações agora?', 
+            type: 'warning',
+            confirmText: 'Ir para Configurações'
+        });
+        if (connect) {
+            onClose();
+            navigate('/settings', { state: { activeTab: 'integrations' } });
+        }
+        return;
+    }
+
+    // CHECK 2: Token Balance
     if (!canAfford) {
-        showAlert({ title: 'Saldo Insuficiente', message: `Você precisa de ${totalCost} tokens.`, type: 'danger' });
+        const buy = await showConfirm({ 
+            title: 'Saldo Insuficiente', 
+            message: `Você precisa de ${totalCost} tokens, mas tem apenas ${subscription.tokenBalance || 0}. Deseja recarregar?`, 
+            type: 'danger',
+            confirmText: 'Comprar Tokens'
+        });
+        if (buy) {
+            onClose();
+            navigate('/settings', { state: { activeTab: 'billing' } });
+        }
         return;
     }
 
@@ -341,9 +368,23 @@ export default function CampaignModal({ isOpen, onClose, onSave, clients, initia
                                 <span className="text-xs text-slate-500 dark:text-slate-400">1 token/msg</span>
                             </button>
                         </div>
-                        <p className="text-xs text-slate-400 mt-2 text-center">
-                            * Exclusivo para envio via WhatsApp Business API.
-                        </p>
+                        
+                        <div className={cn(
+                            "mt-4 p-3 rounded-lg flex items-center gap-2 text-xs",
+                            isWhatsAppConnected 
+                                ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400" 
+                                : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400"
+                        )}>
+                            {isWhatsAppConnected ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                            <span className="font-bold">
+                                {isWhatsAppConnected ? 'WhatsApp Conectado' : 'WhatsApp Desconectado - Conecte nas configurações'}
+                            </span>
+                            {!isWhatsAppConnected && (
+                                <button onClick={() => navigate('/settings', { state: { activeTab: 'integrations' } })} className="ml-auto underline">
+                                    Conectar
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -357,7 +398,7 @@ export default function CampaignModal({ isOpen, onClose, onSave, clients, initia
                                     type="date" 
                                     value={scheduleDate}
                                     onChange={e => setScheduleDate(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none dark:text-white"
+                                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                                 />
                             </div>
                             <div>
@@ -366,7 +407,7 @@ export default function CampaignModal({ isOpen, onClose, onSave, clients, initia
                                     type="time" 
                                     value={scheduleTime}
                                     onChange={e => setScheduleTime(e.target.value)}
-                                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none dark:text-white"
+                                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                                 />
                             </div>
                         </div>
@@ -438,12 +479,17 @@ export default function CampaignModal({ isOpen, onClose, onSave, clients, initia
                                         <AlertTriangle size={14} /> Saldo insuficiente ({subscription.tokenBalance} disponíveis).
                                     </div>
                                 )}
+                                {!isWhatsAppConnected && (
+                                    <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-xs rounded-lg flex items-center gap-2">
+                                        <LinkIcon size={14} /> WhatsApp desconectado.
+                                    </div>
+                                )}
                             </div>
 
                             <div className="flex flex-col gap-3">
                                 <button 
                                     onClick={handleSendNow}
-                                    disabled={!isValid || !canAfford}
+                                    disabled={!isValid}
                                     className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 dark:disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-lg shadow-green-900/20 flex items-center justify-center gap-2 transition-all"
                                 >
                                     <Send size={20} /> 

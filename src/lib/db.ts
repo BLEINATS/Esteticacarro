@@ -5,8 +5,8 @@ import {
 } from './mockData';
 
 const DB_NAME = 'cristal_care_idb';
-// INCREMENTED VERSION TO FORCE SCHEMA UPDATE
-const DB_VERSION = 3;
+// Increment version to force schema refresh if needed
+const DB_VERSION = 5;
 const LOCAL_STORAGE_KEY = 'cristal_care_local_db_v1';
 
 const COLLECTIONS = [
@@ -27,7 +27,9 @@ const COLLECTIONS = [
   'points_history', 
   'alerts', 
   'reminders', 
-  'message_logs'
+  'message_logs',
+  'support_tickets',
+  'social_posts'
 ] as const;
 
 type CollectionName = typeof COLLECTIONS[number];
@@ -94,79 +96,14 @@ const runTransaction = async <T>(
 
 const initializeDB = async () => {
   try {
-    const db = await openDB();
-    const existingLocalData = localStorage.getItem(LOCAL_STORAGE_KEY);
+    await openDB();
     
-    if (existingLocalData) {
-      try {
-        const parsedData = JSON.parse(existingLocalData);
-        const tx = db.transaction(COLLECTIONS, 'readwrite');
-        let hasError = false;
-
-        COLLECTIONS.forEach(col => {
-          if (parsedData[col] && Array.isArray(parsedData[col])) {
-            const store = tx.objectStore(col);
-            parsedData[col].forEach((item: any) => {
-              if (!item.id) item.id = Date.now().toString() + Math.random().toString(36).substr(2, 5);
-              store.put(item);
-            });
-          }
-        });
-
-        await new Promise<void>((resolve, reject) => {
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => { hasError = true; reject(tx.error); };
-        });
-
-        if (!hasError) {
-          localStorage.removeItem(LOCAL_STORAGE_KEY);
-        }
-      } catch (e) {
-        console.error('Migration failed:', e);
-      }
-      return;
-    }
-
-    const userCount = await runTransaction<number>('users', 'readonly', store => store.count());
-    const shouldSkipSeeding = localStorage.getItem('skip_seeding') === 'true';
+    // MODO REAL: Não carregamos mais dados de exemplo (Mock Data).
+    // O banco inicia vazio ou com os dados que já foram salvos anteriormente.
     
-    if (userCount === 0 && !shouldSkipSeeding) {
-      const tx = db.transaction(COLLECTIONS, 'readwrite');
-      
-      const seed = (col: CollectionName, data: any[]) => {
-        const store = tx.objectStore(col);
-        data.forEach(item => {
-           store.put(item);
-        });
-      };
+    // Se precisar forçar a limpeza de dados antigos de teste, descomente a linha abaixo uma vez:
+    // await db.reset(true);
 
-      seed('clients', MOCK_CLIENTS);
-      const vehicles: any[] = [];
-      MOCK_CLIENTS.forEach(c => {
-          if (c.vehicles) {
-              c.vehicles.forEach(v => {
-                  vehicles.push({ ...v, client_id: c.id, tenant_id: MOCK_TENANT.id });
-              });
-          }
-      });
-      seed('vehicles', vehicles);
-      seed('work_orders', MOCK_WORK_ORDERS);
-      seed('inventory', MOCK_INVENTORY);
-      seed('services', MOCK_SERVICES);
-      seed('employees', MOCK_EMPLOYEES);
-      seed('employee_transactions', MOCK_EMPLOYEE_TRANSACTIONS);
-      seed('financial_transactions', MOCK_FINANCIALS);
-      seed('users', [MOCK_USER]);
-      seed('tenants', [MOCK_TENANT]);
-      seed('alerts', MOCK_ALERTS);
-      seed('reminders', MOCK_REMINDERS);
-      seed('rewards', MOCK_REWARDS);
-      
-      await new Promise<void>((resolve, reject) => {
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      });
-    }
   } catch (error) {
     console.error("Failed to initialize DB:", error);
   }
@@ -175,7 +112,7 @@ const initializeDB = async () => {
 export const db = {
   init: initializeDB,
 
-  reset: async (skipSeeding = false) => {
+  reset: async (skipSeeding = true) => {
     if (dbInstance) {
       dbInstance.close();
       dbInstance = null;
@@ -183,9 +120,6 @@ export const db = {
     const req = indexedDB.deleteDatabase(DB_NAME);
     req.onsuccess = () => {
       localStorage.clear();
-      if (skipSeeding) {
-          localStorage.setItem('skip_seeding', 'true');
-      }
       window.location.reload();
     };
   },
@@ -209,7 +143,6 @@ export const db = {
     return newItem;
   },
 
-  // Novo método para sincronização (Cria ou Atualiza)
   upsert: async <T>(collection: CollectionName, item: T): Promise<T> => {
     const newItem = { 
       id: (item as any).id || (typeof item === 'object' && 'id' in (item as any) ? (item as any).id : Date.now().toString()),

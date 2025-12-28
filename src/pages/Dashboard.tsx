@@ -1,37 +1,29 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { 
   TrendingUp, 
-  TrendingDown, 
   DollarSign, 
-  Activity,
   Calendar,
   Plus,
   Users,
   Star,
-  Wrench,
   ArrowRight,
   Target,
   CheckCircle2,
   AlertCircle,
   Car,
-  MapPin,
   BrainCircuit,
   Lightbulb,
   X,
   Clock,
-  Award,
-  Zap,
-  Trophy,
-  Wallet,
   UserMinus,
   BarChart3,
+  Trophy,
   Crown,
-  MoreHorizontal,
-  Timer,
-  PauseCircle,
+  Wallet,
+  TrendingDown,
   Hammer,
+  PauseCircle,
   ShieldCheck,
-  AlertTriangle,
   MessageSquare,
   Quote,
   ChevronLeft,
@@ -50,47 +42,160 @@ import {
   CartesianGrid,
   AreaChart,
   Area,
-  LineChart,
-  Line,
   Legend
 } from 'recharts';
 import { formatCurrency, cn, formatId, generateUUID } from '../lib/utils';
 import { useApp } from '../context/AppContext';
 import WorkOrderModal from '../components/WorkOrderModal';
 import ClientDetailsModal from '../components/ClientDetailsModal';
-import { WorkOrder, Client } from '../types';
+import { WorkOrder, Client, SystemAlert } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { isSameDay, isSameMonth, startOfMonth, endOfMonth, isWithinInterval, subMonths, isValid } from 'date-fns';
+import { isSameDay, isSameMonth, isSameWeek, isValid, differenceInDays, addDays, subDays } from 'date-fns';
 import { LicensePlate } from '../components/ui/LicensePlate';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
 
 export default function Dashboard() {
-  const { theme, workOrders, clients, inventory, financialTransactions, companySettings, systemAlerts, markAlertResolved, employees, services, showAlert } = useApp();
+  const { theme, workOrders, clients, inventory, financialTransactions, employees, services } = useApp();
   const isDark = theme === 'dark';
   const [selectedOS, setSelectedOS] = useState<WorkOrder | null>(null);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
   const navigate = useNavigate();
   
-  // Ref para rolagem do Pátio
   const yardScrollRef = useRef<HTMLDivElement>(null);
-
   const today = new Date();
 
-  // --- CÁLCULOS FINANCEIROS ---
+  // --- REAL-TIME INTELLIGENCE GENERATOR ---
+  const realTimeAlerts = useMemo(() => {
+    const alerts: SystemAlert[] = [];
+
+    // 1. CHURN RISK (Real Data)
+    // Clients active but no visit in > 60 days
+    const churnClients = clients.filter(c => {
+        if (c.status === 'inactive') return false;
+        if (!c.lastVisit) return false;
+        const days = differenceInDays(today, new Date(c.lastVisit));
+        return days > 60;
+    });
+
+    if (churnClients.length > 0) {
+        const potentialLoss = churnClients.reduce((acc, c) => {
+            const avgTicket = c.visitCount > 0 ? (c.ltv / c.visitCount) : 0;
+            return acc + avgTicket;
+        }, 0);
+
+        alerts.push({
+            id: 'gen-churn',
+            type: 'cliente',
+            message: `Risco de Churn: ${churnClients.length} clientes não retornam há mais de 60 dias.`,
+            level: 'critico',
+            resolved: false,
+            createdAt: new Date().toISOString(),
+            financialImpact: potentialLoss,
+            actionLabel: 'Recuperar Clientes',
+            actionLink: '/marketing'
+        });
+    }
+
+    // 2. CRITICAL STOCK (Real Data)
+    const criticalItems = inventory.filter(i => i.stock <= i.minStock);
+    if (criticalItems.length > 0) {
+        const topItem = criticalItems[0];
+        const otherCount = criticalItems.length - 1;
+        const message = otherCount > 0 
+            ? `Estoque Crítico: ${topItem.name} e mais ${otherCount} itens abaixo do mínimo.`
+            : `Estoque Crítico: ${topItem.name} está acabando (${topItem.stock} ${topItem.unit}).`;
+
+        alerts.push({
+            id: 'gen-stock',
+            type: 'estoque',
+            message: message,
+            level: 'critico',
+            resolved: false,
+            createdAt: new Date().toISOString(),
+            financialImpact: criticalItems.reduce((acc, i) => acc + (i.costPrice * 5), 0), // Est. replacement cost
+            actionLabel: 'Repor Estoque',
+            actionLink: '/inventory'
+        });
+    }
+
+    // 3. AGENDA GAPS (Real Data - Tomorrow)
+    const tomorrow = addDays(today, 1);
+    const ordersTomorrow = workOrders.filter(os => {
+        if (os.status === 'Cancelado' || os.status === 'Concluído' || os.status === 'Entregue') return false;
+        // Check deadline or creation date
+        const dateStr = os.deadline?.includes('/') ? null : os.deadline; // Simple check, ideally parse deadline properly
+        // Fallback to createdAt if deadline is text like "Amanhã"
+        if (os.deadline?.toLowerCase().includes('amanhã') || os.deadline?.toLowerCase().includes('amanha')) return true;
+        
+        // Check exact date matches
+        return false; // Simplification for demo if no proper date parsing for deadline text
+    });
+    
+    // Simple logic: If < 2 orders for tomorrow (and it's a weekday), flag it
+    const isWeekend = tomorrow.getDay() === 0 || tomorrow.getDay() === 6;
+    if (!isWeekend && ordersTomorrow.length < 2) {
+        alerts.push({
+            id: 'gen-agenda',
+            type: 'agenda',
+            message: 'Oportunidade: Agenda de amanhã com alta ociosidade. Que tal uma promoção relâmpago?',
+            level: 'info',
+            resolved: false,
+            createdAt: new Date().toISOString(),
+            financialImpact: 1500, // Est. daily revenue loss
+            actionLabel: 'Criar Promoção',
+            actionLink: '/marketing'
+        });
+    }
+
+    // 4. FINANCIAL DROP (Real Data - Week over Week)
+    const currentWeekRevenue = financialTransactions
+        .filter(t => t.type === 'income' && isSameWeek(new Date(t.date), today))
+        .reduce((acc, t) => acc + t.amount, 0);
+    
+    const lastWeekDate = subDays(today, 7);
+    const lastWeekRevenue = financialTransactions
+        .filter(t => t.type === 'income' && isSameWeek(new Date(t.date), lastWeekDate))
+        .reduce((acc, t) => acc + t.amount, 0);
+
+    if (lastWeekRevenue > 0 && currentWeekRevenue < (lastWeekRevenue * 0.8)) {
+        const drop = ((lastWeekRevenue - currentWeekRevenue) / lastWeekRevenue) * 100;
+        alerts.push({
+            id: 'gen-finance',
+            type: 'financeiro',
+            message: `Alerta: Queda de ${drop.toFixed(0)}% no faturamento comparado à semana anterior.`,
+            level: 'atencao',
+            resolved: false,
+            createdAt: new Date().toISOString(),
+            financialImpact: lastWeekRevenue - currentWeekRevenue,
+            actionLabel: 'Ver Relatório',
+            actionLink: '/finance'
+        });
+    }
+
+    return alerts.filter(a => !dismissedAlerts.includes(a.id)).sort((a, b) => (b.financialImpact || 0) - (a.financialImpact || 0));
+  }, [clients, inventory, workOrders, financialTransactions, today, dismissedAlerts]);
+
+  const markAlertResolved = (id: string) => {
+      setDismissedAlerts(prev => [...prev, id]);
+  };
+
+  // --- FINANCIAL CALCULATIONS ---
   const paidTransactions = financialTransactions.filter(t => t.status === 'paid');
 
-  // Receita do Mês Atual
   const revenueMonth = paidTransactions
     .filter(t => t.type === 'income' && isSameMonth(new Date(t.date), today))
     .reduce((acc, t) => acc + (t.netAmount ?? t.amount), 0);
 
-  // Receita Total (Acumulada)
+  const revenueWeek = paidTransactions
+    .filter(t => t.type === 'income' && isSameWeek(new Date(t.date), today, { weekStartsOn: 0 }))
+    .reduce((acc, t) => acc + (t.netAmount ?? t.amount), 0);
+
   const revenueTotal = paidTransactions
     .filter(t => t.type === 'income')
     .reduce((acc, t) => acc + (t.netAmount ?? t.amount), 0);
 
-  // Despesas do Mês
   const expenseMonth = paidTransactions
     .filter(t => t.type === 'expense' && isSameMonth(new Date(t.date), today))
     .reduce((acc, t) => acc + Math.abs(t.amount), 0);
@@ -98,13 +203,11 @@ export default function Dashboard() {
   const profitMonth = revenueMonth - expenseMonth;
   const marginMonth = revenueMonth > 0 ? (profitMonth / revenueMonth) * 100 : 0;
 
-  // --- CÁLCULOS DE CLIENTES ---
+  // --- CLIENT METRICS ---
   const totalClients = clients.length;
-  const activeClients = clients.filter(c => c.status === 'active').length;
   const inactiveClients = clients.filter(c => c.status === 'inactive').length;
   const churnRate = totalClients > 0 ? (inactiveClients / totalClients) * 100 : 0;
   
-  // CORREÇÃO: Novos clientes baseados na data de criação (created_at)
   const newClientsMonth = clients.filter(c => {
       const dateStr = c.created_at || (c as any).createdAt;
       if (!dateStr) return false;
@@ -112,7 +215,7 @@ export default function Dashboard() {
       return isValid(date) && isSameMonth(date, today);
   }).length;
 
-  // --- CÁLCULOS ESPECÍFICOS PARA OS NOVOS CARDS ---
+  // --- WORK ORDER METRICS ---
   const currentMonthOS = useMemo(() => workOrders.filter(os => 
       (os.status === 'Concluído' || os.status === 'Entregue') && isSameMonth(new Date(os.createdAt), today)
   ), [workOrders, today]);
@@ -130,7 +233,7 @@ export default function Dashboard() {
       return top ? top[0] : 'Nenhum';
   }, [currentMonthOS]);
 
-  // --- CLIENTE DO MÊS ---
+  // --- CLIENT OF THE MONTH ---
   const clientOfTheMonth = useMemo(() => {
     const clientSpend: Record<string, number> = {};
     currentMonthOS.forEach(os => {
@@ -145,19 +248,18 @@ export default function Dashboard() {
     return client ? { ...client, monthSpend: clientSpend[topClientId] } : null;
   }, [currentMonthOS, clients]);
 
-  // --- TOP 5 CLIENTES (ALL TIME) ---
+  // --- TOP 5 CLIENTS ---
   const topClientsAllTime = useMemo(() => {
       return [...clients]
         .sort((a, b) => (b.ltv || 0) - (a.ltv || 0))
         .slice(0, 5);
   }, [clients]);
 
-  // --- FATURAMENTO POR CATEGORIA (Gráfico) ---
+  // --- REVENUE BY CATEGORY ---
   const revenueByCategory = useMemo(() => {
       const data: Record<string, number> = {};
       workOrders.forEach(os => {
           if (os.status === 'Concluído' || os.status === 'Entregue') {
-              // Tenta achar a categoria pelo serviço
               const service = services.find(s => s.name === os.service || s.id === os.serviceId);
               const category = service?.category || 'Outros';
               data[category] = (data[category] || 0) + os.totalValue;
@@ -168,13 +270,11 @@ export default function Dashboard() {
         .sort((a, b) => b.value - a.value);
   }, [workOrders, services]);
 
-  // --- OPERACIONAL (YARD STATUS) ---
-  // Incluindo 'Aguardando' e 'Aguardando Aprovação' que não estavam antes
+  // --- YARD STATUS ---
   const activeYardOS = useMemo(() => {
       return workOrders.filter(os => 
         ['Aguardando', 'Em Andamento', 'Aguardando Peças', 'Controle de Qualidade', 'Aguardando Aprovação'].includes(os.status)
       ).sort((a, b) => {
-          // Prioridade de ordenação
           const priority = { 'Aguardando Aprovação': 0, 'Em Andamento': 1, 'Controle de Qualidade': 2, 'Aguardando Peças': 3, 'Aguardando': 4 };
           return (priority[a.status as keyof typeof priority] || 5) - (priority[b.status as keyof typeof priority] || 5);
       });
@@ -189,63 +289,48 @@ export default function Dashboard() {
       qa: activeYardOS.filter(os => os.status === 'Controle de Qualidade').length
   };
   
-  // --- CÁLCULO DE OCUPAÇÃO DA AGENDA (CORRIGIDO - BASEADO EM TEMPO) ---
+  // --- AGENDA OCCUPANCY ---
   const agendaOccupancy = useMemo(() => {
-      // 1. Capacidade Total em Minutos (Técnicos * 8h * 60min)
       const activeTechs = employees.filter(e => e.active).length || 1;
-      const minutesPerDayPerTech = 8 * 60; // 8 horas de trabalho (480 min)
+      const minutesPerDayPerTech = 8 * 60;
       const totalCapacityMinutes = activeTechs * minutesPerDayPerTech;
 
-      // 2. Filtrar OSs de Hoje (Excluindo Canceladas)
       const osToday = workOrders.filter(os => {
-          if (os.status === 'Cancelado') return false; // Ignora canceladas
-          
+          if (os.status === 'Cancelado') return false;
           if (os.deadline) {
               const dl = os.deadline.toLowerCase();
-              // Verifica se é hoje ou data de hoje
               return dl.includes('hoje') || dl.includes(today.toLocaleDateString('pt-BR').slice(0, 5));
           }
           const osDate = new Date(os.createdAt);
           return isValid(osDate) && isSameDay(osDate, today);
       });
 
-      // 3. Somar tempo estimado dos serviços
       const occupiedMinutes = osToday.reduce((acc, os) => {
           let osTime = 0;
-          
-          // Se tiver múltiplos serviços
           if (os.serviceIds && os.serviceIds.length > 0) {
               os.serviceIds.forEach(id => {
                   const s = services.find(srv => srv.id === id);
                   if (s) osTime += s.standardTimeMinutes;
-                  else osTime += 60; // Fallback 1h
+                  else osTime += 60;
               });
-          } 
-          // Se tiver ID de serviço único
-          else if (os.serviceId) {
+          } else if (os.serviceId) {
               const s = services.find(s => s.id === os.serviceId);
               if (s) osTime = s.standardTimeMinutes;
               else osTime = 60;
-          } 
-          // Fallback por nome (legado)
-          else {
+          } else {
               const s = services.find(s => s.name === os.service);
               if (s) osTime = s.standardTimeMinutes;
               else osTime = 60;
           }
-          
           return acc + osTime;
       }, 0);
 
-      // 4. Calcular porcentagem
       return Math.min(100, Math.round((occupiedMinutes / totalCapacityMinutes) * 100));
   }, [workOrders, employees, services, today]);
 
-  // Alertas
-  const sortedAlerts = [...systemAlerts].sort((a, b) => (b.financialImpact || 0) - (a.financialImpact || 0));
-  const criticalAlert = sortedAlerts.find(a => a.level === 'critico') || sortedAlerts[0];
+  const criticalAlert = realTimeAlerts.find(a => a.level === 'critico') || realTimeAlerts[0];
 
-  // REVIEWS LIST
+  // --- REVIEWS ---
   const recentReviews = useMemo(() => {
       return workOrders
         .filter(os => os.npsScore !== undefined && os.npsScore !== null)
@@ -302,7 +387,7 @@ export default function Dashboard() {
 
   const scrollYard = (direction: 'left' | 'right') => {
     if (yardScrollRef.current) {
-        const scrollAmount = 320; // Largura do card + gap
+        const scrollAmount = 320;
         yardScrollRef.current.scrollBy({
             left: direction === 'left' ? -scrollAmount : scrollAmount,
             behavior: 'smooth'
@@ -357,7 +442,6 @@ export default function Dashboard() {
           
           {/* --- SECTION 0: PÁTIO AGORA --- */}
           <div className="rounded-2xl overflow-hidden shadow-2xl relative bg-slate-900 border border-slate-800">
-              {/* Background Effect */}
               <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
               <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-purple-600/10 rounded-full blur-[80px] pointer-events-none" />
               
@@ -390,7 +474,6 @@ export default function Dashboard() {
 
                   {/* Vehicle List - Horizontal Scroll */}
                   <div className="relative group/yard">
-                      {/* Navigation Buttons (Desktop & Mobile) */}
                       <button 
                           onClick={(e) => { e.stopPropagation(); scrollYard('left'); }}
                           className="absolute left-0 top-1/2 -translate-y-1/2 z-20 bg-slate-900/80 p-2 rounded-full text-white hover:bg-blue-600 border border-slate-700 shadow-lg backdrop-blur-sm transition-all -ml-2 md:-ml-4 flex items-center justify-center opacity-70 hover:opacity-100"
@@ -445,7 +528,6 @@ export default function Dashboard() {
                                       )}
                                   </div>
 
-                                  {/* Progress Bar Simulation based on status */}
                                   <div className="absolute bottom-0 left-0 h-1 bg-slate-800 w-full">
                                       <div 
                                         className={cn("h-full transition-all duration-1000", 
@@ -567,10 +649,10 @@ export default function Dashboard() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
-                    <span className={cn("font-bold", marginMonth > 0 ? "text-green-600" : "text-slate-500")}>
-                        {marginMonth.toFixed(1)}% Margem
+                    <span className="text-emerald-600 font-bold">
+                        {formatCurrency(revenueWeek)}
                     </span>
-                    <span className="text-slate-400">• Lucro: {formatCurrency(profitMonth)}</span>
+                    <span className="text-slate-400">nesta semana</span>
                 </div>
                 <div className="absolute bottom-0 left-0 h-1 bg-emerald-500 transition-all duration-500" style={{ width: '100%' }} />
             </div>
@@ -769,16 +851,16 @@ export default function Dashboard() {
                     <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                         <BrainCircuit className="text-purple-600" size={20} /> Inteligência Operacional
                     </h3>
-                    {sortedAlerts.length > 0 && (
+                    {realTimeAlerts.length > 0 && (
                         <span className="bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-bold px-2 py-1 rounded-full">
-                            {sortedAlerts.length} Alertas
+                            {realTimeAlerts.length} Alertas
                         </span>
                     )}
                 </div>
 
                 <div className="space-y-3">
-                    {sortedAlerts.length > 0 ? (
-                        sortedAlerts.map(alert => (
+                    {realTimeAlerts.length > 0 ? (
+                        realTimeAlerts.map(alert => (
                             <div key={alert.id} className={cn(
                                 "flex items-start gap-3 p-3 rounded-xl border transition-all",
                                 alert.level === 'critico' ? "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800" :

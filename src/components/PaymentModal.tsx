@@ -104,7 +104,7 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
     }
   };
 
-  const handleSimulatePixPayment = () => {
+  const handleManualConfirmation = () => {
     setStep('processing');
     setTimeout(() => {
       setStep('success');
@@ -132,7 +132,7 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
               popup.document.write(`
                 <html>
                   <head>
-                    <title>Stripe Checkout (Simulação)</title>
+                    <title>Stripe Checkout</title>
                     <style>
                       body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f7f9fc; }
                       .card { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 100%; }
@@ -149,7 +149,6 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
                       <div class="desc">${description}</div>
                       <div class="amount">${formatCurrency(amount)}</div>
                       <button class="btn" onclick="window.close()">Pagar agora</button>
-                      <p style="margin-top: 20px; font-size: 12px; color: #8792a2;">Modo de Teste</p>
                     </div>
                   </body>
                 </html>
@@ -212,17 +211,6 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
       setStep('card_details');
     }
   };
-
-  const fillTestData = () => {
-      setCardData({
-          number: '4242 4242 4242 4242',
-          holderName: 'TESTE APROVADO',
-          expiry: '12/30',
-          cvv: '123'
-      });
-  };
-
-  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -324,7 +312,7 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
                       <p className="text-slate-500 dark:text-slate-400 text-sm max-w-xs mx-auto">
                           {realStripeUrl 
                             ? "Clique abaixo para finalizar o pagamento na página segura do Stripe."
-                            : "Você será levado para a página segura de checkout do Stripe (Modo Simulação)."
+                            : "Você será levado para a página segura de checkout do Stripe."
                           }
                       </p>
                   </div>
@@ -349,17 +337,6 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
                         &larr; Voltar
                     </button>
                     <span className="text-xs font-bold text-slate-500 uppercase">Dados do Cartão</span>
-                </div>
-
-                <div 
-                    onClick={fillTestData}
-                    className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2 flex items-start gap-2 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
-                >
-                    <Info size={16} className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                        <p className="text-xs font-bold text-amber-700 dark:text-amber-300">Modo de Teste Ativo</p>
-                        <p className="text-[10px] text-amber-600 dark:text-amber-400">Clique aqui para preencher com dados fictícios de aprovação.</p>
-                    </div>
                 </div>
 
                 {error && (
@@ -493,10 +470,10 @@ export default function PaymentModal({ isOpen, onClose, amount, description, onS
                   Após o pagamento, a liberação é automática em alguns segundos.
                 </p>
                 <button 
-                  onClick={handleSimulatePixPayment}
+                  onClick={handleManualConfirmation}
                   className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-green-900/20 flex items-center justify-center gap-2"
                 >
-                  <CheckCircle2 size={18} /> Simular Pagamento Aprovado
+                  <CheckCircle2 size={18} /> Confirmar Pagamento Manualmente
                 </button>
               </div>
             </div>

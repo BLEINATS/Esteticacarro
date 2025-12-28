@@ -7,6 +7,69 @@ export const VEHICLE_SIZES = {
 
 export type VehicleSize = keyof typeof VEHICLE_SIZES;
 
+export interface SupportTicket {
+  id: string;
+  tenantId?: string;
+  userId?: string;
+  userName?: string;
+  type: 'bug' | 'help' | 'feature' | 'other';
+  subject: string;
+  message: string;
+  status: 'open' | 'in_progress' | 'resolved' | 'closed';
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  adminResponse?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentRate {
+  method: string;
+  rate: number;
+  type: 'percentage' | 'fixed';
+  daysToReceive: number;
+}
+
+export interface CompanySettings {
+  name: string;
+  slug: string;
+  responsibleName: string;
+  cnpj: string;
+  email: string;
+  phone: string;
+  address: string;
+  cep?: string;
+  street?: string;
+  number?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  logoUrl: string;
+  website?: string;
+  instagram?: string;
+  facebook?: string;
+  primaryColor?: string;
+  initialBalance: number;
+  hourlyRate?: number;
+  monthlyGoal?: number;
+  paymentRates: PaymentRate[];
+  whatsapp: WhatsappConfig;
+  landingPage: LandingPageConfig;
+  preferences: CompanyPreferences;
+  gamification: GamificationConfig;
+  automations?: {
+    birthday: boolean;
+    nps: boolean;
+    churnRecovery: boolean;
+    appointmentReminders: boolean;
+    reviewRequest: boolean;
+  };
+  customAutomations?: CustomAutomation[];
+  legal?: {
+    termsText?: string;
+    privacyText?: string;
+  };
+}
+
 export interface Vehicle {
   id: string;
   model: string;
@@ -337,6 +400,8 @@ export interface WhatsappSessionInfo {
 export interface WhatsappConfig {
   enabled: boolean;
   apiKey?: string;
+  instanceId?: string; // ID da Instância W-API
+  baseUrl?: string;    // URL Base da API
   session: WhatsappSessionInfo;
   templates: {
     welcome: string;
@@ -392,53 +457,6 @@ export interface GamificationConfig {
   levelSystem: boolean;
   pointsMultiplier: number;
   tiers: TierConfig[];
-}
-
-export interface PaymentRate {
-  method: string;
-  rate: number;
-  type: 'percentage' | 'fixed';
-  daysToReceive: number;
-}
-
-export interface CompanySettings {
-  name: string;
-  slug: string;
-  responsibleName: string;
-  cnpj: string;
-  email: string;
-  phone: string;
-  address: string;
-  cep?: string;
-  street?: string;
-  number?: string;
-  neighborhood?: string;
-  city?: string;
-  state?: string;
-  logoUrl: string;
-  website?: string;
-  instagram?: string;
-  facebook?: string;
-  primaryColor?: string;
-  initialBalance: number;
-  hourlyRate?: number;
-  paymentRates: PaymentRate[]; // Added for Payment Fees
-  whatsapp: WhatsappConfig;
-  landingPage: LandingPageConfig;
-  preferences: CompanyPreferences;
-  gamification: GamificationConfig;
-  automations?: {
-    birthday: boolean;
-    nps: boolean;
-    churnRecovery: boolean;
-    appointmentReminders: boolean;
-    reviewRequest: boolean;
-  };
-  customAutomations?: CustomAutomation[];
-  legal?: {
-    termsText?: string;
-    privacyText?: string;
-  };
 }
 
 export interface Invoice {

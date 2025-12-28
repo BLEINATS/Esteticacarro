@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useSuperAdmin } from '../../context/SuperAdminContext';
-import { Save, Shield, CreditCard, Globe, Mail, Lock, CheckCircle2, MessageSquare, Smartphone, Link as LinkIcon, Eye, EyeOff } from 'lucide-react';
+import { Save, Shield, CreditCard, Globe, Mail, Lock, CheckCircle2, MessageSquare, Smartphone, Eye, EyeOff, Loader2, AlertTriangle, Check, Server, RefreshCw } from 'lucide-react';
 import { useDialog } from '../../context/DialogContext';
 import { cn } from '../../lib/utils';
+import { whatsappService } from '../../services/whatsapp';
 
 export default function SuperAdminSettings() {
   const { saasSettings, updateSaaSSettings } = useSuperAdmin();
@@ -17,6 +18,10 @@ export default function SuperAdminSettings() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Test Connection State
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
     setFormData(saasSettings);
@@ -45,6 +50,33 @@ export default function SuperAdminSettings() {
     showAlert({ title: 'Sucesso', message: 'Senha de administrador atualizada.', type: 'success' });
   };
 
+  const handleTestConnection = async () => {
+      setIsTestingConnection(true);
+      setTestResult(null);
+      
+      const config = {
+          baseUrl: formData.whatsappGlobal?.baseUrl || 'https://api.w-api.io',
+          apiKey: (formData.whatsappGlobal?.apiKey || '').trim(),
+          instanceId: (formData.whatsappGlobal?.instanceId || '').trim()
+      };
+
+      try {
+        const result = await whatsappService.testConnection(config);
+        setTestResult(result);
+      } catch (e: any) {
+        setTestResult({ success: false, message: e.message || 'Erro desconhecido' });
+      } finally {
+        setIsTestingConnection(false);
+      }
+  };
+
+  const resetBaseUrl = () => {
+      setFormData({
+          ...formData,
+          whatsappGlobal: { ...formData.whatsappGlobal!, baseUrl: 'https://api.w-api.io' }
+      });
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -52,7 +84,7 @@ export default function SuperAdminSettings() {
         <p className="text-slate-500 dark:text-slate-400">Gerencie os dados globais da sua plataforma.</p>
       </div>
 
-      {/* TABS - RESPONSIVE & STICKY (Edge-to-Edge on Mobile) */}
+      {/* TABS */}
       <div className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 pt-2 -mx-4 px-4 sm:mx-0 sm:px-0 mb-6">
         <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
             {[
@@ -80,6 +112,7 @@ export default function SuperAdminSettings() {
 
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-6">
         
+        {/* GENERAL TAB */}
         {activeTab === 'general' && (
             <form onSubmit={handleSave} className="space-y-6 animate-in fade-in">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -116,6 +149,7 @@ export default function SuperAdminSettings() {
             </form>
         )}
 
+        {/* FINANCE TAB */}
         {activeTab === 'finance' && (
             <form onSubmit={handleSave} className="space-y-6 animate-in fade-in">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -162,9 +196,6 @@ export default function SuperAdminSettings() {
                                 {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
                             </button>
                         </div>
-                        <p className="text-xs text-slate-500 mt-1">
-                            Chave de API de produção para processar pagamentos reais.
-                        </p>
                     </div>
                 </div>
                 <div className="flex justify-end pt-4">
@@ -175,14 +206,15 @@ export default function SuperAdminSettings() {
             </form>
         )}
 
+        {/* INTEGRATIONS TAB - UPDATED */}
         {activeTab === 'integrations' && (
             <form onSubmit={handleSave} className="space-y-6 animate-in fade-in">
                 <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg mb-4 flex items-start gap-3">
                     <Smartphone className="text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-1" size={24} />
                     <div>
-                        <h3 className="font-bold text-emerald-900 dark:text-emerald-300">WhatsApp API (w-api.app)</h3>
+                        <h3 className="font-bold text-emerald-900 dark:text-emerald-300">WhatsApp API (W-API.io)</h3>
                         <p className="text-sm text-emerald-800 dark:text-emerald-400 mt-1">
-                            Configure a infraestrutura global de mensagens. As lojas usarão esta conexão para criar suas instâncias.
+                            Conecte sua instância do w-api.io.
                         </p>
                     </div>
                 </div>
@@ -212,24 +244,52 @@ export default function SuperAdminSettings() {
                     </div>
 
                     <div className="grid grid-cols-1 gap-6">
+                        {/* Base URL */}
                         <div>
-                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">URL da API (Base URL)</label>
+                            <div className="flex justify-between items-center mb-2">
+                                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">URL Base da API</label>
+                                <button type="button" onClick={resetBaseUrl} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                                    <RefreshCw size={10} /> Restaurar Padrão
+                                </button>
+                            </div>
                             <div className="relative">
-                                <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                <Server className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                 <input 
                                     type="text" 
-                                    value={formData.whatsappGlobal?.baseUrl || ''}
+                                    value={formData.whatsappGlobal?.baseUrl || 'https://api.w-api.io'}
                                     onChange={e => setFormData({
                                         ...formData, 
                                         whatsappGlobal: { ...formData.whatsappGlobal!, baseUrl: e.target.value }
                                     })}
                                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono text-sm"
-                                    placeholder="https://w-api.app/api"
+                                    placeholder="https://api.w-api.io"
                                 />
                             </div>
+                            <p className="text-xs text-slate-500 mt-1">Padrão: https://api.w-api.io</p>
                         </div>
+
+                        {/* Instance ID */}
                         <div>
-                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Token Global / API Key</label>
+                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">ID da Instância (Instance ID)</label>
+                            <div className="relative">
+                                <MessageSquare className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                <input 
+                                    type="text" 
+                                    value={formData.whatsappGlobal?.instanceId || ''}
+                                    onChange={e => setFormData({
+                                        ...formData, 
+                                        whatsappGlobal: { ...formData.whatsappGlobal!, instanceId: e.target.value }
+                                    })}
+                                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono text-sm"
+                                    placeholder="Ex: T34398-VYR3QD-MS29SL"
+                                />
+                            </div>
+                            <p className="text-xs text-slate-500 mt-1">Encontrado no painel da W-API.</p>
+                        </div>
+
+                        {/* Token */}
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Token de Acesso (Bearer Token)</label>
                             <div className="relative">
                                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                 <input 
@@ -240,7 +300,7 @@ export default function SuperAdminSettings() {
                                         whatsappGlobal: { ...formData.whatsappGlobal!, apiKey: e.target.value }
                                     })}
                                     className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono text-sm"
-                                    placeholder="Token de autenticação do w-api.app"
+                                    placeholder="Cole seu token aqui"
                                 />
                                 <button
                                     type="button"
@@ -251,23 +311,31 @@ export default function SuperAdminSettings() {
                                 </button>
                             </div>
                         </div>
-                        <div>
-                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Webhook URL (Callback)</label>
-                            <div className="relative">
-                                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                <input 
-                                    type="text" 
-                                    value={formData.whatsappGlobal?.webhookUrl || ''}
-                                    onChange={e => setFormData({
-                                        ...formData, 
-                                        whatsappGlobal: { ...formData.whatsappGlobal!, webhookUrl: e.target.value }
-                                    })}
-                                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono text-sm"
-                                    placeholder="https://api.seusistema.com/webhook/whatsapp"
-                                />
-                            </div>
-                            <p className="text-xs text-slate-500 mt-1">URL para receber eventos de mensagens e status.</p>
+                    </div>
+
+                    {/* TEST CONNECTION BUTTON */}
+                    <div className="flex flex-col gap-3">
+                        <div className="flex justify-between items-center">
+                            <button 
+                                type="button"
+                                onClick={handleTestConnection}
+                                disabled={isTestingConnection || !formData.whatsappGlobal?.instanceId || !formData.whatsappGlobal?.apiKey}
+                                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                            >
+                                {isTestingConnection ? <Loader2 size={16} className="animate-spin" /> : <Smartphone size={16} />}
+                                Testar Conexão
+                            </button>
                         </div>
+                        
+                        {testResult && (
+                            <div className={cn(
+                                "p-3 rounded-lg text-sm flex items-center gap-2",
+                                testResult.success ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
+                            )}>
+                                {testResult.success ? <Check size={16} /> : <AlertTriangle size={16} />}
+                                {testResult.message}
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -279,6 +347,7 @@ export default function SuperAdminSettings() {
             </form>
         )}
 
+        {/* SECURITY TAB */}
         {activeTab === 'security' && (
             <form onSubmit={handlePasswordChange} className="space-y-6 animate-in fade-in">
                 <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg mb-4">

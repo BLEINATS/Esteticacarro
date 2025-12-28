@@ -9,6 +9,85 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      support_tickets: {
+        Row: {
+          id: string
+          tenant_id: string
+          user_id: string | null
+          user_name: string | null
+          type: string
+          subject: string
+          message: string
+          status: string
+          priority: string
+          admin_response: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          user_id?: string | null
+          user_name?: string | null
+          type: string
+          subject: string
+          message: string
+          status?: string
+          priority?: string
+          admin_response?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          user_id?: string | null
+          user_name?: string | null
+          type?: string
+          subject?: string
+          message?: string
+          status?: string
+          priority?: string
+          admin_response?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      social_posts: {
+        Row: {
+          id: string
+          tenant_id: string
+          work_order_id: string | null
+          image: string
+          caption: string | null
+          hashtags: string[] | null
+          platform: string | null
+          status: string | null
+          created_at: string
+        }
+        Insert: {
+          id: string
+          tenant_id: string
+          work_order_id?: string | null
+          image: string
+          caption?: string | null
+          hashtags?: string[] | null
+          platform?: string | null
+          status?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          work_order_id?: string | null
+          image?: string
+          caption?: string | null
+          hashtags?: string[] | null
+          platform?: string | null
+          status?: string | null
+          created_at?: string
+        }
+      }
       saas_settings: {
         Row: {
           id: number

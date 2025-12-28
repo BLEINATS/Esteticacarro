@@ -34,6 +34,7 @@ import Plans from './pages/super-admin/Plans';
 import SaaSMetrics from './pages/super-admin/SaaSMetrics';
 import SuperAdminSettings from './pages/super-admin/SuperAdminSettings';
 import SaaSFinance from './pages/super-admin/SaaSFinance';
+import SupportTickets from './pages/super-admin/SupportTickets';
 
 function App() {
   return (
@@ -89,6 +90,7 @@ function App() {
                 <Route path="tenants" element={<Tenants />} />
                 <Route path="plans" element={<Plans />} />
                 <Route path="metrics" element={<SaaSMetrics />} />
+                <Route path="support" element={<SupportTickets />} />
                 <Route path="settings" element={<SuperAdminSettings />} />
                 <Route index element={<SaaSDashboard />} />
               </Route>

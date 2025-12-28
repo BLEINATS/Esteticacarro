@@ -22,6 +22,7 @@ export function DottedSurface({ className, ...props }: DottedSurfaceProps) {
     useEffect(() => {
         if (!containerRef.current) return;
 
+        let mounted = true; // Flag to track if component is mounted
         const SEPARATION = 100;
         const AMOUNTX = 50;
         const AMOUNTY = 50;
@@ -97,6 +98,8 @@ export function DottedSurface({ className, ...props }: DottedSurfaceProps) {
 
         // Animation function
         const animate = () => {
+            if (!mounted) return; // Stop if unmounted
+            
             const animationId = requestAnimationFrame(animate);
             if (sceneRef.current) sceneRef.current.animationId = animationId;
 
@@ -148,6 +151,7 @@ export function DottedSurface({ className, ...props }: DottedSurfaceProps) {
 
         // Cleanup function
         return () => {
+            mounted = false; // Set flag to false immediately
             window.removeEventListener('resize', handleResize);
 
             if (sceneRef.current) {

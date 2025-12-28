@@ -7,10 +7,22 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5000,
     allowedHosts: true,
-  },
-  preview: {
-    host: '0.0.0.0',
-    port: 5000,
+    proxy: {
+      // Proxy for W-API (.io version)
+      '/w-api-proxy-io': {
+        target: 'https://api.w-api.io',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/w-api-proxy-io/, ''),
+        secure: false
+      },
+      // Proxy for W-API (.app version - legacy support)
+      '/w-api-proxy-app': {
+        target: 'https://api.w-api.app/v1',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/w-api-proxy-app/, ''),
+        secure: false
+      }
+    }
   },
   optimizeDeps: {
     exclude: ['lucide-react'],

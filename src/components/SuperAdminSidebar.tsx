@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Settings, LogOut, 
-  ShieldCheck, Package, BarChart3, X, DollarSign
+  ShieldCheck, Package, BarChart3, X, DollarSign, LifeBuoy
 } from 'lucide-react';
 import { useSuperAdmin } from '../context/SuperAdminContext';
 import { cn } from '../lib/utils';
@@ -15,7 +15,9 @@ interface SuperAdminSidebarProps {
 export default function SuperAdminSidebar({ isOpen, onClose }: SuperAdminSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout } = useSuperAdmin();
+  const { logout, supportTickets } = useSuperAdmin();
+
+  const openTicketsCount = supportTickets.filter(t => t.status === 'open' || t.status === 'in_progress').length;
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/super-admin/dashboard' },
@@ -23,6 +25,7 @@ export default function SuperAdminSidebar({ isOpen, onClose }: SuperAdminSidebar
     { icon: Users, label: 'Tenants (Lojas)', path: '/super-admin/tenants' },
     { icon: Package, label: 'Planos & Pacotes', path: '/super-admin/plans' },
     { icon: BarChart3, label: 'Métricas SaaS', path: '/super-admin/metrics' },
+    { icon: LifeBuoy, label: 'Suporte & Chamados', path: '/super-admin/support', badge: openTicketsCount },
     { icon: Settings, label: 'Configurações', path: '/super-admin/settings' },
   ];
 
@@ -66,14 +69,21 @@ export default function SuperAdminSidebar({ isOpen, onClose }: SuperAdminSidebar
                 to={item.path}
                 onClick={onClose}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group",
+                  "flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors group",
                   isActive 
                     ? "bg-indigo-600 text-white" 
                     : "text-slate-400 hover:bg-slate-800 hover:text-white"
                 )}
               >
-                <item.icon size={20} className={cn("flex-shrink-0", isActive ? "text-white" : "text-slate-500 group-hover:text-white")} />
-                <span className="font-medium text-sm">{item.label}</span>
+                <div className="flex items-center gap-3">
+                    <item.icon size={20} className={cn("flex-shrink-0", isActive ? "text-white" : "text-slate-500 group-hover:text-white")} />
+                    <span className="font-medium text-sm">{item.label}</span>
+                </div>
+                {item.badge !== undefined && item.badge > 0 && (
+                    <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                        {item.badge}
+                    </span>
+                )}
               </Link>
             );
           })}
